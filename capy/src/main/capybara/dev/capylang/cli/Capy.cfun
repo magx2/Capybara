@@ -34,6 +34,7 @@ from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocati
 from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
+from /dev/capylang/compiler/LinkedProgramIOProvider import { linked_program_io }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
@@ -1713,18 +1714,8 @@ private fun read_linked_libraries(libraries: List[String]): Effect[Result[Set[Co
         )
 
 private fun read_linked_program(inputDir: Path, requireModules: bool): Effect[Result[CompiledProgram]] =
-    let program_file = inputDir / "program.json"
-    is_file(program_file).flat_map(has_program =>
-        if has_program
-        then read_linked_program_file(program_file).map(program_result =>
-            match program_result with
-            case Error e -> e
-            case Success { program } ->
-                if requireModules & program.modules.is_empty()
-                then Error { message: "Missing linked module files in directory: " + cli_path_to_string(inputDir) }
-                else Success { program }
-        )
-        else read_linked_program_from_module_files(inputDir, requireModules)
+    linked_program_io().flat_map(codec =>
+        codec.read_program(inputDir, requireModules).map(readResult => readResult.result)
     )
 
 private fun read_linked_program_file(file: Path): Effect[Result[CompiledProgram]] =

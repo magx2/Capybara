@@ -4,9 +4,8 @@ from /capy/lang/Effect import { * }
 from ObjectMethodInterop import { * }
 
 fun tests(): Effect[TestFile] =
-    let assertion <- invoke_foo_returns_effect()
     test_file("/dev/capylang/test/ObjectMethodInterop.cfun", [
-        test("invoke_foo returns the OO method result", () => assertion),
+        invoke_foo_returns_effect().map(assertion => test("invoke_foo returns the OO method result", () => assertion)),
     ])
 
 fun invoke_foo_returns_effect(): Effect[Assert] =

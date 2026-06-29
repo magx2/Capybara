@@ -9,6 +9,7 @@ from /capy/lang/String import { * }
 from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
+from /capy/lang/Async import { Async, all }
 from /capy/lang/Effect import { * }
 from /capy/date_time/Clock import { now }
 from /capy/date_time/DateTime import { * }
@@ -289,19 +290,12 @@ fun run_tests_and_print_summary(rtype: ReportType, output_dir: Path, log_type: L
 ///
 /// Existing files that already have the same content are left untouched.
 fun write_test_outputs(output_dir: Path, test_outputs: List[TestOutput]): Effect[Result[List[Path]]] =
+    all(write_test_output_tasks(output_dir, test_outputs)).map(results => async_test_output_results(results))
+
+private fun write_test_output_tasks(output_dir: Path, test_outputs: List[TestOutput]): List[Async[Result[Path]]] =
     match test_outputs[0] with
-    case None -> pure(Success { [] })
-    case Some { test_output } ->
-        write_test_output(output_dir, test_output).flat_map(current_result =>
-            match current_result with
-            case Error e -> pure(e)
-            case Success { written_path } ->
-                write_test_outputs(output_dir, test_outputs[1:]).map(rest_result =>
-                    match rest_result with
-                    case Error e -> e
-                    case Success { written_paths } -> Success { [written_path] + written_paths }
-                )
-        )
+    case None -> []
+    case Some { test_output } -> [write_test_output(output_dir, test_output).start()] + write_test_output_tasks(output_dir, test_outputs[1:])
 
 /// Writes text only when the target file content is different.
 fun write_text_if_changed(path: Path, content: String): Effect[Result[String]] =
@@ -332,6 +326,20 @@ private fun create_test_output_parent(path: Path): Effect[Result[Path]] =
     match path.parent() with
     case None -> pure(Success { path })
     case Some { parent } -> create_directories(parent)
+
+private fun async_test_output_results(results: List[Result[Result[Path]]]): Result[List[Path]] =
+    match results[0] with
+    case None -> Success { [] }
+    case Some { outer } ->
+        match outer with
+        case Error e -> e
+        case Success { inner } ->
+            match inner with
+            case Error e -> e
+            case Success { written_path } ->
+                match async_test_output_results(results[1:]) with
+                case Error e -> e
+                case Success { written_paths } -> Success { [written_path] + written_paths }
 
 const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
 

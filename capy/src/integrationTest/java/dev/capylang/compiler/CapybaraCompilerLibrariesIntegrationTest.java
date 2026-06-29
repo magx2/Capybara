@@ -136,6 +136,44 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     @Test
+    void shouldGatherJavaScriptTestsWithConstructorPayloadOoReceiver() {
+        var objectSource = """
+                class NativeProviderDomain {
+                    def read(): long = 12345L
+                }
+                """;
+        var testSource = """
+                from /capy/test/Assert import { * }
+                from /capy/test/CapyTest import { * }
+                from /capy/lang/Effect import { * }
+                from NativeProviderDomain import { * }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/foo/app/NativeProviderDomain.coo", [
+                        constructor_payload_receiver_method_call_is_gathered().map(assertion => test("constructor payload receiver method call is gathered", () => assertion)),
+                    ])
+
+                fun constructor_payload_receiver_method_call_is_gathered(): Effect[Assert] =
+                    let domain <- NativeProviderDomain()
+                    let millis <- domain.read()
+                    assert_that(millis).is_equal_to(12345L)
+                """;
+        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(
+                rawModule("NativeProviderDomain", "/foo/app", objectSource, SourceKind.OBJECT_ORIENTED),
+                rawModule("NativeProviderDomainTest", "/foo/app", testSource)
+        ), new LinkedHashSet<>()));
+
+        assertThat(generated.modules())
+                .extracting(GeneratedModule::relativePath)
+                .contains("foo/app/NativeProviderDomainTest.js", "capy/test/CapyTestRuntime.js");
+        var runtime = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.js"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(runtime.code()).contains("NativeProviderDomainTest");
+    }
+
+    @Test
     void shouldGenerateJavaScriptQualifiedImportCalls() {
         var moduleA = """
                 fun foo(x: int): int = x + 1
@@ -200,6 +238,10 @@ class CapybaraCompilerLibrariesIntegrationTest {
 
     private static RawModule rawModule(String name, String path, String input) {
         return new RawModule(name, path, input, SourceKind.FUNCTIONAL);
+    }
+
+    private static RawModule rawModule(String name, String path, String input, SourceKind sourceKind) {
+        return new RawModule(name, path, input, sourceKind);
     }
 
     private static NativeProviderManifest emptyNativeProviders() {

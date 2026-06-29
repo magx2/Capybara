@@ -1,3 +1,4 @@
+from /capy/collection/Dict import { * }
 from /capy/collection/List import { * }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
@@ -13,6 +14,7 @@ from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectO
 from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
 from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
 from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/CompiledProgram import { * }
 from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
@@ -36,14 +38,50 @@ data PythonObjectMethodBinding { module: CompiledModule, objectClass: CompiledOb
 data PythonQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
 /// Decoded Python annotation schema argument with field name, value kind, and encoded source value.
 data PythonSchemaAnnotationArgument { name: String, kind: String, value: String }
+/// Schema annotation values grouped under one object reflection metadata key.
+data PythonObjectAnnotationValues { values: List[String] }
+/// Object reflection annotation schema values collected in one pass for a class or interface.
+data PythonObjectAnnotationSources { typeAnnotations: List[String], fieldAnnotations: Dict[PythonObjectAnnotationValues], methodAnnotations: Dict[PythonObjectAnnotationValues] }
 /// Python generator mapping from a standard-library value to its Python identifier and type name.
 data PythonStdlibValue { pythonName: String, typeName: String }
+/// Decoded overload request name used for backend dispatch lookups.
+data PythonOverloadRequest { requested: bool, functionName: String, argumentType: String }
+/// Schema lookup result that distinguishes a type with no values from a missing type.
+data PythonSchemaValues { typeExists: bool, values: List[String] }
+/// Decoded object field schema metadata used while rebuilding object classes.
+data PythonObjectFieldSchema { name: String, visibility: String, typeName: String, hasValue: bool }
+/// Object field schemas and initializer helpers collected in one class scan.
+data PythonObjectFieldSources { schemas: List[CompiledFunction], initializers: List[CompiledFunction] }
+/// Object class schema helpers collected in one class scan.
+data PythonObjectClassSources {
+    openValue: String,
+    parameters: List[CompiledFunction],
+    parents: List[String],
+    fieldSchemas: List[CompiledFunction],
+    fieldInitializers: List[CompiledFunction],
+    initBlocks: List[CompiledFunction],
+    methods: List[CompiledFunction]
+}
+/// Python reflection table entries collected together to avoid duplicate schema scans.
+data PythonReflectionEntries { typeEntries: List[String], enumValueEntries: List[String] }
+/// Python source sections collected in one pass over compiled functions.
+data PythonFunctionSections { constants: String, functions: String }
+/// Python object-oriented metadata indexed by compiled module path.
+data PythonObjectOrientedUnitIndex { units: Dict[CompiledObjectOrientedUnit] }
+/// Native-provider declarations for a single Python generated module, indexed by provider function name.
+data PythonNativeProviderDeclarations { declarations: Dict[CompiledNativeProviderDeclaration] }
+/// Python native-provider declarations and Python-capable bindings indexed for generator lookups.
+data PythonNativeProviderIndex { declarationsByModule: Dict[PythonNativeProviderDeclarations], bindings: Dict[CompiledNativeProviderBinding] }
+/// Python native-provider lookup scope for one generated module.
+data PythonNativeProviderScope { declarations: Dict[CompiledNativeProviderDeclaration], bindings: Dict[CompiledNativeProviderBinding] }
 
 /// Generates Python source modules, native-provider stubs, and runtime modules from a compiled program.
 fun python_generator(program: CompiledProgram): GeneratedProgram =
+    let objectOrientedUnitIndex = python_object_oriented_unit_index(program.objectOrientedModules)
+    let nativeProviderIndex = python_native_provider_index(program.nativeProviderCatalog)
     GeneratedProgram {
         modules: python_native_provider_interface_modules(program.nativeProviderCatalog.declarations)
-            + python_modules(program.modules, program.modules, program.nativeProviderCatalog)
+            + python_modules(program.modules, program.modules, objectOrientedUnitIndex, nativeProviderIndex)
             + python_test_runtime_modules(program.modules)
             + python_native_runtime_modules()
     }
@@ -76,23 +114,61 @@ private fun python_native_provider_interface_name(interfaceId: String): String =
     else interfaceId[separator + 1, interfaceId.size().value]
 
 /// Creates Python generated source modules for compiled modules.
-private fun python_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): List[GeneratedModule] =
+private fun python_modules(modules: List[CompiledModule], allModules: List[CompiledModule], objectOrientedUnitIndex: PythonObjectOrientedUnitIndex, nativeProviderIndex: PythonNativeProviderIndex): List[GeneratedModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> [GeneratedModule {
         relativePath: python_module_relative_path(module, ".py"),
-        code: python_module_code(module, allModules, nativeProviderCatalog)
-    }] + python_modules(modules[1:], allModules, nativeProviderCatalog)
+        code: python_module_code(module, allModules, objectOrientedUnitIndex, nativeProviderIndex)
+    }] + python_modules(modules[1:], allModules, objectOrientedUnitIndex, nativeProviderIndex)
 
 /// Emits the complete Python source for one compiled module.
-private fun python_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun python_module_code(module: CompiledModule, allModules: List[CompiledModule], objectOrientedUnitIndex: PythonObjectOrientedUnitIndex, nativeProviderIndex: PythonNativeProviderIndex): String =
+    let nativeProviderScope = python_native_provider_scope_for_module(module, nativeProviderIndex)
+    let sections = python_function_sections(module.functions, module, allModules, nativeProviderScope)
     "# Generated by Capybara." + python_newline()
     + python_runtime_import()
     + python_imports(module.imports, module, allModules)
     + python_newline()
-    + python_object_classes(python_compiled_object_classes(module.functions), module, allModules)
-    + python_constants(module.functions, module, allModules)
-    + python_functions(module.functions, module, allModules, nativeProviderCatalog)
+    + python_object_classes(python_object_classes_for_module(module, objectOrientedUnitIndex), module, allModules)
+    + sections.constants
+    + sections.functions
+
+/// Returns object classes carried by linked programs, falling back to schema decoding for legacy module-only linked input.
+private fun python_object_classes_for_module(module: CompiledModule, objectOrientedUnitIndex: PythonObjectOrientedUnitIndex): List[CompiledObjectOrientedClass] =
+    if objectOrientedUnitIndex.units.is_empty()
+    then python_compiled_object_classes(module.functions)
+    else match objectOrientedUnitIndex.units.get(python_compiled_module_key(module.name, module.path)) with
+        case Some { unit } -> unit.classes
+        case None -> []
+
+/// Builds object-oriented metadata lookup by compiled module path.
+private fun python_object_oriented_unit_index(objectOrientedModules: List[CompiledObjectOrientedUnit]): PythonObjectOrientedUnitIndex =
+    PythonObjectOrientedUnitIndex { units: python_object_oriented_unit_dict(objectOrientedModules) }
+
+/// Builds object-oriented metadata dictionary while preserving first-match lookup semantics.
+private fun python_object_oriented_unit_dict(objectOrientedModules: List[CompiledObjectOrientedUnit]): Dict[CompiledObjectOrientedUnit] =
+    python_object_oriented_unit_dict_with_acc(objectOrientedModules, {:})
+
+/// Builds object-oriented metadata dictionary using a forward accumulator.
+private fun python_object_oriented_unit_dict_with_acc(objectOrientedModules: List[CompiledObjectOrientedUnit], units: Dict[CompiledObjectOrientedUnit]): Dict[CompiledObjectOrientedUnit] =
+    match objectOrientedModules[0] with
+    case None -> units
+    case Some { unit } ->
+        python_object_oriented_unit_dict_with_acc(objectOrientedModules[1:], python_object_oriented_unit_dict_add(units, unit))
+
+/// Adds an object-oriented metadata unit unless an earlier unit already owns the key.
+private fun python_object_oriented_unit_dict_add(units: Dict[CompiledObjectOrientedUnit], unit: CompiledObjectOrientedUnit): Dict[CompiledObjectOrientedUnit] =
+    let key = python_compiled_module_key(unit.name, unit.path)
+    match units.get(key) with
+    case Some _ -> units
+    case None -> units + (key, unit)
+
+/// Builds the lookup key for compiled module metadata.
+private fun python_compiled_module_key(name: String, path: String): String =
+    if path.is_empty()
+    then name
+    else path + "/" + name
 
 /// Emits one Python import statement for runtime.
 private fun python_runtime_import(): String =
@@ -198,36 +274,30 @@ private fun python_object_type_method(objectClass: CompiledObjectOrientedClass, 
 
 /// Formats object info as a Python literal.
 private fun python_object_info_literal(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = python_object_annotation_sources(objectClass.name, module.functions)
     "__capy_data(\"ObjectInfo\", dict("
         + "name=" + python_string_literal(objectClass.name)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
         + ", open=" + python_bool_code(objectClass.open)
-        + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, module, allModules)
-        + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, module, allModules)
+        + ", fields=" + python_object_field_infos_literal(objectClass.name, objectClass.fields, 0, annotationSources, module, allModules)
+        + ", methods=" + python_object_method_infos_literal(objectClass.name, objectClass.methods, annotationSources, module, allModules)
         + ", parents=" + python_object_parent_infos_literal(objectClass.parents, module, allModules)
-        + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|type|" + objectClass.name + "|", module.functions),
-            module,
-            allModules
-        )
+        + ", annotations=" + python_reflection_annotation_infos_literal(annotationSources.typeAnnotations, module, allModules)
         + "))"
 
 /// Formats object interface info as a Python literal.
 private fun python_object_interface_info_literal(interfaceName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let annotationSources = python_object_annotation_sources(interfaceName, module.functions)
     "__capy_data(\"" + python_object_interface_info_type(python_object_interface_kind(interfaceName, module.functions)) + "\", dict("
         + "name=" + python_string_literal(interfaceName)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
-        + ", methods=" + python_object_interface_method_infos_literal(interfaceName, module.functions, module, allModules)
+        + ", methods=" + python_object_interface_method_infos_literal(interfaceName, module.functions, annotationSources, module, allModules)
         + ", parents=" + python_object_parent_infos_literal(
             python_object_schema_type_references(python_schema_values("__capy_oo_interface_parent|" + interfaceName + "|", module.functions)),
             module,
             allModules
         )
-        + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|type|" + interfaceName + "|", module.functions),
-            module,
-            allModules
-        )
+        + ", annotations=" + python_reflection_annotation_infos_literal(annotationSources.typeAnnotations, module, allModules)
         + "))"
 
 /// Formats Python source text for object interface kind.
@@ -241,88 +311,88 @@ private fun python_object_interface_info_type(kind: String): String =
     if kind == "trait" then "TraitInfo" else "InterfaceInfo"
 
 /// Formats object field infos as a Python literal.
-private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_infos_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> "[]"
     case Some { field } ->
-        "[" + python_object_field_info_literal(className, field, idx, module, allModules)
-            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+        "[" + python_object_field_info_literal(className, field, idx, annotationSources, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, annotationSources, module, allModules)
             + "]"
 
 /// Formats object field infos tail as a Python literal.
-private fun python_object_field_infos_tail_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_infos_tail_literal(className: String, fields: List[CompiledObjectOrientedField], idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
-        ", " + python_object_field_info_literal(className, field, idx, module, allModules)
-            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, module, allModules)
+        ", " + python_object_field_info_literal(className, field, idx, annotationSources, module, allModules)
+            + python_object_field_infos_tail_literal(className, fields[1:], idx + 1, annotationSources, module, allModules)
 
 /// Formats object field info as a Python literal.
-private fun python_object_field_info_literal(className: String, field: CompiledObjectOrientedField, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_field_info_literal(className: String, field: CompiledObjectOrientedField, idx: int, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"FieldInfo\", dict("
         + "name=" + python_string_literal(field.name)
         + ", type=" + python_any_info_literal(field.typeReference, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|field|" + className + "|" + idx + "|", module.functions),
+            python_object_annotation_values("" + idx, annotationSources.fieldAnnotations),
             module,
             allModules
         )
         + "))"
 
 /// Formats object method infos as a Python literal.
-private fun python_object_method_infos_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_infos_literal(className: String, methods: List[CompiledObjectOrientedMethod], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> "[]"
     case Some { method } ->
-        "[" + python_object_method_info_literal(className, method, module, allModules)
-            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+        "[" + python_object_method_info_literal(className, method, annotationSources, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], annotationSources, module, allModules)
             + "]"
 
 /// Formats object method infos tail as a Python literal.
-private fun python_object_method_infos_tail_literal(className: String, methods: List[CompiledObjectOrientedMethod], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_infos_tail_literal(className: String, methods: List[CompiledObjectOrientedMethod], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match methods[0] with
     case None -> ""
     case Some { method } ->
-        ", " + python_object_method_info_literal(className, method, module, allModules)
-            + python_object_method_infos_tail_literal(className, methods[1:], module, allModules)
+        ", " + python_object_method_info_literal(className, method, annotationSources, module, allModules)
+            + python_object_method_infos_tail_literal(className, methods[1:], annotationSources, module, allModules)
 
 /// Formats object method info as a Python literal.
-private fun python_object_method_info_literal(className: String, method: CompiledObjectOrientedMethod, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_method_info_literal(className: String, method: CompiledObjectOrientedMethod, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_data(\"MethodInfo\", dict("
         + "name=" + python_string_literal(method.name)
         + ", pkg=" + python_package_info_literal(module.name, module.path)
         + ", params=" + python_object_method_param_infos_literal(method.parameters, module, allModules)
         + ", return_type=" + python_any_info_literal(method.returnType, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|method|" + className + "|" + method.name + "|", module.functions),
+            python_object_annotation_values(method.name, annotationSources.methodAnnotations),
             module,
             allModules
         )
         + "))"
 
 /// Formats object interface method infos as a Python literal.
-private fun python_object_interface_method_infos_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_infos_literal(interfaceName: String, functions: List[CompiledFunction], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> "[]"
     case Some { function } ->
         if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
-        then "[" + python_object_interface_method_info_literal(function, module, allModules)
-            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+        then "[" + python_object_interface_method_info_literal(function, annotationSources, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
             + "]"
-        else python_object_interface_method_infos_literal(interfaceName, functions[1:], module, allModules)
+        else python_object_interface_method_infos_literal(interfaceName, functions[1:], annotationSources, module, allModules)
 
 /// Formats object interface method infos tail as a Python literal.
-private fun python_object_interface_method_infos_tail_literal(interfaceName: String, functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_infos_tail_literal(interfaceName: String, functions: List[CompiledFunction], annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     match functions[0] with
     case None -> ""
     case Some { function } ->
         if python_compiled_object_interface_method_function_for_interface(function, interfaceName)
-        then ", " + python_object_interface_method_info_literal(function, module, allModules)
-            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
-        else python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], module, allModules)
+        then ", " + python_object_interface_method_info_literal(function, annotationSources, module, allModules)
+            + python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
+        else python_object_interface_method_infos_tail_literal(interfaceName, functions[1:], annotationSources, module, allModules)
 
 /// Formats object interface method info as a Python literal.
-private fun python_object_interface_method_info_literal(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_object_interface_method_info_literal(function: CompiledFunction, annotationSources: PythonObjectAnnotationSources, module: CompiledModule, allModules: List[CompiledModule]): String =
     let interfaceName = python_compiled_object_interface_method_owner_name(function.name)
     let methodName = python_compiled_object_interface_method_name(function.name)
     "__capy_data(\"MethodInfo\", dict("
@@ -331,11 +401,43 @@ private fun python_object_interface_method_info_literal(function: CompiledFuncti
         + ", params=" + python_object_method_param_infos_literal(function.parameters, module, allModules)
         + ", return_type=" + python_any_info_literal(function.returnType, module, allModules)
         + ", annotations=" + python_reflection_annotation_infos_literal(
-            python_schema_values("__capy_oo_annotation|method|" + interfaceName + "|" + methodName + "|", module.functions),
+            python_object_annotation_values(methodName, annotationSources.methodAnnotations),
             module,
             allModules
         )
         + "))"
+
+/// Collects object reflection annotation schema values for one object owner.
+private fun python_object_annotation_sources(ownerName: String, functions: List[CompiledFunction]): PythonObjectAnnotationSources =
+    match functions[0] with
+    case None -> PythonObjectAnnotationSources { typeAnnotations: [], fieldAnnotations: {:}, methodAnnotations: {:} }
+    case Some { function } ->
+        let rest = python_object_annotation_sources(ownerName, functions[1:])
+        if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|type|" + ownerName + "|")
+        then rest.with(typeAnnotations: [python_schema_value(function)] + rest.typeAnnotations)
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|field|" + ownerName + "|")
+        then rest.with(fieldAnnotations: python_object_annotation_values_add(rest.fieldAnnotations, python_object_annotation_member_key(function.name, "__capy_oo_annotation|field|" + ownerName + "|"), python_schema_value(function)))
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_annotation|method|" + ownerName + "|")
+        then rest.with(methodAnnotations: python_object_annotation_values_add(rest.methodAnnotations, python_object_annotation_member_key(function.name, "__capy_oo_annotation|method|" + ownerName + "|"), python_schema_value(function)))
+        else rest
+
+/// Adds one object annotation schema value while preserving source order.
+private fun python_object_annotation_values_add(index: Dict[PythonObjectAnnotationValues], key: String, value: String): Dict[PythonObjectAnnotationValues] =
+    match index.get(key) with
+    case Some { existing } -> index + (key, PythonObjectAnnotationValues { values: [value] + existing.values })
+    case None -> index + (key, PythonObjectAnnotationValues { values: [value] })
+
+/// Returns object annotation schema values for a member key.
+private fun python_object_annotation_values(key: String, index: Dict[PythonObjectAnnotationValues]): List[String] =
+    match index.get(key) with
+    case Some { values } -> values.values
+    case None -> []
+
+/// Extracts the first path segment after an object annotation prefix.
+private fun python_object_annotation_member_key(name: String, prefix: String): String =
+    let rest = name[prefix.size().value, name.size().value]
+    let separator = python_first_index_of(rest, "|", 0)
+    if separator < 0 then rest else rest[0, separator]
 
 /// Formats object method param infos as a Python literal.
 private fun python_object_method_param_infos_literal(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -381,18 +483,20 @@ private fun python_object_parent_infos_tail_literal(parents: List[CompiledTypeRe
 
 /// Formats any info as a Python literal.
 private fun python_any_info_literal(typeReference: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = typeReference.name
+    let unqualifiedName = python_type_unqualified_name(typeName)
     "__capy_data(\"DataInfo\", dict("
-        + "name=" + python_string_literal(python_type_unqualified_name(typeReference.name))
-        + ", pkg=" + python_type_package_info_literal(typeReference.name, module, allModules)
+        + "name=" + python_string_literal(unqualifiedName)
+        + ", pkg=" + python_type_package_info_literal(typeName, unqualifiedName, module, allModules)
         + ", annotations=[]"
         + "))"
 
 /// Formats type package info as a Python literal.
-private fun python_type_package_info_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_type_package_info_literal(typeName: String, unqualifiedName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_object_class_by_type(typeName, allModules) with
     case Some { binding } -> python_package_info_literal(binding.module.name, binding.module.path)
     case None ->
-        match python_data_type_owner_module(python_type_unqualified_name(typeName), module, allModules) with
+        match python_data_type_owner_module(unqualifiedName, module, allModules) with
         case Some { owner } -> python_package_info_literal(owner.name, owner.path)
         case None -> python_package_info_literal("", "")
 
@@ -506,10 +610,12 @@ private fun python_import(declaration: CompiledImportDeclaration, module: Compil
 
 /// Emits Python import source for import extension method aliases.
 private fun python_import_extension_method_aliases(declaration: CompiledImportDeclaration, modulePath: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if declaration.wildcard & !declaration.qualified
-    then match python_find_imported_module(declaration, module, allModules) with
-        case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
-        case None -> ""
+    if declaration.wildcard
+    then if !declaration.qualified
+        then match python_find_imported_module(declaration, module, allModules) with
+            case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
+            case None -> ""
+        else ""
     else ""
 
 /// Emits Python import source for import extension method aliases for functions.
@@ -524,9 +630,11 @@ private fun python_import_extension_method_aliases_for_functions(declaration: Co
 
 /// Collects imported extension method alias visible to the current module.
 private fun python_imported_extension_method_alias(function: CompiledFunction, declaration: CompiledImportDeclaration): bool =
-    python_extension_method_function(function)
-        & !python_skip_function(function)
-        & !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+    if python_extension_method_function(function)
+    then if python_skip_function(function)
+        then false
+        else !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+    else false
 
 /// Computes the Python name for method owner member.
 private fun python_method_owner_member_name(name: String): String =
@@ -539,22 +647,39 @@ private fun python_import_module_name(modulePath: String, module: CompiledModule
 
 /// Checks whether an import matches the standard-library import rule.
 private fun python_stdlib_import(modulePath: String): bool =
-    python_string_has_prefix(modulePath, "/capy/") | python_string_has_prefix(modulePath, "capy/")
+    if python_string_has_prefix(modulePath, "/capy/")
+    then true
+    else python_string_has_prefix(modulePath, "capy/")
 
-/// Formats Python source text for functions.
-private fun python_functions(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+/// Formats Python constants and functions in one pass over compiled functions.
+private fun python_function_sections(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: PythonNativeProviderScope): PythonFunctionSections =
     match functions[0] with
-    case None -> ""
+    case None -> PythonFunctionSections { constants: "", functions: "" }
     case Some { function } ->
-        if python_skip_function(function)
-        then python_functions(functions[1:], module, allModules, nativeProviderCatalog)
-        else python_function(function, module, allModules, nativeProviderCatalog) + python_newline() + python_functions(functions[1:], module, allModules, nativeProviderCatalog)
+        let rest = python_function_sections(functions[1:], module, allModules, nativeProviderScope)
+        if python_compiled_constant(function)
+        then if python_compiled_schema(function)
+            then rest
+            else PythonFunctionSections {
+                constants: python_constant(function, module, allModules) + rest.constants,
+                functions: rest.functions
+            }
+        else if python_imported_function(function)
+        then rest
+        else if python_compiled_object_helper_function(function)
+        then rest
+        else PythonFunctionSections {
+            constants: rest.constants,
+            functions: python_function(function, module, allModules, nativeProviderScope) + python_newline() + rest.functions
+        }
 
 /// Checks whether a function matches the skip function metadata.
 private fun python_skip_function(function: CompiledFunction): bool =
-    python_compiled_constant(function)
-        | python_imported_function(function)
-        | python_compiled_object_helper_function(function)
+    if python_compiled_constant(function)
+    then true
+    else if python_imported_function(function)
+    then true
+    else python_compiled_object_helper_function(function)
 
 /// Extracts compiled metadata for constant.
 private fun python_compiled_constant(function: CompiledFunction): bool =
@@ -570,38 +695,36 @@ private fun python_imported_function(function: CompiledFunction): bool =
 
 /// Extracts compiled metadata for object helper function.
 private fun python_compiled_object_helper_function(function: CompiledFunction): bool =
-    python_string_has_prefix(function.name, "__capy_oo_method|")
-        | python_string_has_prefix(function.name, "__capy_oo_interface_method|")
-        | python_string_has_prefix(function.name, "__capy_oo_field_init|")
-        | python_string_has_prefix(function.name, "__capy_oo_init|")
-
-/// Formats Python source text for constants.
-private fun python_constants(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match functions[0] with
-    case None -> ""
-    case Some { function } ->
-        if python_emitted_constant(function)
-        then python_constant(function, module, allModules) + python_constants(functions[1:], module, allModules)
-        else python_constants(functions[1:], module, allModules)
+    if !python_string_has_prefix(function.name, "__capy_oo_")
+    then false
+    else if python_string_has_prefix(function.name, "__capy_oo_method|")
+    then true
+    else if python_string_has_prefix(function.name, "__capy_oo_interface_method|")
+    then true
+    else if python_string_has_prefix(function.name, "__capy_oo_field_init|")
+    then true
+    else python_string_has_prefix(function.name, "__capy_oo_init|")
 
 /// Checks whether the current value satisfies the emitted constant rule for Python processing.
 private fun python_emitted_constant(function: CompiledFunction): bool =
-    python_compiled_constant(function) & !python_compiled_schema(function)
+    if python_compiled_constant(function)
+    then !python_compiled_schema(function)
+    else false
 
 /// Formats Python source text for constant.
 private fun python_constant(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     python_identifier(function.name) + " = " + python_expression_code(function.body, [], module, allModules) + python_newline()
 
 /// Formats Python source text for function.
-private fun python_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
+private fun python_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: PythonNativeProviderScope): String =
     let env = python_function_bindings(function)
     "def " + python_function_name(function) + "(" + python_function_parameters(function) + "):" + python_newline()
-    + python_function_body(function, env, module, allModules, nativeProviderCatalog)
+    + python_function_body(function, env, module, allModules, nativeProviderScope)
 
 /// Emits Python expression text for function body.
-private fun python_function_body(function: CompiledFunction, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderCatalog: NativeProviderCatalog): String =
-    match python_find_native_provider_declaration(function, module, nativeProviderCatalog.declarations) with
-    case Some { declaration } -> python_native_provider_function_body(declaration, function.returnType, nativeProviderCatalog)
+private fun python_function_body(function: CompiledFunction, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule], nativeProviderScope: PythonNativeProviderScope): String =
+    match nativeProviderScope.declarations.get(function.name) with
+    case Some { declaration } -> python_native_provider_function_body(declaration, function.returnType, nativeProviderScope)
     case None ->
         if python_async_native_function(function, module)
         then "    return " + python_async_native_function_body(function) + python_newline()
@@ -624,20 +747,74 @@ private fun python_first_function_parameter_name(function: CompiledFunction): St
     case Some { parameter } -> parameter.name
     case None -> "value"
 
-/// Finds a native provider declaration in scope, imports, or compiled modules.
-private fun python_find_native_provider_declaration(function: CompiledFunction, module: CompiledModule, declarations: List[CompiledNativeProviderDeclaration]): /capy/lang/Option[CompiledNativeProviderDeclaration] =
+private fun python_native_provider_index(catalog: NativeProviderCatalog): PythonNativeProviderIndex =
+    PythonNativeProviderIndex {
+        declarationsByModule: python_native_provider_declarations_by_module(catalog.declarations),
+        bindings: python_native_provider_binding_dict(catalog.bindings)
+    }
+
+private fun python_native_provider_scope_for_module(module: CompiledModule, index: PythonNativeProviderIndex): PythonNativeProviderScope =
+    match index.declarationsByModule.get(python_native_provider_module_key(module.name, module.path)) with
+    case Some { declarations } -> PythonNativeProviderScope {
+        declarations: declarations.declarations,
+        bindings: index.bindings
+    }
+    case None -> PythonNativeProviderScope {
+        declarations: python_empty_native_provider_declaration_dict(),
+        bindings: index.bindings
+    }
+
+private fun python_empty_native_provider_declaration_dict(): Dict[CompiledNativeProviderDeclaration] =
+    {:}
+
+private fun python_native_provider_declarations_by_module(declarations: List[CompiledNativeProviderDeclaration]): Dict[PythonNativeProviderDeclarations] =
+    python_native_provider_declarations_by_module_with_acc(declarations, {:})
+
+private fun python_native_provider_declarations_by_module_with_acc(declarations: List[CompiledNativeProviderDeclaration], declarationsByModule: Dict[PythonNativeProviderDeclarations]): Dict[PythonNativeProviderDeclarations] =
     match declarations[0] with
-    case None -> /capy/lang/Option.None {}
+    case None -> declarationsByModule
     case Some { declaration } ->
-        if declaration.providerName == function.name
-            & declaration.sourceModuleName == module.name
-            & declaration.sourceModulePath == module.path
-        then /capy/lang/Option.Some { declaration }
-        else python_find_native_provider_declaration(function, module, declarations[1:])
+        python_native_provider_declarations_by_module_with_acc(declarations[1:], python_native_provider_add_declaration(declarationsByModule, declaration))
+
+private fun python_native_provider_add_declaration(declarationsByModule: Dict[PythonNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[PythonNativeProviderDeclarations] =
+    let moduleKey = python_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
+    let declarations = match declarationsByModule.get(moduleKey) with
+        case Some { moduleDeclarations } -> moduleDeclarations.declarations
+        case None -> python_empty_native_provider_declaration_dict()
+    match declarations.get(declaration.providerName) with
+    case Some _ -> declarationsByModule
+    case None -> declarationsByModule + (moduleKey, PythonNativeProviderDeclarations {
+        declarations: declarations + (declaration.providerName, declaration)
+    })
+
+private fun python_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
+    python_native_provider_binding_dict_with_acc(bindings, {:})
+
+private fun python_native_provider_binding_dict_with_acc(bindings: List[CompiledNativeProviderBinding], bindingIndex: Dict[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
+    match bindings[0] with
+    case None -> bindingIndex
+    case Some { binding } ->
+        if python_native_provider_binding_has_python(binding)
+        then python_native_provider_binding_dict_with_acc(bindings[1:], python_native_provider_binding_dict_add(bindingIndex, binding))
+        else python_native_provider_binding_dict_with_acc(bindings[1:], bindingIndex)
+
+private fun python_native_provider_binding_dict_add(bindingIndex: Dict[CompiledNativeProviderBinding], binding: CompiledNativeProviderBinding): Dict[CompiledNativeProviderBinding] =
+    let key = python_native_provider_binding_key(binding.interfaceId, binding.qualifier)
+    match bindingIndex.get(key) with
+    case Some _ -> bindingIndex
+    case None -> bindingIndex + (key, binding)
+
+private fun python_native_provider_module_key(name: String, path: String): String =
+    if path.is_empty()
+    then name
+    else path + "/" + name
+
+private fun python_native_provider_binding_key(interfaceId: String, qualifier: String): String =
+    interfaceId.size().value + "|" + interfaceId + "|" + qualifier
 
 /// Emits Python expression text for native provider function body.
-private fun python_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, catalog: NativeProviderCatalog): String =
-    match python_find_native_provider_binding(declaration, catalog.bindings) with
+private fun python_native_provider_function_body(declaration: CompiledNativeProviderDeclaration, returnType: CompiledTypeReference, nativeProviderScope: PythonNativeProviderScope): String =
+    match nativeProviderScope.bindings.get(python_native_provider_binding_key(declaration.interfaceId, declaration.qualifier)) with
     case Some { binding } -> python_native_provider_binding_body(declaration, returnType, binding)
     case None -> python_native_provider_not_wired_body(declaration, returnType)
 
@@ -646,15 +823,6 @@ private fun python_native_provider_binding_body(declaration: CompiledNativeProvi
     match binding.pythonBinding with
     case Some { backend } -> python_native_provider_bound_body(declaration, returnType, backend)
     case None -> python_native_provider_not_wired_body(declaration, returnType)
-
-/// Finds a native provider binding in scope, imports, or compiled modules.
-private fun python_find_native_provider_binding(declaration: CompiledNativeProviderDeclaration, bindings: List[CompiledNativeProviderBinding]): /capy/lang/Option[CompiledNativeProviderBinding] =
-    match bindings[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { binding } ->
-        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier & python_native_provider_binding_has_python(binding)
-        then /capy/lang/Option.Some { binding }
-        else python_find_native_provider_binding(declaration, bindings[1:])
 
 /// Checks whether the current value satisfies the native provider binding has Python rule for Python processing.
 private fun python_native_provider_binding_has_python(binding: CompiledNativeProviderBinding): bool =
@@ -937,9 +1105,11 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
 
 /// Checks whether an expression has the string concat expression shape.
 private fun python_string_concat_expression(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    binary.operator == "+"
-        & leftType == python_string_type()
-        & python_expression_type(binary.right, env, module, allModules) == python_string_type()
+    if binary.operator == "+"
+    then if leftType == python_string_type()
+        then python_expression_type(binary.right, env, module, allModules) == python_string_type()
+        else false
+    else false
 
 /// Checks whether an operator belongs to the binary extension operator expression with left type category.
 private fun python_binary_extension_operator_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1036,30 +1206,29 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_io_function_call_code(call, env, module, allModules)
     else if python_reflection_function_call(call)
     then python_reflection_function_call_code(call, env, module, allModules)
-    else if python_object_type_function_call(call, module, allModules)
-    then python_object_type_function_call_code(call, module, allModules)
-    else if python_object_constructor_call(call, module, allModules)
-    then python_object_constructor_call_code(call, env, module, allModules)
-    else if python_partial_function_call(call)
-    then
-        let names = python_partial_placeholder_names(call.arguments, env)
-        "lambda " + python_lambda_parameters(names) + ": "
-            + python_function_call_name(call.name, module, allModules)
-            + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
-    else if python_enum_parse_call(call, module, allModules)
-    then python_enum_parse_call_code(call, env, module, allModules)
-    else
-        let resolvedName =
-            if python_local_function_count(call.name, module.functions) > 1 & python_one_method_argument(call.arguments)
+    else match python_object_special_function_call_code(call, env, module, allModules) with
+        case Some { code } -> code
+        case None ->
+            if python_partial_function_call(call)
             then
-                let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
-                if argumentType == python_unknown_type()
-                then python_function_call_name(call.name, module, allModules)
-                else match python_find_local_overload_in_module(call.name, argumentType, module, allModules) with
-                case Some { function } -> python_function_name(function)
-                case None -> python_function_call_name(call.name, module, allModules)
-            else python_function_call_name(call.name, module, allModules)
-        resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+                let names = python_partial_placeholder_names(call.arguments, env)
+                "lambda " + python_lambda_parameters(names) + ": "
+                    + python_function_call_name(call.name, module, allModules)
+                    + "(" + python_partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
+            else if python_enum_parse_call(call, module, allModules)
+            then python_enum_parse_call_code(call, env, module, allModules)
+            else
+                let resolvedName =
+                    if python_local_function_overloaded(call.name, module.functions) & python_one_method_argument(call.arguments)
+                    then
+                        let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
+                        if argumentType == python_unknown_type()
+                        then python_function_call_name(call.name, module, allModules)
+                        else match python_find_local_overload_in_module(call.name, argumentType, module, allModules) with
+                        case Some { function } -> python_function_name(function)
+                        case None -> python_function_call_name(call.name, module, allModules)
+                    else python_function_call_name(call.name, module, allModules)
+                resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a function matches the reflection function call metadata.
 private fun python_reflection_function_call(call: CompiledFunctionCallExpression): bool =
@@ -1113,68 +1282,76 @@ private fun python_this_binding_is_object(name: String, env: List[PythonBinding]
 
 /// Emits Python code for method call.
 private fun python_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
-    let receiver = python_expression_code(call.receiver, env, module, allModules)
     if python_partial_method_call(call)
     then
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        let receiver = python_expression_code(call.receiver, env, module, allModules)
         let names = python_partial_placeholder_names(call.arguments, env)
         "lambda " + python_lambda_parameters(names) + ": "
             + python_partial_method_call_body_code(call, receiverType, receiver, names, env, module, allModules)
     else if call.name == "__capy_call"
     then python_callable_call_code(call, env, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_method_call_code(call, env, module, allModules)
-    else if python_effect_start_method_call(call, receiverType)
-    then "__capy_async_start(" + receiver + ")"
-    else if python_async_join_method_call(call, receiverType)
-    then "__capy_async_join(" + receiver + ")"
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_pipe_code(python_async_map_method_binary(call), env, module, allModules)
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_call_code(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
     else if call.name == "size" & call.arguments.is_empty()
-    then "__capy_size(" + receiver + ")"
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then "__capy_enum_name(" + receiver + ")"
-    else if python_char_to_string_method_call(call, receiverType)
-    then "__capy_to_string(" + receiver + ")"
-    else if python_string_get_method_call(call, receiverType)
-    then python_string_get_method_code(call, env, module, allModules)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_string_parse_method_code(call, env, module, allModules)
-    else if python_string_method_call(call, receiverType)
-    then python_string_method_code(call, env, module, allModules)
-    else if python_regex_method_call(call, receiverType)
-    then python_regex_method_call_code(call, env, module, allModules)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
-    then python_stdlib_date_time_method_call_code(call, env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_set_method_call_code(call, env, module, allModules)
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_collection_reduce_method_code(call, receiverType, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_code(python_collection_method_binary(call), env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_native_collection_method_call_code(call, receiverType, receiver, env, module, allModules)
-    else if python_seq_as_list_call(call)
-    then "__capy_as_list(" + receiver + ")"
-    else if python_seq_first_call(call, receiverType)
-    then "__capy_index(__capy_as_list(" + receiver + "), 0)"
-    else if python_collection_predicate_call(call, receiverType)
-    then python_collection_predicate_call_code(call, env, module, allModules)
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then python_primitive_conversion_method_code(call, env, module, allModules)
-    else if python_object_type_method_call(call, env, module, allModules)
-    then python_object_type_method_call_code(call, module, allModules)
-    else if python_object_method_call(call, env, module, allModules)
-    then python_object_method_call_code(call, env, module, allModules)
-    else match python_find_extension_method(call, env, module, allModules) with
-        case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
-        case None ->
-            receiver + "." + python_method_name(call.name)
-                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+    then "__capy_size(" + python_expression_code(call.receiver, env, module, allModules) + ")"
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        let receiver = python_expression_code(call.receiver, env, module, allModules)
+        if python_effect_method_call(call, receiverType)
+        then python_effect_method_call_code(call, env, module, allModules)
+        else if python_effect_start_method_call(call, receiverType)
+        then "__capy_async_start(" + receiver + ")"
+        else if python_async_join_method_call(call, receiverType)
+        then "__capy_async_join(" + receiver + ")"
+        else if python_async_map_method_call(call, receiverType)
+        then python_async_pipe_code(python_async_map_method_binary(call), env, module, allModules)
+        else if python_result_method_call(call, receiverType)
+        then python_result_method_call_code(call, env, module, allModules)
+        else if python_option_method_call(call, receiverType)
+        then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
+        else if python_enum_name_method_call(call, receiverType, module, allModules)
+        then "__capy_enum_name(" + receiver + ")"
+        else if python_char_to_string_method_call(call, receiverType)
+        then "__capy_to_string(" + receiver + ")"
+        else if python_string_get_method_call(call, receiverType)
+        then python_string_get_method_code(call, env, module, allModules)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_string_parse_method_code(call, env, module, allModules)
+        else if python_string_method_call(call, receiverType)
+        then python_string_method_code(call, env, module, allModules)
+        else if python_regex_method_call(call, receiverType)
+        then python_regex_method_call_code(call, env, module, allModules)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_stdlib_date_time_method_call_code_with_receiver_type(call, python_type_unqualified_name(receiverType), receiver, env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_set_method_call_code(call, env, module, allModules)
+        else if python_collection_reduce_method_call(call, receiverType)
+        then python_collection_reduce_method_code(call, receiverType, env, module, allModules)
+        else if python_collection_method_call(call, receiverType)
+        then python_collection_pipe_code(python_collection_method_binary(call), env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_native_collection_method_call_code(call, receiverType, receiver, env, module, allModules)
+        else if python_seq_as_list_call(call)
+        then "__capy_as_list(" + receiver + ")"
+        else if python_seq_first_call(call, receiverType)
+        then "__capy_index(__capy_as_list(" + receiver + "), 0)"
+        else if python_collection_predicate_call(call, receiverType)
+        then python_collection_predicate_call_code(call, env, module, allModules)
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then python_primitive_conversion_method_code(call, env, module, allModules)
+        else if python_object_type_method_call(call, env, module, allModules)
+        then python_object_type_method_call_code(call, module, allModules)
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ ->
+                "Effect.delay(lambda: "
+                    + receiver
+                    + "." + python_method_name(call.name)
+                    + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
+            case None ->
+                match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
+                case None ->
+                    receiver + "." + python_method_name(call.name)
+                        + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a call has the object constructor call shape.
 private fun python_object_constructor_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1182,14 +1359,16 @@ private fun python_object_constructor_call(call: CompiledFunctionCallExpression,
     case Some _ -> true
     case None -> false
 
-/// Emits Python code for object constructor call.
-private fun python_object_constructor_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match python_find_object_class_in_scope(call.name, module, allModules) with
-    case Some { binding } ->
-        "Effect.delay(lambda: " + python_object_class_reference(binding, module)
-            + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
-    case None -> python_function_call_name(call.name, module, allModules)
-        + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+/// Resolves object type and constructor calls while keeping lookup and emission in one pass.
+private fun python_object_special_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    if python_object_type_function_call_shape(call)
+    then python_object_type_call_code_for_name_option(python_object_type_function_receiver_name(call.name), module, allModules)
+    else match python_find_object_class_in_scope(call.name, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some {
+            "Effect.delay(lambda: " + python_object_class_reference(binding, module)
+                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + "))"
+        }
+        case None -> /capy/lang/Option.None {}
 
 /// Checks whether a type reference matches the object type method call rule.
 private fun python_object_type_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1209,14 +1388,14 @@ private fun python_object_type_method_call_code(call: CompiledMethodCallExpressi
 
 /// Checks whether a type reference matches the object type function call rule.
 private fun python_object_type_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_object_type_function_call_shape(call)
+        & python_object_type_receiver_name(python_object_type_function_receiver_name(call.name), module, allModules)
+
+/// Checks whether a call has the syntactic shape of an object type function call.
+private fun python_object_type_function_call_shape(call: CompiledFunctionCallExpression): bool =
     python_qualified_name(call.name)
         & python_qualified_call_member(call.name) == "type"
         & call.arguments.is_empty()
-        & python_object_type_receiver_name(python_object_type_function_receiver_name(call.name), module, allModules)
-
-/// Emits Python code for object type function call.
-private fun python_object_type_function_call_code(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_object_type_call_code_for_name(python_object_type_function_receiver_name(call.name), module, allModules)
 
 /// Computes the Python name for object type function receiver.
 private fun python_object_type_function_receiver_name(name: String): String =
@@ -1240,6 +1419,15 @@ private fun python_object_type_call_code_for_name(name: String, module: Compiled
         match python_find_object_interface_module_in_scope(name, module, allModules) with
         case Some { owner } -> python_object_interface_info_literal(python_object_interface_member_name(name), owner, allModules)
         case None -> "__capy_unsupported('COO type')"
+
+/// Computes Python object type call code only when the target exists.
+private fun python_object_type_call_code_for_name_option(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match python_find_object_class_in_scope(name, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { python_object_class_reference(binding, module) + ".type()" }
+    case None ->
+        match python_find_object_interface_module_in_scope(name, module, allModules) with
+        case Some { owner } -> /capy/lang/Option.Some { python_object_interface_info_literal(python_object_interface_member_name(name), owner, allModules) }
+        case None -> /capy/lang/Option.None {}
 
 /// Checks whether method metadata matches the object method call rule.
 private fun python_object_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1276,7 +1464,10 @@ private fun python_partial_method_call(call: CompiledMethodCallExpression): bool
 private fun python_arguments_contain_placeholder(arguments: List[CompiledExpression]): bool =
     match arguments[0] with
     case None -> false
-    case Some { expression } -> python_partial_placeholder_expression(expression) | python_arguments_contain_placeholder(arguments[1:])
+    case Some { expression } ->
+        if python_partial_placeholder_expression(expression)
+        then true
+        else python_arguments_contain_placeholder(arguments[1:])
 
 /// Checks whether an expression has the partial placeholder expression shape.
 private fun python_partial_placeholder_expression(expression: CompiledExpression): bool =
@@ -1366,7 +1557,9 @@ private fun python_partial_placeholder_names_with_used(arguments: List[CompiledE
 /// Computes the Python name for available partial parameter.
 private fun python_available_partial_parameter_name(used: List[String], env: List[PythonBinding], idx: int): String =
     let name = "capybaraPartial" + idx
-    if python_binding_exists(name, env) | python_string_list_contains(name, used)
+    if python_binding_exists(name, env)
+    then python_available_partial_parameter_name(used, env, idx + 1)
+    else if python_string_list_contains(name, used)
     then python_available_partial_parameter_name(used, env, idx + 1)
     else name
 
@@ -1943,7 +2136,10 @@ private fun python_regex_receiver_type(typeName: String): bool =
 
 /// Checks whether method metadata matches the standard-library date/time method call rule.
 private fun python_stdlib_date_time_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_stdlib_date_time_method(python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules)), call.name, call.arguments, env, module, allModules)
+    python_stdlib_date_time_method_call_with_receiver_type(call, python_expression_type(call.receiver, env, module, allModules), env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    python_stdlib_date_time_method(python_type_unqualified_name(receiverType), call.name, call.arguments, env, module, allModules)
 
 /// Checks whether method metadata matches the standard-library date/time method rule.
 private fun python_stdlib_date_time_method(receiver: String, methodName: String, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1973,6 +2169,9 @@ private fun python_stdlib_date_time_method(receiver: String, methodName: String,
 private fun python_stdlib_date_time_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
     let receiver = python_expression_code(call.receiver, env, module, allModules)
+    python_stdlib_date_time_method_call_code_with_receiver_type(call, receiverType, receiver, env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_code_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if receiverType == "Date"
     then python_stdlib_date_method_call_code(call, receiver, env, module, allModules)
     else if receiverType == "Time"
@@ -2684,8 +2883,9 @@ private fun python_reduce_expression_code(reduce: CompiledReduceExpression, env:
 
 /// Checks whether an expression has the option reduce expression shape.
 private fun python_option_reduce_expression(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    reduce.keyName.is_empty()
-        & python_option_pipe_receiver_type(python_expression_type(reduce.receiver, env, module, allModules))
+    if reduce.keyName.is_empty()
+    then python_option_pipe_receiver_type(python_expression_type(reduce.receiver, env, module, allModules))
+    else false
 
 /// Emits Python code for option reduce expression.
 private fun python_option_reduce_expression_code(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2859,7 +3059,10 @@ private fun python_effect_block(block: CompiledBlockExpression): bool =
 private fun python_effect_bindings(bindings: List[CompiledLetBinding]): bool =
     match bindings[0] with
     case None -> false
-    case Some { binding } -> binding.operator == "<-" | python_effect_bindings(bindings[1:])
+    case Some { binding } ->
+        if binding.operator == "<-"
+        then true
+        else python_effect_bindings(bindings[1:])
 
 /// Checks whether the current value satisfies the result block rule for Python processing.
 private fun python_result_block(block: CompiledBlockExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3224,15 +3427,18 @@ private fun python_object_info_type_for_name(name: String, module: CompiledModul
 
 /// Checks whether a function matches the standard-library effect function call metadata.
 private fun python_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    call.arguments.is_empty()
-        & python_local_function_count(call.name, module.functions) == 0
-        & if call.name == "current_millis"
-            then python_system_member_imported("current_millis", module.imports)
-            else if call.name == "nano_time"
-            then python_system_member_imported("nano_time", module.imports)
-            else if call.name == "now"
-            then python_clock_member_imported("now", module.imports)
-            else false
+    if call.arguments.is_empty()
+    then python_stdlib_effect_function_call_by_name(call.name, module)
+    else false
+
+private fun python_stdlib_effect_function_call_by_name(name: String, module: CompiledModule): bool =
+    if name == "current_millis"
+    then !python_local_function_exists(name, module.functions) & python_system_member_imported("current_millis", module.imports)
+    else if name == "nano_time"
+    then !python_local_function_exists(name, module.functions) & python_system_member_imported("nano_time", module.imports)
+    else if name == "now"
+    then !python_local_function_exists(name, module.functions) & python_clock_member_imported("now", module.imports)
+    else false
 
 /// Emits Python code for standard-library effect function call.
 private fun python_stdlib_effect_function_call_code(name: String): String =
@@ -3247,10 +3453,9 @@ private fun python_stdlib_effect_function_call_type(name: String): String =
     python_effect_type()
 
 private fun python_stdlib_parse_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    python_one_method_argument(call.arguments)
-        & python_local_function_count(call.name, module.functions) == 0
-        & python_string_parse_method_name(call.name)
-        & python_primitives_member_imported(call.name, module.imports)
+    if python_one_method_argument(call.arguments) & python_string_parse_method_name(call.name)
+    then !python_local_function_exists(call.name, module.functions) & python_primitives_member_imported(call.name, module.imports)
+    else false
 
 private fun python_stdlib_parse_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     python_string_parse_helper(call.name)
@@ -3259,10 +3464,9 @@ private fun python_stdlib_parse_function_call_code(call: CompiledFunctionCallExp
         + ")"
 
 private fun python_stdlib_path_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    python_one_method_argument(call.arguments)
-        & python_local_function_count(call.name, module.functions) == 0
-        & call.name == "from_string"
-        & python_path_member_imported("from_string", module.imports)
+    if python_one_method_argument(call.arguments) & call.name == "from_string"
+    then !python_local_function_exists(call.name, module.functions) & python_path_member_imported("from_string", module.imports)
+    else false
 
 private fun python_stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "from_string("
@@ -3274,9 +3478,9 @@ private fun python_stdlib_io_function_call(call: CompiledFunctionCallExpression,
         & python_stdlib_io_function_argument_count(call.name, call.arguments)
 
 private fun python_stdlib_io_function_call_by_name(name: String, module: CompiledModule): bool =
-    python_local_function_count(name, module.functions) == 0
-        & python_io_function_name(name)
-        & python_io_member_imported(name, module.imports)
+    if python_io_function_name(name)
+    then !python_local_function_exists(name, module.functions) & python_io_member_imported(name, module.imports)
+    else false
 
 private fun python_stdlib_io_function_argument_count(name: String, arguments: List[CompiledExpression]): bool =
     if python_io_unary_function_name(name)
@@ -3342,69 +3546,70 @@ private fun python_module_member_imported(member: String, imports: List[Compiled
     match imports[0] with
     case None -> false
     case Some { declaration } ->
-        if (declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath)
-            & python_import_includes_name(member, declaration)
-        then true
+        if declaration.modulePath == absoluteModulePath | declaration.modulePath == relativeModulePath
+        then if python_import_includes_name(member, declaration) then true else python_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
         else python_module_member_imported(member, imports[1:], absoluteModulePath, relativeModulePath)
 
 /// Infers the expression type for method call.
 private fun python_method_call_expression_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if call.name == "__capy_call"
     then python_callable_call_expression_type(call, env, module, allModules)
     else if call.name == "size"
     then python_int_type()
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then python_string_type()
-    else if python_char_to_string_method_call(call, receiverType)
-    then python_string_type()
-    else if python_string_get_method_call(call, receiverType)
-    then python_string_get_method_return_type(call)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_result_type()
-    else if python_string_method_call(call, receiverType)
-    then python_string_method_return_type(call.name)
-    else if python_regex_method_call(call, receiverType)
-    then python_regex_method_call_type(call.name)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
-    then python_stdlib_date_time_method_call_type(call, env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_set_method_call_type(call, env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_native_collection_method_call_type(call, receiverType)
-    else if python_seq_as_list_call(call)
-    then python_list_type()
-    else if python_collection_predicate_call(call, receiverType)
-    then python_bool_type()
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then if call.name == "to_int" then python_int_type() else python_long_type()
-    else if python_object_type_method_call(call, env, module, allModules)
-    then python_object_type_method_call_type(call, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_type()
-    else if python_effect_start_method_call(call, receiverType)
-    then python_async_type()
-    else if python_async_join_method_call(call, receiverType)
-    then python_effect_type()
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_type()
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_call_type(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_type()
-    else if python_assert_method(call.name)
-    then python_assert_type()
-    else if python_object_method_call(call, env, module, allModules)
-    then python_effect_type()
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_first_method_argument_type(call.arguments, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
-    else if python_seq_first_call(call, receiverType)
-    then python_option_type()
-    else match python_find_extension_method(call, env, module, allModules) with
-        case Some { function } -> function.returnType.name
-        case None -> python_unknown_type()
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        if python_enum_name_method_call(call, receiverType, module, allModules)
+        then python_string_type()
+        else if python_char_to_string_method_call(call, receiverType)
+        then python_string_type()
+        else if python_string_get_method_call(call, receiverType)
+        then python_string_get_method_return_type(call)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_result_type()
+        else if python_string_method_call(call, receiverType)
+        then python_string_method_return_type(call.name)
+        else if python_regex_method_call(call, receiverType)
+        then python_regex_method_call_type(call.name)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_stdlib_date_time_method_call_type_with_receiver(call, python_type_unqualified_name(receiverType), env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_set_method_call_type(call, env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_native_collection_method_call_type(call, receiverType)
+        else if python_seq_as_list_call(call)
+        then python_list_type()
+        else if python_collection_predicate_call(call, receiverType)
+        then python_bool_type()
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then if call.name == "to_int" then python_int_type() else python_long_type()
+        else if python_object_type_method_call(call, env, module, allModules)
+        then python_object_type_method_call_type(call, module, allModules)
+        else if python_effect_method_call(call, receiverType)
+        then python_effect_type()
+        else if python_effect_start_method_call(call, receiverType)
+        then python_async_type()
+        else if python_async_join_method_call(call, receiverType)
+        then python_effect_type()
+        else if python_async_map_method_call(call, receiverType)
+        then python_async_type()
+        else if python_result_method_call(call, receiverType)
+        then python_result_method_call_type(call, env, module, allModules)
+        else if python_option_method_call(call, receiverType)
+        then python_option_type()
+        else if python_assert_method(call.name)
+        then python_assert_type()
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ -> python_effect_type()
+            case None ->
+                if python_collection_reduce_method_call(call, receiverType)
+                then python_first_method_argument_type(call.arguments, env, module, allModules)
+                else if python_collection_method_call(call, receiverType)
+                then python_collection_pipe_result_type(python_collection_method_operator(call.name), receiverType)
+                else if python_seq_first_call(call, receiverType)
+                then python_option_type()
+                else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                    case Some { function } -> function.returnType.name
+                    case None -> python_unknown_type()
 
 /// Computes the Python type for result method call.
 private fun python_result_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3459,15 +3664,17 @@ private fun python_data_constructor_pipeline_returns_result(constructorTypes: Li
     match constructorTypes[0] with
     case None -> false
     case Some { constructorType } ->
-        python_data_constructor_type_returns_result(constructorType, module, allModules)
-            | python_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
+        if python_data_constructor_type_returns_result(constructorType, module, allModules)
+        then true
+        else python_data_constructor_pipeline_returns_result(constructorTypes[1:], module, allModules)
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun python_data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_data_constructor_function(typeName, module) with
     case Some { function } ->
-        python_result_pipe_receiver_type(function.returnType.name)
-            | python_result_pipe_receiver_type(python_data_constructor_inferred_expression_type(function.body, python_function_bindings(function), module, allModules))
+        if python_result_pipe_receiver_type(function.returnType.name)
+        then true
+        else python_result_pipe_receiver_type(python_data_constructor_inferred_expression_type(function.body, python_function_bindings(function), module, allModules))
     case None -> false
 
 /// Infers the expression type for data constructor inferred.
@@ -3634,8 +3841,10 @@ private fun python_result_payload_type_from_function_call(name: String, module: 
 
 /// Emits Python expression text for result payload type from method call.
 private fun python_result_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules))
-    then python_string_parse_payload_type(call.name)
+    if python_string_parse_method_name(call.name)
+    then if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules))
+        then python_string_parse_payload_type(call.name)
+        else python_unknown_type()
     else python_unknown_type()
 
 /// Emits Python expression text for result payload type from with expression.
@@ -3665,7 +3874,9 @@ private fun python_result_payload_type_from_data_literal(literal: CompiledDataLi
     else
         let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
         let constructorTypes = python_data_parent_constructor_type_names(declaredTypeName, module, allModules) + python_data_own_constructor_type_names(declaredTypeName, module)
-        if !python_raw_data_literal(literal.typeName) & python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
+        if python_raw_data_literal(literal.typeName)
+        then python_unknown_type()
+        else if python_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then declaredTypeName
         else python_unknown_type()
 
@@ -3705,7 +3916,6 @@ private fun python_string_method_return_type(name: String): String =
 /// Infers the expression type for binary.
 private fun python_binary_expression_type(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
-    let rightType = python_expression_type(binary.right, env, module, allModules)
     if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_type(binary, env, module, allModules)
     else if python_async_pipe_expression_with_left_type(binary, leftType)
@@ -3725,13 +3935,19 @@ private fun python_binary_expression_type(binary: CompiledBinaryExpression, env:
     else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
     case Some { function } -> function.returnType.name
     case None ->
-    if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
-    then python_bool_type()
-    else if binary.operator == "+" & (leftType == "String" | rightType == "String")
-    then python_string_type()
-    else if python_numeric_binary_operator(binary.operator) & python_numeric_type(leftType) & python_numeric_type(rightType)
-    then python_promoted_numeric_type(leftType, rightType)
-    else python_unknown_type()
+        if python_bool_binary_operator(binary.operator) | python_comparison_operator(binary.operator)
+        then python_bool_type()
+        else if binary.operator == "+" & leftType == "String"
+        then python_string_type()
+        else
+            let rightType = python_expression_type(binary.right, env, module, allModules)
+            if binary.operator == "+" & rightType == "String"
+            then python_string_type()
+            else if python_numeric_binary_operator(binary.operator)
+            then if python_numeric_type(leftType)
+                then if python_numeric_type(rightType) then python_promoted_numeric_type(leftType, rightType) else python_unknown_type()
+                else python_unknown_type()
+            else python_unknown_type()
 
 /// Checks whether an operator belongs to the binary operator category.
 private fun python_bool_binary_operator(operator: String): bool =
@@ -3879,6 +4095,9 @@ private fun python_stdlib_data_constructor_type(typeName: String, family: String
 /// Computes the Python type for standard-library date time method call.
 private fun python_stdlib_date_time_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiver = python_type_unqualified_name(python_expression_type(call.receiver, env, module, allModules))
+    python_stdlib_date_time_method_call_type_with_receiver(call, receiver, env, module, allModules)
+
+private fun python_stdlib_date_time_method_call_type_with_receiver(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if receiver == "Date"
     then if call.name == "to_days_since_unix_epoch" then python_int_type() else if call.name == "to_iso_8601" then python_string_type() else "Date"
     else if receiver == "Time"
@@ -4210,24 +4429,34 @@ private fun python_enum_static_field_access_type_name(access: CompiledFieldAcces
 
 /// Checks whether the current value satisfies the qualified enum value name rule for Python processing.
 private fun python_qualified_enum_value_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_qualified_name(name)
-        & python_enum_value_exists(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+    let idx = python_last_dot_index(name)
+    python_qualified_name_at(name, idx)
+        & python_enum_value_exists(python_enum_qualified_type_name_at(name, idx), python_qualified_call_member_at(name, idx), module, allModules)
 
 /// Computes the Python type name for enum qualified.
 private fun python_enum_qualified_type_name(name: String): String =
-    name[0, python_last_dot_index(name)]
+    python_enum_qualified_type_name_at(name, python_last_dot_index(name))
+
+/// Computes the Python type name for enum qualified using a precomputed separator.
+private fun python_enum_qualified_type_name_at(name: String, idx: int): String =
+    name[0, idx]
 
 /// Computes the Python name for enum qualified member.
 private fun python_enum_qualified_member_name(name: String): String =
-    name[python_last_dot_index(name) + 1, name.size().value]
+    python_qualified_call_member_at(name, python_last_dot_index(name))
 
 /// Emits Python code for enum qualified value.
 private fun python_enum_qualified_value_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_enum_value_reference_code(python_enum_qualified_type_name(name), python_enum_qualified_member_name(name), module, allModules)
+    let idx = python_last_dot_index(name)
+    python_enum_value_reference_code(python_enum_qualified_type_name_at(name, idx), python_qualified_call_member_at(name, idx), module, allModules)
 
 /// Checks whether enum type exists in the relevant declarations or imports.
 private fun python_enum_type_exists(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !python_enum_values(name, module, allModules).is_empty()
+    if python_enum_type_exists_in_functions(name, module.functions)
+    then true
+    else match python_enum_type_imported_module(name, module.imports, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether enum value exists in the relevant declarations or imports.
 private fun python_enum_value_exists(typeName: String, valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4235,15 +4464,16 @@ private fun python_enum_value_exists(typeName: String, valueName: String, module
 
 /// Computes value metadata for enum values.
 private fun python_enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if python_enum_type_exists_in_functions(name, module.functions)
-    then python_enum_values_in_functions(name, module.functions)
+    let localValues = python_enum_values_in_functions(name, module.functions)
+    if !localValues.is_empty()
+    then localValues
     else match python_enum_values_in_imports(name, module.imports, module, allModules) with
         case Some { values } -> values
         case None -> []
 
 /// Checks whether enum type exists in functions exists in the relevant declarations or imports.
 private fun python_enum_type_exists_in_functions(name: String, functions: List[CompiledFunction]): bool =
-    !python_enum_values_in_functions(name, functions).is_empty()
+    python_schema_value_with_prefix_exists("__capy_schema_enum|" + name + "|", functions)
 
 /// Collects enum metadata for enum values in functions.
 private fun python_enum_values_in_functions(name: String, functions: List[CompiledFunction]): List[String] =
@@ -4262,8 +4492,9 @@ private fun python_enum_values_in_imports(name: String, imports: List[CompiledIm
 private fun python_enum_values_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
     match python_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
-        if python_enum_type_exists_in_functions(name, importedModule.functions)
-        then /capy/lang/Option.Some { python_enum_values_in_functions(name, importedModule.functions) }
+        let values = python_enum_values_in_functions(name, importedModule.functions)
+        if !values.is_empty()
+        then /capy/lang/Option.Some { values }
         else python_enum_values_in_imports(name, rest, module, allModules)
     case _ -> python_enum_values_in_imports(name, rest, module, allModules)
 
@@ -4319,8 +4550,9 @@ private fun python_module_import_expression(module: CompiledModule): String =
 
 /// Finds a qualified function binding in scope, imports, or compiled modules.
 private fun python_find_qualified_function_binding(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
-    match python_find_module_by_path(python_qualified_call_module_path(name, module), allModules) with
-    case Some { targetModule } -> python_find_qualified_function_in_module(python_qualified_call_member(name), targetModule)
+    let idx = python_last_dot_index(name)
+    match python_find_module_by_path(python_qualified_call_module_path_at(name, idx, module), allModules) with
+    case Some { targetModule } -> python_find_qualified_function_in_module(python_qualified_call_member_at(name, idx), targetModule)
     case None -> /capy/lang/Option.None {}
 
 /// Finds a qualified function in a module in scope, imports, or compiled modules.
@@ -4331,21 +4563,34 @@ private fun python_find_qualified_function_in_module(name: String, module: Compi
 
 /// Checks whether the current value satisfies the qualified name rule for Python processing.
 private fun python_qualified_name(name: String): bool =
-    let idx = python_last_dot_index(name)
+    python_qualified_name_at(name, python_last_dot_index(name))
+
+/// Checks whether a precomputed separator satisfies the qualified name rule for Python processing.
+private fun python_qualified_name_at(name: String, idx: int): bool =
     idx > 0 & idx < name.size().value - 1
 
 /// Emits Python expression text for qualified call member.
 private fun python_qualified_call_member(name: String): String =
-    let idx = python_last_dot_index(name)
+    python_qualified_call_member_at(name, python_last_dot_index(name))
+
+/// Emits Python expression text for qualified call member using a precomputed separator.
+private fun python_qualified_call_member_at(name: String, idx: int): String =
     if idx < 0 then name else name[idx + 1, name.size().value]
 
 /// Computes the output or module path for qualified call module.
 private fun python_qualified_call_module_path(name: String, module: CompiledModule): String =
-    python_qualified_module_path(python_qualified_call_class_name(name), module)
+    python_qualified_call_module_path_at(name, python_last_dot_index(name), module)
+
+/// Computes the output or module path for qualified call module using a precomputed separator.
+private fun python_qualified_call_module_path_at(name: String, idx: int, module: CompiledModule): String =
+    python_qualified_module_path(python_qualified_call_class_name_at(name, idx), module)
 
 /// Computes the Python name for qualified call class.
 private fun python_qualified_call_class_name(name: String): String =
-    let idx = python_last_dot_index(name)
+    python_qualified_call_class_name_at(name, python_last_dot_index(name))
+
+/// Computes the Python name for qualified call class using a precomputed separator.
+private fun python_qualified_call_class_name_at(name: String, idx: int): String =
     if idx < 0 then name else name[0, idx]
 
 /// Checks whether qualified import matches the requested declaration, type, or name.
@@ -4389,6 +4634,17 @@ private fun python_overload_requested_function_name(name: String): String =
 private fun python_overload_requested_argument_type(name: String): String =
     let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
     if marker < 0 then python_unknown_type() else name[marker + "__capy_overload_arg__".size().value, name.size().value]
+
+/// Decodes an overload request in one marker scan.
+private fun python_overload_request_parts(name: String): PythonOverloadRequest =
+    let marker = python_first_index_of(name, "__capy_overload_arg__", 0)
+    if marker < 0
+    then PythonOverloadRequest { requested: false, functionName: name, argumentType: python_unknown_type() }
+    else PythonOverloadRequest {
+        requested: true,
+        functionName: name[0, marker],
+        argumentType: name[marker + "__capy_overload_arg__".size().value, name.size().value]
+    }
 
 /// Computes the Python name for type reference name key.
 private fun python_type_reference_name_key(name: String, argumentName: String): String =
@@ -4449,10 +4705,11 @@ private fun python_callable_function(function: CompiledFunction): bool =
 
 /// Finds a local function in scope, imports, or compiled modules.
 private fun python_find_local_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    if python_overload_request(name)
+    let request = python_overload_request_parts(name)
+    if request.requested
     then python_find_local_overload(
-        python_overload_requested_function_name(name),
-        python_overload_requested_argument_type(name),
+        request.functionName,
+        request.argumentType,
         functions,
         /capy/lang/Option.None {},
         1000000
@@ -4585,7 +4842,9 @@ private fun python_find_binding_in_imports(name: String, imports: List[CompiledI
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.qualified | !python_import_includes_name(name, declaration)
+        if declaration.qualified
+        then python_find_binding_in_imports(name, imports[1:], module, allModules, constant)
+        else if !python_import_includes_name(name, declaration)
         then python_find_binding_in_imports(name, imports[1:], module, allModules, constant)
         else python_find_binding_in_import(name, declaration, imports[1:], module, allModules, constant)
 
@@ -4622,23 +4881,52 @@ private fun python_compiled_object_classes(functions: List[CompiledFunction]): L
 
 /// Extracts compiled metadata for object class schema.
 private fun python_compiled_object_class_schema(function: CompiledFunction): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_class|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_class|")
+    else false
 
 /// Extracts compiled metadata for object class.
 private fun python_compiled_object_class(function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedClass =
-    let className = function.name["__capy_oo_class|".size().value, function.name.size().value]
+    let className = python_compiled_object_class_name(function)
+    let sources = python_compiled_object_class_sources(className, functions)
     CompiledObjectOrientedClass {
         name: className,
         visibility: python_schema_value(function),
         documentation: function.documentation,
-        open: python_compiled_object_class_open(className, functions),
-        parameters: python_compiled_object_class_parameters(className, functions),
-        parents: python_object_schema_type_references(python_schema_values("__capy_oo_parent|" + className + "|", functions)),
-        fields: python_compiled_object_fields(className, functions),
-        initBlocks: python_compiled_object_init_blocks(className, functions),
-        methods: python_compiled_object_methods(className, functions),
+        open: sources.openValue == "true",
+        parameters: python_compiled_object_class_parameters_from_sources(sources.parameters),
+        parents: python_object_schema_type_references(sources.parents),
+        fields: python_compiled_object_fields(className, sources.fieldSchemas, sources.fieldInitializers),
+        initBlocks: python_compiled_object_init_blocks_from_sources(sources.initBlocks),
+        methods: python_compiled_object_methods_from_sources(sources.methods),
         location: function.location
     }
+
+/// Extracts compiled object class schema and helper sources for one class once.
+private fun python_compiled_object_class_sources(className: String, functions: List[CompiledFunction]): PythonObjectClassSources =
+    match functions[0] with
+    case None -> PythonObjectClassSources { openValue: "", parameters: [], parents: [], fieldSchemas: [], fieldInitializers: [], initBlocks: [], methods: [] }
+    case Some { function } ->
+        let rest = python_compiled_object_class_sources(className, functions[1:])
+        if python_compiled_schema(function) & function.name == "__capy_oo_class_open|" + className
+        then rest.with(openValue: python_schema_value(function))
+        else if python_compiled_object_class_parameter_schema(function, className)
+        then rest.with(parameters: [function] + rest.parameters)
+        else if python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_parent|" + className + "|")
+        then rest.with(parents: [python_schema_value(function)] + rest.parents)
+        else if python_compiled_object_field_schema_for_class(function, className)
+        then rest.with(fieldSchemas: [function] + rest.fieldSchemas)
+        else if python_compiled_object_field_init_function(function, className)
+        then rest.with(fieldInitializers: [function] + rest.fieldInitializers)
+        else if python_compiled_object_init_function_for_class(function, className)
+        then rest.with(initBlocks: [function] + rest.initBlocks)
+        else if python_compiled_object_method_function(function, className)
+        then rest.with(methods: [function] + rest.methods)
+        else rest
+
+/// Extracts compiled metadata for object class name.
+private fun python_compiled_object_class_name(function: CompiledFunction): String =
+    function.name["__capy_oo_class|".size().value, function.name.size().value]
 
 /// Extracts compiled metadata for object class open.
 private fun python_compiled_object_class_open(className: String, functions: List[CompiledFunction]): bool =
@@ -4655,9 +4943,17 @@ private fun python_compiled_object_class_parameters(className: String, functions
         then [python_compiled_object_class_parameter(function)] + python_compiled_object_class_parameters(className, functions[1:])
         else python_compiled_object_class_parameters(className, functions[1:])
 
+/// Extracts compiled metadata for object class parameters from prefiltered schema functions.
+private fun python_compiled_object_class_parameters_from_sources(functions: List[CompiledFunction]): List[CompiledFunctionParameter] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [python_compiled_object_class_parameter(function)] + python_compiled_object_class_parameters_from_sources(functions[1:])
+
 /// Extracts compiled metadata for object class parameter schema.
 private fun python_compiled_object_class_parameter_schema(function: CompiledFunction, className: String): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_param|" + className + "|")
+    else false
 
 /// Extracts compiled metadata for object class parameter.
 private fun python_compiled_object_class_parameter(function: CompiledFunction): CompiledFunctionParameter =
@@ -4686,51 +4982,95 @@ private fun python_object_schema_type_references(values: List[String]): List[Com
     case Some { value } -> [python_object_schema_type_reference(value)] + python_object_schema_type_references(values[1:])
 
 /// Extracts compiled metadata for object fields.
-private fun python_compiled_object_fields(className: String, functions: List[CompiledFunction]): List[CompiledObjectOrientedField] =
-    match functions[0] with
+private fun python_compiled_object_fields(className: String, fieldSchemas: List[CompiledFunction], fieldInitializers: List[CompiledFunction]): List[CompiledObjectOrientedField] =
+    match fieldSchemas[0] with
     case None -> []
     case Some { function } ->
-        if python_compiled_object_field_schema_for_class(function, className)
-        then [python_compiled_object_field(className, function, functions)] + python_compiled_object_fields(className, functions[1:])
-        else python_compiled_object_fields(className, functions[1:])
+        [python_compiled_object_field(className, function, fieldInitializers)] + python_compiled_object_fields(className, fieldSchemas[1:], fieldInitializers)
 
 /// Extracts compiled metadata for object field schema for class.
 private fun python_compiled_object_field_schema_for_class(function: CompiledFunction, className: String): bool =
-    python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+    if python_compiled_schema(function)
+    then python_string_has_prefix(function.name, "__capy_oo_field|" + className + "|")
+    else false
 
 /// Extracts compiled metadata for object field.
-private fun python_compiled_object_field(className: String, function: CompiledFunction, functions: List[CompiledFunction]): CompiledObjectOrientedField =
+private fun python_compiled_object_field(className: String, function: CompiledFunction, fieldInitializers: List[CompiledFunction]): CompiledObjectOrientedField =
     let value = python_schema_value(function)
-    let fieldName = python_object_field_schema_name(value)
+    let schema = python_object_field_schema_metadata(value)
     CompiledObjectOrientedField {
-        name: fieldName,
-        visibility: python_object_field_schema_visibility(value),
+        name: schema.name,
+        visibility: schema.visibility,
         documentation: function.documentation,
-        typeReference: python_object_schema_type_reference(python_object_field_schema_type(value)),
-        value: python_compiled_object_field_value(className, fieldName, functions, function.location),
-        hasValue: python_object_field_schema_has_value(value),
+        typeReference: python_object_schema_type_reference(schema.typeName),
+        value: python_compiled_object_field_value(className, schema.name, fieldInitializers, function.location),
+        hasValue: schema.hasValue,
         location: function.location
     }
 
+/// Extracts compiled object field schema and initializer helpers for one class once.
+private fun python_compiled_object_field_sources(className: String, functions: List[CompiledFunction]): PythonObjectFieldSources =
+    match functions[0] with
+    case None -> PythonObjectFieldSources { schemas: [], initializers: [] }
+    case Some { function } ->
+        let rest = python_compiled_object_field_sources(className, functions[1:])
+        if python_compiled_object_field_schema_for_class(function, className)
+        then PythonObjectFieldSources {
+            schemas: [function] + rest.schemas,
+            initializers: rest.initializers
+        }
+        else if python_compiled_object_field_init_function(function, className)
+        then PythonObjectFieldSources {
+            schemas: rest.schemas,
+            initializers: [function] + rest.initializers
+        }
+        else rest
+
 /// Extracts compiled metadata for object field value.
-private fun python_compiled_object_field_value(className: String, fieldName: String, functions: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
-    match python_find_compiled_object_field_init(className, fieldName, functions) with
+private fun python_compiled_object_field_value(className: String, fieldName: String, fieldInitializers: List[CompiledFunction], location: CompiledSourceLocation): CompiledExpression =
+    match python_find_compiled_object_field_init(className, fieldName, fieldInitializers) with
     case Some { function } -> function.body
     case None -> CompiledUnsupportedExpression { source: "", location: location }
 
 /// Finds a compiled object field initializer in scope, imports, or compiled modules.
-private fun python_find_compiled_object_field_init(className: String, fieldName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+private fun python_find_compiled_object_field_init(className: String, fieldName: String, fieldInitializers: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    python_find_compiled_object_field_init_by_name("__capy_oo_field_init|" + className + "|" + fieldName, fieldInitializers)
+
+/// Finds a compiled object field initializer by its encoded helper name.
+private fun python_find_compiled_object_field_init_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if function.name == "__capy_oo_field_init|" + className + "|" + fieldName
+        if function.name == name
         then /capy/lang/Option.Some { function }
-        else python_find_compiled_object_field_init(className, fieldName, functions[1:])
+        else python_find_compiled_object_field_init_by_name(name, functions[1:])
+
+/// Extracts compiled metadata for object field initializer function for class.
+private fun python_compiled_object_field_init_function(function: CompiledFunction, className: String): bool =
+    if python_string_has_prefix(function.name, "__capy_oo_field_init|")
+    then python_string_has_prefix(function.name, "__capy_oo_field_init|" + className + "|")
+    else false
 
 /// Computes the Python name for object field schema.
 private fun python_object_field_schema_name(value: String): String =
     let first = python_first_index_of(value, "|", 0)
     if first < 0 then value else value[0, first]
+
+/// Decodes object field schema separators once for generated object metadata.
+private fun python_object_field_schema_metadata(value: String): PythonObjectFieldSchema =
+    let first = python_first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else python_first_index_of(value, "|", first + 1)
+    let last = python_last_index_of(value, "|")
+    PythonObjectFieldSchema {
+        name: if first < 0 then value else value[0, first],
+        visibility: if first < 0 | second < 0 then "public" else value[first + 1, second],
+        typeName: if second < 0
+            then "any"
+            else if last <= second
+            then value[second + 1, value.size().value]
+            else value[second + 1, last],
+        hasValue: last >= 0 & value[last + 1, value.size().value] == "true"
+    }
 
 /// Encodes schema metadata text for object field schema visibility.
 private fun python_object_field_schema_visibility(value: String): String =
@@ -4775,6 +5115,16 @@ private fun python_compiled_object_init_blocks(className: String, functions: Lis
         }] + python_compiled_object_init_blocks(className, functions[1:])
         else python_compiled_object_init_blocks(className, functions[1:])
 
+/// Extracts compiled metadata for object initializer blocks from prefiltered functions.
+private fun python_compiled_object_init_blocks_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedInitBlock] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [CompiledObjectOrientedInitBlock {
+        body: function.body,
+        documentation: function.documentation,
+        location: function.location
+    }] + python_compiled_object_init_blocks_from_sources(functions[1:])
+
 /// Extracts compiled metadata for object initializer function for class.
 private fun python_compiled_object_init_function_for_class(function: CompiledFunction, className: String): bool =
     if python_string_has_prefix(function.name, "__capy_oo_init|")
@@ -4796,9 +5146,17 @@ private fun python_compiled_object_methods(className: String, functions: List[Co
         then [python_compiled_object_method(function)] + python_compiled_object_methods(className, functions[1:])
         else python_compiled_object_methods(className, functions[1:])
 
+/// Extracts compiled metadata for object methods from prefiltered functions.
+private fun python_compiled_object_methods_from_sources(functions: List[CompiledFunction]): List[CompiledObjectOrientedMethod] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [python_compiled_object_method(function)] + python_compiled_object_methods_from_sources(functions[1:])
+
 /// Extracts compiled metadata for object method function.
 private fun python_compiled_object_method_function(function: CompiledFunction, className: String): bool =
-    python_string_has_prefix(function.name, "__capy_oo_method|") & python_compiled_object_method_class_name(function.name) == className
+    if python_string_has_prefix(function.name, "__capy_oo_method|")
+    then python_compiled_object_method_class_name(function.name) == className
+    else false
 
 /// Extracts compiled metadata for object method.
 private fun python_compiled_object_method(function: CompiledFunction): CompiledObjectOrientedMethod =
@@ -4869,16 +5227,18 @@ private fun python_find_qualified_object_class(name: String, module: CompiledMod
 
 /// Finds an object class in scope, imports, or compiled modules.
 private fun python_find_object_class(name: String, module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
-    python_find_object_class_in_classes(name, python_compiled_object_classes(module.functions), module)
+    python_find_object_class_in_functions(name, module.functions, module)
 
-/// Finds an object class in classes in scope, imports, or compiled modules.
-private fun python_find_object_class_in_classes(name: String, classes: List[CompiledObjectOrientedClass], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
-    match classes[0] with
+/// Finds an object class in functions without materializing unrelated object classes.
+private fun python_find_object_class_in_functions(name: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
+    match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { objectClass } ->
-        if objectClass.name == name
-        then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: objectClass } }
-        else python_find_object_class_in_classes(name, classes[1:], module)
+    case Some { function } ->
+        if python_compiled_object_class_schema(function)
+        then if python_compiled_object_class_name(function) == name
+            then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: python_compiled_object_class(function, functions) } }
+            else python_find_object_class_in_functions(name, functions[1:], module)
+        else python_find_object_class_in_functions(name, functions[1:], module)
 
 /// Finds an object class in imports in scope, imports, or compiled modules.
 private fun python_find_object_class_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
@@ -4947,25 +5307,77 @@ private fun python_object_interface_member_name(name: String): String =
 
 /// Finds an object class by type in scope, imports, or compiled modules.
 private fun python_find_object_class_by_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
+    if !python_object_receiver_type(typeName)
+    then /capy/lang/Option.None {}
+    else python_find_object_class_by_object_type(typeName, modules)
+
+/// Finds an object class by encoded object type in scope, imports, or compiled modules.
+private fun python_find_object_class_by_object_type(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
+    let modulePath = python_object_type_module_path(typeName)
+    let className = python_object_type_member_name(typeName)
+    if modulePath.is_empty()
+    then python_find_object_class_by_object_type_in_modules(typeName, modules)
+    else match python_find_module_by_path(modulePath, modules) with
+        case Some { module } -> {
+            match python_find_object_class_by_encoded_name(className, module.functions, module) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> python_find_object_class_by_object_type_in_modules(typeName, modules)
+        }
+        case None -> python_find_object_class_by_object_type_in_modules(typeName, modules)
+
+/// Finds an object class by encoded object type with the historical module scan.
+private fun python_find_object_class_by_object_type_in_modules(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        match python_find_object_class_by_type_in_module(typeName, python_compiled_object_classes(module.functions), module) with
+        match python_find_object_class_by_type_in_module(typeName, module.functions, module) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> python_find_object_class_by_type(typeName, modules[1:])
+        case None -> python_find_object_class_by_object_type_in_modules(typeName, modules[1:])
 
-/// Finds an object class by type in a module in scope, imports, or compiled modules.
-private fun python_find_object_class_by_type_in_module(typeName: String, classes: List[CompiledObjectOrientedClass], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
-    match classes[0] with
+/// Finds an object class by the encoded Python identifier segment.
+private fun python_find_object_class_by_encoded_name(encodedName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
+    match functions[0] with
     case None -> /capy/lang/Option.None {}
-    case Some { objectClass } ->
-        if typeName == python_object_type_name(module, objectClass.name)
-        then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: objectClass } }
-        else python_find_object_class_by_type_in_module(typeName, classes[1:], module)
+    case Some { function } ->
+        if python_compiled_object_class_schema(function)
+        then if python_identifier(python_compiled_object_class_name(function)) == encodedName
+            then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: python_compiled_object_class(function, functions) } }
+            else python_find_object_class_by_encoded_name(encodedName, functions[1:], module)
+        else python_find_object_class_by_encoded_name(encodedName, functions[1:], module)
+
+/// Returns the length of the encoded Python object-type marker prefix.
+private fun python_object_type_prefix_size(): int =
+    "__capy_oo|".size().value
+
+/// Extracts the owner module path from an encoded object type name.
+private fun python_object_type_module_path(typeName: String): String =
+    let rawName = typeName[python_object_type_prefix_size(), typeName.size().value]
+    let idx = python_last_dot_index(rawName)
+    if idx < 0 then "" else rawName[0, idx]
+
+/// Extracts the encoded member identifier from an encoded object type name.
+private fun python_object_type_member_name(typeName: String): String =
+    let rawName = typeName[python_object_type_prefix_size(), typeName.size().value]
+    let idx = python_last_dot_index(rawName)
+    if idx < 0 then rawName else rawName[idx + 1, rawName.size().value]
+
+/// Finds an object class by type in a module without materializing unrelated object classes.
+private fun python_find_object_class_by_type_in_module(typeName: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if python_compiled_object_class_schema(function)
+        then if typeName == python_object_type_name(module, python_compiled_object_class_name(function))
+            then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: python_compiled_object_class(function, functions) } }
+            else python_find_object_class_by_type_in_module(typeName, functions[1:], module)
+        else python_find_object_class_by_type_in_module(typeName, functions[1:], module)
 
 /// Finds an object method in scope, imports, or compiled modules.
 private fun python_find_object_method(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectMethodBinding] =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    python_find_object_method_with_receiver_type(call, receiverType, allModules)
+
+private fun python_find_object_method_with_receiver_type(call: CompiledMethodCallExpression, receiverType: String, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectMethodBinding] =
     match python_find_object_class_by_type(receiverType, allModules) with
     case Some { binding } -> {
         match python_find_object_method_in_methods(call.name, binding.objectClass.methods) with
@@ -5000,6 +5412,9 @@ private fun python_object_type_name(module: CompiledModule, className: String): 
 /// Finds an extension method in scope, imports, or compiled modules.
 private fun python_find_extension_method(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    python_find_extension_method_with_receiver_type(receiverType, call, module, allModules)
+
+private fun python_find_extension_method_with_receiver_type(receiverType: String, call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     if receiverType == python_unknown_type()
     then /capy/lang/Option.None {}
     else python_find_extension_method_in_scope(receiverType, call.name, module, allModules)
@@ -5027,7 +5442,9 @@ private fun python_find_method_function(ownerName: String, methodName: String, f
 
 /// Checks whether method function matches the requested declaration, type, or name.
 private fun python_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
-    if python_skip_function(function) | !python_extension_method_function(function)
+    if python_skip_function(function)
+    then false
+    else if !python_extension_method_function(function)
     then false
     else
         let idx = python_last_dot_index(function.name)
@@ -5087,9 +5504,26 @@ private fun python_find_module_by_path(modulePath: String, modules: List[Compile
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
-        if python_module_path(module) == modulePath
+        if python_module_matches_path(modulePath, module)
         then /capy/lang/Option.Some { module }
         else python_find_module_by_path(modulePath, modules[1:])
+
+/// Checks whether a compiled module matches a slash-separated module path without building the full path.
+private fun python_module_matches_path(modulePath: String, module: CompiledModule): bool =
+    let nameSize = module.name.size().value
+    if modulePath.size().value < nameSize
+    then false
+    else if !python_string_has_suffix(modulePath, module.name)
+    then false
+    else if module.path.is_empty()
+    then module.name == modulePath
+    else
+        let pathSize = module.path.size().value
+        if modulePath.size().value != pathSize + 1 + nameSize
+        then false
+        else if !python_string_has_prefix(modulePath, module.path)
+        then false
+        else modulePath[pathSize, pathSize + 1] == "/"
 
 /// Checks whether an import matches the import includes name rule.
 private fun python_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
@@ -5101,7 +5535,7 @@ private fun python_import_includes_name(name: String, declaration: CompiledImpor
 private fun python_string_list_contains(value: String, values: List[String]): bool =
     match values[0] with
     case None -> false
-    case Some { item } -> item == value | python_string_list_contains(value, values[1:])
+    case Some { item } -> if item == value then true else python_string_list_contains(value, values[1:])
 
 /// Computes the output or module path for module.
 private fun python_module_path(module: CompiledModule): String =
@@ -5126,13 +5560,21 @@ private fun python_method_owner_base_name(name: String): String =
 /// Computes the Python name for type unqualified.
 private fun python_type_unqualified_name(name: String): String =
     let withoutArguments = python_method_owner_base_name(name)
-    let afterSlash = python_after_last_separator(withoutArguments, "/")
-    python_after_last_separator(afterSlash, ".")
+    let idx = python_last_type_separator(withoutArguments)
+    if idx < 0 then withoutArguments else withoutArguments[idx + 1, withoutArguments.size().value]
 
-/// Formats Python source text for after last separator.
-private fun python_after_last_separator(value: String, separator: String): String =
-    let idx = python_last_index_of(value, separator)
-    if idx < 0 then value else value[idx + 1, value.size().value]
+/// Computes the last separator for a qualified or path-qualified type name.
+private fun python_last_type_separator(name: String): int =
+    python_last_type_separator_from(name, 0, -1)
+
+/// Computes the last separator for a qualified or path-qualified type name from an offset.
+private fun python_last_type_separator_from(name: String, idx: int, found: int): int =
+    if idx >= name.size().value
+    then found
+    else match name[idx] with
+        case None -> found
+        case Some { char } ->
+            python_last_type_separator_from(name, idx + 1, if char == "." | char == "/" then idx else found)
 
 /// Computes the Python name for method member.
 private fun python_method_member_name(name: String): String =
@@ -6418,8 +6860,9 @@ private fun python_runtime_data_helpers_code(): String =
 
 /// Emits Python code for test runtime reflection.
 private fun python_test_runtime_reflection_code(modules: List[CompiledModule]): String =
-    "__capy_reflection_types = " + python_reflection_types_literal(modules, modules) + python_newline()
-    + "__capy_reflection_enum_values = " + python_reflection_enum_values_literal(modules, modules) + python_newline()
+    let entries = python_reflection_entries(modules, modules)
+    "__capy_reflection_types = " + python_code_dict(entries.typeEntries) + python_newline()
+    + "__capy_reflection_enum_values = " + python_code_dict(entries.enumValueEntries) + python_newline()
     + python_newline()
     + "def __capy_reflection_package(metadata):" + python_newline()
     + "    metadata = dict(metadata or dict())" + python_newline()
@@ -7077,9 +7520,11 @@ private fun python_test_gather_call_for_function(function: CompiledFunction, mod
 
 /// Checks whether module can be included in generated test gathering.
 private fun python_module_gatherable(module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !python_module_has_primitive_backed_type(module.functions)
-        & python_module_imports_gatherable(module.imports, module, allModules)
-        & python_module_functions_gatherable(module.functions, module, allModules)
+    if python_module_has_primitive_backed_type(module.functions)
+    then false
+    else if python_module_imports_gatherable(module.imports, module, allModules)
+    then python_module_functions_gatherable(module.functions, module, allModules)
+    else false
 
 /// Checks whether module imports can be included in generated test gathering.
 private fun python_module_imports_gatherable(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7090,8 +7535,9 @@ private fun python_module_imports_gatherable(imports: List[CompiledImportDeclara
         then python_module_imports_gatherable(imports[1:], module, allModules)
         else match python_find_imported_module(declaration, module, allModules) with
             case Some { importedModule } ->
-                python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
-                    & python_module_imports_gatherable(imports[1:], module, allModules)
+                if python_module_functions_gatherable(importedModule.functions, importedModule, allModules)
+                then python_module_imports_gatherable(imports[1:], module, allModules)
+                else false
             case None -> false
 
 /// Checks whether a type reference matches the module has primitive backed type rule.
@@ -7099,16 +7545,20 @@ private fun python_module_has_primitive_backed_type(functions: List[CompiledFunc
     match functions[0] with
     case None -> false
     case Some { function } ->
-        (python_compiled_schema(function) & python_string_has_prefix(function.name, "__capy_schema_primitive|"))
-            | python_module_has_primitive_backed_type(functions[1:])
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, "__capy_schema_primitive|")
+            then true
+            else python_module_has_primitive_backed_type(functions[1:])
+        else python_module_has_primitive_backed_type(functions[1:])
 
 /// Checks whether module functions can be included in generated test gathering.
 private fun python_module_functions_gatherable(functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match functions[0] with
     case None -> true
     case Some { function } ->
-        python_function_gatherable(function, module, allModules)
-            & python_module_functions_gatherable(functions[1:], module, allModules)
+        if python_function_gatherable(function, module, allModules)
+        then python_module_functions_gatherable(functions[1:], module, allModules)
+        else false
 
 /// Checks whether function can be included in generated test gathering.
 private fun python_function_gatherable(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7138,8 +7588,9 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
     case CompiledThrowExpression throwExpression -> python_expression_gatherable(throwExpression.value, env, module, allModules)
     case CompiledTryCatchExpression tryCatch ->
-        python_expression_gatherable(tryCatch.body, env, module, allModules)
-            & python_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        if python_expression_gatherable(tryCatch.body, env, module, allModules)
+        then python_try_catch_branches_gatherable(tryCatch.branches, env, module, allModules)
+        else false
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true
@@ -7148,21 +7599,25 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledStringLiteral _ -> true
     case CompiledVariableExpression _ -> true
     case CompiledIfExpression ifExpression ->
-        python_expression_gatherable(ifExpression.condition, env, module, allModules)
-            & python_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
-            & python_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+        if python_expression_gatherable(ifExpression.condition, env, module, allModules)
+        then if python_expression_gatherable(ifExpression.thenBranch, env, module, allModules)
+            then python_expression_gatherable(ifExpression.elseBranch, env, module, allModules)
+            else false
+        else false
     case CompiledBinaryExpression binary -> python_binary_expression_gatherable(binary, env, module, allModules)
     case CompiledUnaryExpression unary ->
-        python_unary_operator_gatherable(unary.operator)
-            & python_expression_gatherable(unary.expression, env, module, allModules)
+        if python_unary_operator_gatherable(unary.operator)
+        then python_expression_gatherable(unary.expression, env, module, allModules)
+        else false
     case CompiledFunctionCallExpression call ->
         python_function_call_gatherable(call, env, module, allModules)
     case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
     case CompiledMethodCallExpression call ->
         python_method_call_gatherable(call, env, module, allModules)
     case CompiledWithExpression withExpression ->
-        python_expression_gatherable(withExpression.receiver, env, module, allModules)
-            & python_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        if python_expression_gatherable(withExpression.receiver, env, module, allModules)
+        then python_data_fields_gatherable(withExpression.fields, env, module, allModules)
+        else false
     case CompiledLambdaExpression lambda ->
         python_expression_gatherable(lambda.body, python_lambda_bindings(lambda.parameters) + env, module, allModules)
     case CompiledListLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
@@ -7171,12 +7626,16 @@ private fun python_expression_gatherable(expression: CompiledExpression, env: Li
     case CompiledTupleLiteral literal -> python_expressions_gatherable(literal.values, env, module, allModules)
     case CompiledIndexExpression index -> python_index_expression_gatherable(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_fields_gatherable(literal.fields, env, module, allModules)
-    case CompiledFieldAccessExpression access -> python_enum_static_field_access(access, env, module, allModules) | python_expression_gatherable(access.receiver, env, module, allModules)
+    case CompiledFieldAccessExpression access ->
+        if python_enum_static_field_access(access, env, module, allModules)
+        then true
+        else python_expression_gatherable(access.receiver, env, module, allModules)
     case CompiledReduceExpression reduce -> python_reduce_expression_gatherable(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> python_match_expression_gatherable(matchExpression, env, module, allModules)
     case CompiledBlockExpression block ->
-        python_bindings_gatherable(block.bindings, env, module, allModules)
-            & python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+        if python_bindings_gatherable(block.bindings, env, module, allModules)
+        then python_expression_gatherable(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
+        else false
 
 /// Checks whether OO try/catch branches can be included in generated test gathering.
 private fun python_try_catch_branches_gatherable(branches: List[CompiledTryCatchBranch], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7184,8 +7643,9 @@ private fun python_try_catch_branches_gatherable(branches: List[CompiledTryCatch
     case None -> true
     case Some { branch } ->
         let catchEnv = [PythonBinding { name: branch.catchName, pythonName: python_identifier(branch.catchName), typeName: "Error" }] + env
-        python_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
-            & python_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        if python_expression_gatherable(branch.catchBody, catchEnv, module, allModules)
+        then python_try_catch_branches_gatherable(branches[1:], env, module, allModules)
+        else false
 
 /// Checks whether binary operator can be included in generated test gathering.
 private fun python_binary_operator_gatherable(operator: String): bool =
@@ -7226,8 +7686,9 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
 
 /// Checks whether collection pipe can be included in generated test gathering.
 private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_callable_expression_gatherable(binary.right, env, module, allModules)
+    else false
 
 /// Checks whether lambda expression can be included in generated test gathering.
 private fun python_lambda_expression_gatherable(lambda: CompiledLambdaExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7239,8 +7700,9 @@ private fun python_lambda_expression_gatherable_with_bindings(lambda: CompiledLa
 
 /// Checks whether result pipe can be included in generated test gathering.
 private fun python_result_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_result_callable_expression_gatherable(binary.left, binary.right, env, module, allModules)
+    else false
 
 /// Checks whether async pipe can be included in generated test gathering.
 private fun python_async_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7251,14 +7713,16 @@ private fun python_async_pipe_gatherable(binary: CompiledBinaryExpression, env: 
 private fun python_result_reduce_operator_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match binary.right with
     case CompiledTupleLiteral literal ->
-        python_expression_gatherable(binary.left, env, module, allModules)
-            & python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        if python_expression_gatherable(binary.left, env, module, allModules)
+        then python_result_reduce_arguments_gatherable(binary.left, literal.values, env, module, allModules)
+        else false
     case _ -> false
 
 /// Checks whether option pipe can be included in generated test gathering.
 private fun python_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(binary.left, env, module, allModules)
-        & python_callable_expression_gatherable(binary.right, env, module, allModules)
+    if python_expression_gatherable(binary.left, env, module, allModules)
+    then python_callable_expression_gatherable(binary.right, env, module, allModules)
+    else false
 
 /// Checks whether callable expression can be included in generated test gathering.
 private fun python_callable_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7338,7 +7802,6 @@ private fun python_callable_binding_type(typeName: String): bool =
 
 /// Checks whether method call can be included in generated test gathering.
 private fun python_method_call_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let receiverType = python_expression_type(call.receiver, env, module, allModules)
     if python_assert_method(call.name)
     then if python_expression_gatherable(call.receiver, env, module, allModules)
         then python_expressions_gatherable(call.arguments, env, module, allModules)
@@ -7352,65 +7815,69 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
     then if call.arguments.is_empty()
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else false
-    else if python_char_to_string_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_string_get_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_string_parse_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_string_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_regex_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_stdlib_date_time_method_call(call, env, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_set_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_native_collection_method_call_with_receiver_type(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_seq_as_list_call(call)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_collection_predicate_call(call, receiverType)
-    then python_collection_predicate_gatherable(call, env, module, allModules)
-    else if python_primitive_conversion_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_enum_name_method_call(call, receiverType, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_object_method_call(call, env, module, allModules)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_object_receiver_type(receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-        & python_expressions_gatherable(call.arguments, env, module, allModules)
-    else if python_effect_method_call(call, receiverType)
-    then python_effect_method_gatherable(call, env, module, allModules)
-    else if python_effect_start_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_async_join_method_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else if python_async_map_method_call(call, receiverType)
-    then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
-    else if python_result_method_call(call, receiverType)
-    then python_result_method_gatherable(call, env, module, allModules)
-    else if python_option_method_call(call, receiverType)
-    then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
-    else if python_collection_reduce_method_call(call, receiverType)
-    then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
-    else if python_collection_method_call(call, receiverType)
-    then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
-    else if python_seq_first_call(call, receiverType)
-    then python_expression_gatherable(call.receiver, env, module, allModules)
-    else match python_find_extension_method(call, env, module, allModules) with
-        case Some _ ->
-            python_expression_gatherable(call.receiver, env, module, allModules)
-                & python_expressions_gatherable(call.arguments, env, module, allModules)
-        case None -> false
+    else
+        let receiverType = python_expression_type(call.receiver, env, module, allModules)
+        if python_char_to_string_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_string_get_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_string_parse_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_string_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_regex_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_stdlib_date_time_method_call_with_receiver_type(call, receiverType, env, module, allModules)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_set_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_native_collection_method_call_with_receiver_type(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+            & python_expressions_gatherable(call.arguments, env, module, allModules)
+        else if python_seq_as_list_call(call)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_collection_predicate_call(call, receiverType)
+        then python_collection_predicate_gatherable(call, env, module, allModules)
+        else if python_primitive_conversion_method_call(call, receiverType)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else if python_enum_name_method_call(call, receiverType, module, allModules)
+        then python_expression_gatherable(call.receiver, env, module, allModules)
+        else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
+            case Some _ ->
+                python_expression_gatherable(call.receiver, env, module, allModules)
+                    & python_expressions_gatherable(call.arguments, env, module, allModules)
+            case None ->
+                if python_object_receiver_type(receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                    & python_expressions_gatherable(call.arguments, env, module, allModules)
+                else if python_effect_method_call(call, receiverType)
+                then python_effect_method_gatherable(call, env, module, allModules)
+                else if python_effect_start_method_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else if python_async_join_method_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else if python_async_map_method_call(call, receiverType)
+                then python_async_pipe_gatherable(python_async_map_method_binary(call), env, module, allModules)
+                else if python_result_method_call(call, receiverType)
+                then python_result_method_gatherable(call, env, module, allModules)
+                else if python_option_method_call(call, receiverType)
+                then python_option_pipe_gatherable(python_option_method_binary(call), env, module, allModules)
+                else if python_collection_reduce_method_call(call, receiverType)
+                then python_collection_reduce_method_gatherable(call, receiverType, env, module, allModules)
+                else if python_collection_method_call(call, receiverType)
+                then python_collection_pipe_gatherable(python_collection_method_binary(call), env, module, allModules)
+                else if python_seq_first_call(call, receiverType)
+                then python_expression_gatherable(call.receiver, env, module, allModules)
+                else match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
+                    case Some _ ->
+                        python_expression_gatherable(call.receiver, env, module, allModules)
+                            & python_expressions_gatherable(call.arguments, env, module, allModules)
+                    case None -> false
 
 /// Checks whether effect method can be included in generated test gathering.
 private fun python_effect_method_gatherable(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7456,16 +7923,18 @@ private fun python_single_callable_argument_gatherable(arguments: List[CompiledE
     match arguments[0] with
     case None -> false
     case Some { argument } ->
-        arguments[1:].is_empty()
-            & python_callable_expression_gatherable(argument, env, module, allModules)
+        if arguments[1:].is_empty()
+        then python_callable_expression_gatherable(argument, env, module, allModules)
+        else false
 
 /// Checks whether result single callable argument can be included in generated test gathering.
 private fun python_result_single_callable_argument_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
     case None -> false
     case Some { argument } ->
-        arguments[1:].is_empty()
-            & python_result_callable_expression_gatherable(receiver, argument, env, module, allModules)
+        if arguments[1:].is_empty()
+        then python_result_callable_expression_gatherable(receiver, argument, env, module, allModules)
+        else false
 
 /// Checks whether result reduce arguments can be included in generated test gathering.
 private fun python_result_reduce_arguments_gatherable(receiver: CompiledExpression, arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7475,9 +7944,11 @@ private fun python_result_reduce_arguments_gatherable(receiver: CompiledExpressi
         match arguments[1] with
         case None -> false
         case Some { errorMapper } ->
-            arguments[2:].is_empty()
-                & python_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
-                & python_callable_expression_gatherable(errorMapper, env, module, allModules)
+            if arguments[2:].is_empty()
+            then if python_result_callable_expression_gatherable(receiver, successMapper, env, module, allModules)
+                then python_callable_expression_gatherable(errorMapper, env, module, allModules)
+                else false
+            else false
 
 /// Checks whether result callable expression can be included in generated test gathering.
 private fun python_result_callable_expression_gatherable(receiver: CompiledExpression, mapper: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7495,15 +7966,26 @@ private fun python_result_callable_expression_gatherable(receiver: CompiledExpre
 
 /// Checks whether a function matches the local function unambiguous metadata.
 private fun python_local_function_unambiguous(name: String, functions: List[CompiledFunction]): bool =
-    python_local_function_count(name, functions) == 1
+    python_local_function_count_at_most(name, functions, 2) == 1
 
-/// Counts local function count for overload or test discovery logic.
-private fun python_local_function_count(name: String, functions: List[CompiledFunction]): int =
-    match functions[0] with
+/// Checks whether a non-skipped local function exists.
+private fun python_local_function_exists(name: String, functions: List[CompiledFunction]): bool =
+    python_local_function_count_at_most(name, functions, 1) > 0
+
+/// Checks whether a non-skipped local function name has overloads.
+private fun python_local_function_overloaded(name: String, functions: List[CompiledFunction]): bool =
+    python_local_function_count_at_most(name, functions, 2) > 1
+
+/// Counts local functions up to the requested cap.
+private fun python_local_function_count_at_most(name: String, functions: List[CompiledFunction], limit: int): int =
+    if limit <= 0
+    then 0
+    else match functions[0] with
     case None -> 0
     case Some { function } ->
-        let current = if !python_skip_function(function) & function.name == name then 1 else 0
-        current + python_local_function_count(name, functions[1:])
+        if !python_skip_function(function) & function.name == name
+        then 1 + python_local_function_count_at_most(name, functions[1:], limit - 1)
+        else python_local_function_count_at_most(name, functions[1:], limit)
 
 /// Collects imported function exists visible to the current module.
 private fun python_imported_function_exists(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7516,34 +7998,44 @@ private fun python_expressions_gatherable(expressions: List[CompiledExpression],
     match expressions[0] with
     case None -> true
     case Some { expression } ->
-        python_expression_gatherable(expression, env, module, allModules)
-            & python_expressions_gatherable(expressions[1:], env, module, allModules)
+        if python_expression_gatherable(expression, env, module, allModules)
+        then python_expressions_gatherable(expressions[1:], env, module, allModules)
+        else false
 
 /// Checks whether dict entries can be included in generated test gathering.
 private fun python_dict_entries_gatherable(entries: List[CompiledDictEntry], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match entries[0] with
     case None -> true
     case Some { entry } ->
-        python_expression_gatherable(entry.key, env, module, allModules)
-            & python_expression_gatherable(entry.value, env, module, allModules)
-            & python_dict_entries_gatherable(entries[1:], env, module, allModules)
+        if python_expression_gatherable(entry.key, env, module, allModules)
+        then if python_expression_gatherable(entry.value, env, module, allModules)
+            then python_dict_entries_gatherable(entries[1:], env, module, allModules)
+            else false
+        else false
 
 /// Checks whether index expression can be included in generated test gathering.
 private fun python_index_expression_gatherable(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     let receiverType = python_expression_type(index.receiver, env, module, allModules)
     if !python_built_in_index_expression(index, receiverType)
     then python_user_defined_index_gatherable(index, receiverType, env, module, allModules)
-    else python_expression_gatherable(index.receiver, env, module, allModules)
-        & python_expression_gatherable(index.index, env, module, allModules)
-        & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+    else if python_expression_gatherable(index.receiver, env, module, allModules)
+    then python_index_parts_gatherable(index, env, module, allModules)
+    else false
+
+private fun python_index_parts_gatherable(index: CompiledIndexExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if python_expression_gatherable(index.index, env, module, allModules)
+    then if index.hasEndIndex
+        then python_expression_gatherable(index.endIndex, env, module, allModules)
+        else true
+    else false
 
 /// Checks whether user defined index can be included in generated test gathering.
 private fun python_user_defined_index_gatherable(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
     case Some _ ->
-        python_expression_gatherable(index.receiver, env, module, allModules)
-            & python_expression_gatherable(index.index, env, module, allModules)
-            & (!index.hasEndIndex | python_expression_gatherable(index.endIndex, env, module, allModules))
+        if python_expression_gatherable(index.receiver, env, module, allModules)
+        then python_index_parts_gatherable(index, env, module, allModules)
+        else false
     case None -> false
 
 /// Checks whether data fields can be included in generated test gathering.
@@ -7551,22 +8043,29 @@ private fun python_data_fields_gatherable(fields: List[CompiledDataField], env: 
     match fields[0] with
     case None -> true
     case Some { field } ->
-        !field.spread
-            & python_expression_gatherable(field.value, env, module, allModules)
-            & python_data_fields_gatherable(fields[1:], env, module, allModules)
+        if field.spread
+        then false
+        else if python_expression_gatherable(field.value, env, module, allModules)
+        then python_data_fields_gatherable(fields[1:], env, module, allModules)
+        else false
 
 /// Checks whether reduce expression can be included in generated test gathering.
 private fun python_reduce_expression_gatherable(reduce: CompiledReduceExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    !reduce.accumulatorName.is_empty()
-        & !reduce.valueName.is_empty()
-        & python_expression_gatherable(reduce.receiver, env, module, allModules)
-        & python_expression_gatherable(reduce.initial, env, module, allModules)
-        & python_expression_gatherable(reduce.body, python_reduce_bindings(reduce, env), module, allModules)
+    if reduce.accumulatorName.is_empty()
+    then false
+    else if reduce.valueName.is_empty()
+    then false
+    else if python_expression_gatherable(reduce.receiver, env, module, allModules)
+    then if python_expression_gatherable(reduce.initial, env, module, allModules)
+        then python_expression_gatherable(reduce.body, python_reduce_bindings(reduce, env), module, allModules)
+        else false
+    else false
 
 /// Checks whether match expression can be included in generated test gathering.
 private fun python_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_expression_gatherable(matchExpression.value, env, module, allModules)
-        & python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    if python_expression_gatherable(matchExpression.value, env, module, allModules)
+    then python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    else false
 
 /// Checks whether match is supported by the current backend.
 private fun python_match_supported(matchExpression: CompiledMatchExpression): bool =
@@ -7577,23 +8076,43 @@ private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], env: L
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        python_match_case_gatherable(matchCase, env, module, allModules)
-            & (cases[1:].is_empty() | python_match_cases_gatherable(cases[1:], env, module, allModules))
+        if python_match_case_gatherable(matchCase, env, module, allModules)
+        then if cases[1:].is_empty()
+            then true
+            else python_match_cases_gatherable(cases[1:], env, module, allModules)
+        else false
 
 /// Checks whether match case can be included in generated test gathering.
 private fun python_match_case_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    python_match_case_supported(matchCase)
-        & (!matchCase.hasLiteral | python_expression_gatherable(matchCase.literal, env, module, allModules))
-        & (!matchCase.hasGuard | python_expression_gatherable(matchCase.guard, python_match_case_env(matchCase, env), module, allModules))
-        & python_expression_gatherable(matchCase.body, python_match_case_env(matchCase, env), module, allModules)
+    if python_match_case_supported(matchCase)
+    then python_match_case_literal_guard_body_gatherable(matchCase, env, module, allModules)
+    else false
+
+private fun python_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if matchCase.hasLiteral
+    then if python_expression_gatherable(matchCase.literal, env, module, allModules)
+        then python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+        else false
+    else python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+
+private fun python_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let caseEnv = python_match_case_env(matchCase, env)
+    if matchCase.hasGuard
+    then if python_expression_gatherable(matchCase.guard, caseEnv, module, allModules)
+        then python_expression_gatherable(matchCase.body, caseEnv, module, allModules)
+        else false
+    else python_expression_gatherable(matchCase.body, caseEnv, module, allModules)
 
 /// Checks whether match cases is supported by the current backend.
 private fun python_match_cases_supported(cases: List[CompiledMatchCase]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        python_match_case_supported(matchCase)
-            & (cases[1:].is_empty() | python_match_cases_supported(cases[1:]))
+        if python_match_case_supported(matchCase)
+        then if cases[1:].is_empty()
+            then true
+            else python_match_cases_supported(cases[1:])
+        else false
 
 /// Checks whether match case is supported by the current backend.
 private fun python_match_case_supported(matchCase: CompiledMatchCase): bool =
@@ -7604,9 +8123,11 @@ private fun python_bindings_gatherable(bindings: List[CompiledLetBinding], env: 
     match bindings[0] with
     case None -> true
     case Some { binding } ->
-        (binding.operator == "=" | binding.operator == "<-")
-            & python_expression_gatherable(binding.value, env, module, allModules)
-            & python_bindings_gatherable(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
+        if binding.operator == "=" | binding.operator == "<-"
+        then if python_expression_gatherable(binding.value, env, module, allModules)
+            then python_bindings_gatherable(bindings[1:], [python_let_binding(binding, env, module, allModules)] + env, module, allModules)
+            else false
+        else false
 
 /// Checks whether test function can be included in generated test gathering.
 private fun python_test_function_gatherable(function: CompiledFunction): bool =
@@ -7698,27 +8219,34 @@ private fun python_assert_method(name: String): bool =
         | name == "failed"
         | name == "succeeded"
 
-/// Formats reflection types as a Python literal.
-private fun python_reflection_types_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    python_code_dict(python_reflection_type_entries(modules, allModules))
-
-/// Collects reflection metadata entries for reflection type.
-private fun python_reflection_type_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
+/// Collects reflection type and enum metadata entries in one module pass.
+private fun python_reflection_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): PythonReflectionEntries =
     match modules[0] with
-    case None -> []
+    case None -> PythonReflectionEntries { typeEntries: [], enumValueEntries: [] }
     case Some { module } ->
-        python_reflection_type_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + python_reflection_type_entries(modules[1:], allModules)
+        let current = python_reflection_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
+        let rest = python_reflection_entries(modules[1:], allModules)
+        PythonReflectionEntries {
+            typeEntries: current.typeEntries + rest.typeEntries,
+            enumValueEntries: current.enumValueEntries + rest.enumValueEntries
+        }
 
-/// Collects reflection metadata entries for reflection type entries in a module.
-private fun python_reflection_type_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+/// Collects reflection entries for one module from its schema type list.
+private fun python_reflection_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): PythonReflectionEntries =
     match typeNames[0] with
-    case None -> []
+    case None -> PythonReflectionEntries { typeEntries: [], enumValueEntries: [] }
     case Some { typeName } ->
-        if python_enum_type_exists_in_functions(typeName, module.functions)
-        then python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
-        else [python_code_dict_entry(typeName, python_reflection_type_metadata_literal(typeName, module, allModules))]
-            + python_reflection_type_entries_in_module(typeNames[1:], module, allModules)
+        let enumValues = python_enum_values_in_functions(typeName, module.functions)
+        let rest = python_reflection_entries_in_module(typeNames[1:], module, allModules)
+        if !enumValues.is_empty()
+        then PythonReflectionEntries {
+            typeEntries: rest.typeEntries,
+            enumValueEntries: python_reflection_enum_value_entries_for_type(typeName, enumValues, module, allModules) + rest.enumValueEntries
+        }
+        else PythonReflectionEntries {
+            typeEntries: [python_code_dict_entry(typeName, python_reflection_type_metadata_literal(typeName, module, allModules))] + rest.typeEntries,
+            enumValueEntries: rest.enumValueEntries
+        }
 
 /// Formats reflection type metadata as a Python literal.
 private fun python_reflection_type_metadata_literal(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7758,28 +8286,6 @@ private fun python_reflection_field_metadata_literal(dataName: String, field: St
             allModules
         )),
     ])
-
-/// Formats reflection enum values as a Python literal.
-private fun python_reflection_enum_values_literal(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
-    python_code_dict(python_reflection_enum_value_entries(modules, allModules))
-
-/// Collects reflection metadata entries for reflection enum value.
-private fun python_reflection_enum_value_entries(modules: List[CompiledModule], allModules: List[CompiledModule]): List[String] =
-    match modules[0] with
-    case None -> []
-    case Some { module } ->
-        python_reflection_enum_value_entries_in_module(python_schema_values("__capy_schema_type|", module.functions), module, allModules)
-            + python_reflection_enum_value_entries(modules[1:], allModules)
-
-/// Collects reflection metadata entries for reflection enum value entries in a module.
-private fun python_reflection_enum_value_entries_in_module(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    match typeNames[0] with
-    case None -> []
-    case Some { typeName } ->
-        if python_enum_type_exists_in_functions(typeName, module.functions)
-        then python_reflection_enum_value_entries_for_type(typeName, python_enum_values_in_functions(typeName, module.functions), module, allModules)
-            + python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
-        else python_reflection_enum_value_entries_in_module(typeNames[1:], module, allModules)
 
 /// Computes the Python type for reflection enum value entries for a.
 private fun python_reflection_enum_value_entries_for_type(typeName: String, values: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
@@ -8068,9 +8574,11 @@ private fun python_annotation_binding_in_module(name: String, module: CompiledMo
 
 /// Checks whether annotation import matches the requested declaration, type, or name.
 private fun python_annotation_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
-    !python_stdlib_import(declaration.modulePath)
-        & !declaration.qualified
-        & python_import_includes_name(name, declaration)
+    if python_stdlib_import(declaration.modulePath)
+    then false
+    else if declaration.qualified
+    then false
+    else python_import_includes_name(name, declaration)
 
 /// Emits one Python import statement for standard-library annotation binding in.
 private fun python_stdlib_annotation_binding_in_import(name: String, declaration: CompiledImportDeclaration): /capy/lang/Option[PythonAnnotationBinding] =
@@ -8180,7 +8688,7 @@ private fun python_data_type_owner_module_in_modules(name: String, modules: List
 
 /// Checks whether a type reference matches the data type declared in a module rule.
 private fun python_data_type_declared_in_module(name: String, module: CompiledModule): bool =
-    python_string_list_contains(name, python_schema_values("__capy_schema_type|", module.functions))
+    python_schema_type_exists(name, module.functions)
 
 /// Collects data type fields for Python processing.
 private fun python_data_type_fields(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
@@ -8210,8 +8718,9 @@ private fun python_data_type_parent_fields(parents: List[String], module: Compil
 
 /// Collects encoded schema constants for data type.
 private fun python_data_type_schema_values(name: String, prefix: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    if python_schema_type_exists(name, module.functions)
-    then python_schema_values(prefix + name + "|", module.functions)
+    let localValues = python_schema_values_for_type(name, prefix, module.functions)
+    if localValues.typeExists
+    then localValues.values
     else match python_data_type_schema_values_in_imports(name, prefix, module.imports, module, allModules) with
         case Some { value } -> value
         case None -> python_data_type_schema_values_in_modules(name, prefix, allModules)
@@ -8221,8 +8730,9 @@ private fun python_data_type_schema_values_in_modules(name: String, prefix: Stri
     match modules[0] with
     case None -> []
     case Some { module } ->
-        if python_schema_type_exists(name, module.functions)
-        then python_schema_values(prefix + name + "|", module.functions)
+        let moduleValues = python_schema_values_for_type(name, prefix, module.functions)
+        if moduleValues.typeExists
+        then moduleValues.values
         else python_data_type_schema_values_in_modules(name, prefix, modules[1:])
 
 /// Emits Python import statements for data type schema values in.
@@ -8238,16 +8748,19 @@ private fun python_data_type_schema_values_in_imports(name: String, prefix: Stri
 private fun python_data_type_schema_values_in_import(name: String, prefix: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], declaration: CompiledImportDeclaration): /capy/lang/Option[List[String]] =
     match python_find_imported_module(declaration, module, allModules) with
     case Some { importedModule } ->
-        if python_schema_type_exists(name, importedModule.functions)
-        then /capy/lang/Option.Some { python_schema_values(prefix + name + "|", importedModule.functions) }
+        let importedValues = python_schema_values_for_type(name, prefix, importedModule.functions)
+        if importedValues.typeExists
+        then /capy/lang/Option.Some { importedValues.values }
         else python_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
     case _ -> python_data_type_schema_values_in_imports(name, prefix, rest, module, allModules)
 
 /// Checks whether data import matches the requested declaration, type, or name.
 private fun python_data_import_matches(name: String, declaration: CompiledImportDeclaration): bool =
-    !python_stdlib_import(declaration.modulePath)
-        & !declaration.qualified
-        & python_import_includes_name(name, declaration)
+    if python_stdlib_import(declaration.modulePath)
+    then false
+    else if declaration.qualified
+    then false
+    else python_import_includes_name(name, declaration)
 
 /// Checks whether a type reference matches the primitive backed type rule.
 private fun python_primitive_backed_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -8308,47 +8821,96 @@ private fun python_primitive_backed_backing_type_in_modules(name: String, module
 
 /// Merges schema fields while preserving compiler-visible metadata.
 private fun python_merge_schema_fields(first: List[String], second: List[String]): List[String] =
-    first + python_schema_fields_not_named(second, first)
+    first + python_schema_fields_not_named(second, python_schema_field_name_index(first))
 
 /// Collects schema metadata entries for schema fields not named.
-private fun python_schema_fields_not_named(fields: List[String], existing: List[String]): List[String] =
+private fun python_schema_fields_not_named(fields: List[String], existingNames: Dict[bool]): List[String] =
     match fields[0] with
     case None -> []
     case Some { field } ->
-        if python_schema_field_name_exists(python_schema_field_name(field), existing)
-        then python_schema_fields_not_named(fields[1:], existing)
-        else [field] + python_schema_fields_not_named(fields[1:], existing + [field])
+        let name = python_schema_field_name(field)
+        if python_schema_field_name_exists(name, existingNames)
+        then python_schema_fields_not_named(fields[1:], existingNames)
+        else [field] + python_schema_fields_not_named(fields[1:], existingNames + (name, true))
+
+/// Indexes schema field names already emitted by earlier fields.
+private fun python_schema_field_name_index(fields: List[String]): Dict[bool] =
+    python_schema_field_name_index_acc(fields, {:})
+
+/// Accumulates schema field names already emitted by earlier fields.
+private fun python_schema_field_name_index_acc(fields: List[String], names: Dict[bool]): Dict[bool] =
+    match fields[0] with
+    case None -> names
+    case Some { field } -> python_schema_field_name_index_acc(fields[1:], names + (python_schema_field_name(field), true))
 
 /// Checks whether schema field name exists in the relevant declarations or imports.
-private fun python_schema_field_name_exists(name: String, fields: List[String]): bool =
-    match fields[0] with
+private fun python_schema_field_name_exists(name: String, fields: Dict[bool]): bool =
+    match fields.get(name) with
+    case Some _ -> true
     case None -> false
-    case Some { field } -> python_schema_field_name(field) == name | python_schema_field_name_exists(name, fields[1:])
 
 /// Checks whether schema type exists in the relevant declarations or imports.
 private fun python_schema_type_exists(name: String, functions: List[CompiledFunction]): bool =
+    python_schema_type_exists_named("__capy_schema_type|" + name, functions)
+
+/// Checks whether schema type exists using a precomputed schema key.
+private fun python_schema_type_exists_named(name: String, functions: List[CompiledFunction]): bool =
     match functions[0] with
     case None -> false
     case Some { function } ->
-        (python_compiled_schema(function) & function.name == "__capy_schema_type|" + name)
-            | python_schema_type_exists(name, functions[1:])
+        if python_compiled_schema(function)
+        then if function.name == name
+            then true
+            else python_schema_type_exists_named(name, functions[1:])
+        else python_schema_type_exists_named(name, functions[1:])
+
+/// Collects schema values while also checking whether the owning data type exists.
+private fun python_schema_values_for_type(name: String, valuePrefix: String, functions: List[CompiledFunction]): PythonSchemaValues =
+    python_schema_values_for_type_named("__capy_schema_type|" + name, valuePrefix + name + "|", functions)
+
+private fun python_schema_values_for_type_named(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction]): PythonSchemaValues =
+    match functions[0] with
+    case None -> PythonSchemaValues { typeExists: false, values: [] }
+    case Some { function } ->
+        let rest = python_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
+        if python_compiled_schema(function)
+        then PythonSchemaValues {
+            typeExists: if rest.typeExists then true else function.name == typeSchemaName,
+            values: if python_string_has_prefix(function.name, valuePrefix) then [python_schema_value(function)] + rest.values else rest.values
+        }
+        else rest
 
 /// Computes value metadata for schema values.
 private fun python_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
     match functions[0] with
     case None -> []
     case Some { function } ->
-        if python_compiled_schema(function) & python_string_has_prefix(function.name, prefix)
-        then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, prefix)
+            then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
+            else python_schema_values(prefix, functions[1:])
         else python_schema_values(prefix, functions[1:])
+
+/// Checks whether any schema helper has the requested key prefix without materializing values.
+private fun python_schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if python_compiled_schema(function)
+        then if python_string_has_prefix(function.name, prefix)
+            then true
+            else python_schema_value_with_prefix_exists(prefix, functions[1:])
+        else python_schema_value_with_prefix_exists(prefix, functions[1:])
 
 /// Looks up optional metadata for schema value named.
 private fun python_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
     match functions[0] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
-        if python_compiled_schema(function) & function.name == name
-        then /capy/lang/Option.Some { python_schema_value(function) }
+        if python_compiled_schema(function)
+        then if function.name == name
+            then /capy/lang/Option.Some { python_schema_value(function) }
+            else python_schema_value_named(name, functions[1:])
         else python_schema_value_named(name, functions[1:])
 
 /// Computes value metadata for schema value.
