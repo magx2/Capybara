@@ -148,6 +148,41 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateFlatPythonStringConcatenation() {
+        var source = """
+                fun pieces(a: String, b: String, c: String, d: String): String =
+                    a + "-" + b + "-" + c + "-" + d
+                """;
+        var program = compileProgram(List.of(rawModule("StringConcat", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/StringConcat.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("return \"\".join([a, \"-\", b, \"-\", c, \"-\", d])");
+    }
+
+    @Test
+    void shouldGeneratePythonCollectionReduceOperator() {
+        var source = """
+                fun joined(values: List[String]): String =
+                    values |> "", (acc, value) => acc + value
+                """;
+        var program = compileProgram(List.of(rawModule("CollectionReduce", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/CollectionReduce.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).contains("__capy_reduce(");
+        assertThat(code).doesNotContain("|>");
+    }
+
+    @Test
     void shouldGenerateUnionParentFieldsInJavaDataDeclarations() {
         var source = """
                 union A { a: String } = B | C
