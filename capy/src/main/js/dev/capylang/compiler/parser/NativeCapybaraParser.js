@@ -761,7 +761,7 @@ function primitive_backed_type_declaration_definitions(ctx) {
     var name = text(ctx_call(ctx, "primitiveBackedTypeName"));
     var backing_type = type_ref(text(ctx_call(ctx, "primitiveBackingType")), []);
     var location = source_location(ctx);
-    var definitions = [schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_primitive|" + name), backing_type["name"], location), schema_constant_definition((("__capy_schema_field|" + name) + "|0"), ("value|" + backing_type["name"]), location)];
+    var definitions = [schema_constant_definition(("__capy_schema_type|" + name), name, location), schema_constant_definition(("__capy_schema_kind|" + name), "primitive", location), schema_constant_definition(("__capy_schema_primitive|" + name), backing_type["name"], location), schema_constant_definition((("__capy_schema_field|" + name) + "|0"), ("value|" + backing_type["name"]), location)];
     if (pyTruthy(ctx_has(ctx, "constructorClause"))) {
         definitions.push(constructor_function_definition(name, [data("FunctionParameter", { name: "value", typeReference: backing_type, location: source_location(ctx_call(ctx, "primitiveBackingType")) })], ctx_call(ctx, "constructorClause")));
     }

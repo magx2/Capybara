@@ -1662,6 +1662,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 location
         ));
         definitions.add(schemaConstantDefinition("__capy_schema_type|" + name, name, docComments(ctx.docComment()), location));
+        definitions.add(schemaConstantDefinition("__capy_schema_kind|" + name, "primitive", location));
         definitions.add(schemaConstantDefinition("__capy_schema_visibility|" + name, visibility, location));
         definitions.add(schemaConstantDefinition("__capy_schema_primitive|" + name, backingType.name(), location));
         definitions.add(schemaConstantDefinition(

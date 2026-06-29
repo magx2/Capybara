@@ -173,6 +173,43 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreservePrimitiveBackedFieldTypesInJavaDataDeclarations() {
+        var programSource = """
+                union Program = Success | Failed
+
+                data Success {}
+                data Failed { exit_code: failed_exit_code }
+
+                type failed_exit_code -> int
+                """;
+        var consumerSource = """
+                from /capy/lang/Program import { * }
+
+                fun fail(): Program = Failed { exit_code: 1 }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Program", "/capy/lang", programSource, SourceKind.FUNCTIONAL),
+                rawModule("Main", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var programCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/lang/Program.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var consumerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(programCode).contains("    public record Failed(int exit_code) {}");
+        assertThat(programCode).doesNotContain("record failed_exit_code");
+        assertThat(consumerCode).contains("new capy.lang.Program.Failed(1)");
+    }
+
+    @Test
     void shouldRejectObjectOrientedThrowingNonError() {
         var objectSource = """
                 class BadThrow {

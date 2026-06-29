@@ -598,6 +598,7 @@ private fun java_data_types(typeNames: List[String], module: CompiledModule, all
 private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
     java_data_type_generated(typeName, module)
         & java_data_type_kind(typeName, module.functions) != "enum"
+        & java_data_type_kind(typeName, module.functions) != "primitive"
 
 /// Checks whether a data type can be generated without colliding with the enclosing module class.
 private fun java_data_type_generated(typeName: String, module: CompiledModule): bool =
@@ -614,9 +615,17 @@ private fun java_data_type_kind(typeName: String, functions: List[CompiledFuncti
     match schema_value_named("__capy_schema_kind|" + typeName, functions) with
     case Some { value } -> value
     case None ->
-        if enum_type_exists_in_functions(typeName, functions)
+        if primitive_backed_type_exists_in_functions(typeName, functions)
+        then "primitive"
+        else if enum_type_exists_in_functions(typeName, functions)
         then "enum"
         else "data"
+
+/// Checks whether a schema type is primitive-backed in functions.
+private fun primitive_backed_type_exists_in_functions(typeName: String, functions: List[CompiledFunction]): bool =
+    match schema_value_named("__capy_schema_primitive|" + typeName, functions) with
+    case Some _ -> true
+    case None -> false
 
 /// Resolves the schema kind for a data type visible from a module.
 private fun java_data_type_kind_in_scope(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -797,7 +806,9 @@ private fun java_data_type_java_type(type: CompiledTypeReference, module: Compil
     then java_data_type_java_type(first_type_argument(type), module, allModules) + "[]"
     else if !primitiveType.is_empty()
     then primitiveType
-    else java_data_type_boxed_java_type(type, module, allModules)
+    else match primitive_backed_backing_type(type.name, module, allModules) with
+        case Some { backingType } -> java_data_type_java_type(backingType, module, allModules)
+        case None -> java_data_type_boxed_java_type(type, module, allModules)
 
 /// Formats a boxed Java type in generated data declarations.
 private fun java_data_type_boxed_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -814,7 +825,13 @@ private fun java_data_type_boxed_java_type(type: CompiledTypeReference, module: 
     then java_object_type_java_name(type)
     else if !primitiveType.is_empty()
     then primitiveType
-    else if boxed_container_java_type_name(type.name)
+    else match primitive_backed_backing_type(type.name, module, allModules) with
+        case Some { backingType } -> java_data_type_boxed_java_type(backingType, module, allModules)
+        case None -> java_data_type_boxed_non_primitive_java_type(type, simpleType, dataTypeName, module, allModules)
+
+/// Formats a boxed Java type in generated data declarations after primitive-backed type resolution.
+private fun java_data_type_boxed_non_primitive_java_type(type: CompiledTypeReference, simpleType: String, dataTypeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if boxed_container_java_type_name(type.name)
     then boxed_container_java_type(type.name, java_data_type_boxed_java_type(first_type_argument(type), module, allModules))
     else if type.name == "Tuple"
     then "java.util.List<?>"

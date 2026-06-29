@@ -971,6 +971,7 @@ def primitive_backed_type_declaration_definitions(ctx):
     location = source_location(ctx)
     definitions = [
         schema_constant_definition("__capy_schema_type|" + name, name, location),
+        schema_constant_definition("__capy_schema_kind|" + name, "primitive", location),
         schema_constant_definition("__capy_schema_primitive|" + name, backing_type["name"], location),
         schema_constant_definition("__capy_schema_field|" + name + "|0", "value|" + backing_type["name"], location),
     ]
