@@ -13,6 +13,9 @@ fun tests(): Effect[TestFile] =
         path_methods_create_list_and_delete_files_and_directories().map(assertion => test("path methods create list and delete files and directories", () => assertion)),
         path_methods_copy_move_and_replace_files().map(assertion => test("path methods copy move and replace files", () => assertion)),
         path_methods_forward_io_failures().map(assertion => test("path methods forward IO failures", () => assertion)),
+        test("should parse Windows drive letters", () => should_parse_windows_drive_letters()),
+        test("should parse Windows absolute paths", () => should_parse_windows_absolute_paths()),
+        test("should parse Windows UNC absolute paths", () => should_parse_windows_unc_absolute_paths()),
     ])
 
 fun path_methods_read_write_append_text_lines_and_bytes(): Effect[Assert] =
@@ -137,6 +140,32 @@ fun path_methods_forward_io_failures(): Effect[Assert] =
         assert_failed_message_contains(size_missing, "size failed"),
         assert_failed_message_contains(copy_missing, "copy failed"),
         assert_that(missing_exists).is_false(),
+    ])
+
+private fun should_parse_windows_absolute_paths(): Assert =
+    let path = from_string("D:\\repos\\capybara\\src\\main\\capybara")
+    assert_all([
+        assert_that(path.root).is_equal_to(PathRoot.ABSOLUTE),
+        assert_that(path.prefix).contains("D:\\"),
+        assert_that(path.segments).is_equal_to(["repos", "capybara", "src", "main", "capybara"]),
+    ])
+
+private fun should_parse_windows_unc_absolute_paths(): Assert =
+    let path = from_string("\\\\server\\share\\src\\main")
+    assert_all([
+        assert_that(path.root).is_equal_to(PathRoot.ABSOLUTE),
+        assert_that(path.prefix).contains("\\\\server\\share\\"),
+        assert_that(path.segments).is_equal_to(["src", "main"]),
+    ])
+
+private fun should_parse_windows_drive_letters(): Assert =
+    assert_all([
+        assert_that(windows_drive_letter { "D" }).succeeds(windows_drive_letter! { "D" }),
+        assert_that(windows_drive_letter { "z" }).succeeds(windows_drive_letter! { "Z" }),
+        assert_that(windows_drive_letter { "1" }).fails_with_kind("capy.io.path.invalid_drive_letter", "windows_drive_letter must be a single ASCII letter, was `1`"),
+        assert_that(windows_drive_letter { "" }).fails(),
+        assert_that(windows_drive_letter! { "d" }).is_equal_to(windows_drive_letter! { "D" }),
+        assert_that(windows_drive_letter! { "d" }.native_prefix()).is_equal_to("D:\\"),
     ])
 
 private fun unique_temp_path(name: String): Effect[Path] =

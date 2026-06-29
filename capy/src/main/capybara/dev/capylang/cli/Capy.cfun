@@ -1512,7 +1512,54 @@ private fun relative_to(base: Path, path: Path): Path =
     cli_relative_to(base, path)
 
 private fun cli_relative_to(base: Path, path: Path): Path =
-    from_string(cli_path_segments_to_string(cli_drop_prefix_segments(base.normalize().segments, path.normalize().segments)))
+    Path {
+        root: PathRoot.RELATIVE,
+        prefix: None {},
+        segments: cli_drop_prefix_segments(cli_path_compare_segments(base), cli_path_compare_segments(path))
+    }
+
+private fun cli_path_compare_segments(path: Path): List[String] =
+    cli_drop_windows_drive_segment(cli_split_path_segments(path.normalize().segments))
+
+private fun cli_split_path_segments(segments: List[String]): List[String] =
+    match segments[0] with
+    case None -> []
+    case Some { segment } -> cli_split_path_segment(segment, "", []) + cli_split_path_segments(segments[1:])
+
+private fun cli_split_path_segment(segment: String, current: String, acc: List[String]): List[String] =
+    match segment[0] with
+    case None -> if current.is_empty() then acc else acc + current
+    case Some { value } ->
+        if cli_path_separator(value)
+        then
+            if current.is_empty()
+            then cli_split_path_segment(segment[1, segment.size()], "", acc)
+            else cli_split_path_segment(segment[1, segment.size()], "", acc + current)
+        else cli_split_path_segment(segment[1, segment.size()], current + value, acc)
+
+private fun cli_drop_windows_drive_segment(segments: List[String]): List[String] =
+    match segments[0] with
+    case None -> []
+    case Some { segment } -> if cli_windows_drive_segment(segment) then segments[1:] else segments
+
+private fun cli_windows_drive_segment(segment: String): bool =
+    match segment[0] with
+    case Some { drive } -> {
+        match segment[1] with
+        case Some { ':' } -> {
+            match segment[2] with
+            case None -> cli_valid_windows_drive_letter(drive)
+            case _ -> false
+        }
+        case _ -> false
+    }
+    case _ -> false
+
+private fun cli_valid_windows_drive_letter(value: String): bool =
+    value.size() == 1 & ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" ? value)
+
+private fun cli_path_separator(value: String): bool =
+    value == '/' | value == '\\'
 
 private fun cli_drop_prefix_segments(prefix: List[String], segments: List[String]): List[String] =
     if cli_segments_have_prefix(prefix, segments)
@@ -1552,7 +1599,11 @@ private fun cli_path_to_string(path: Path): String =
     let body = cli_path_segments_to_string(normalized.segments)
     match normalized.root with
     case RELATIVE -> if body.is_empty() then "." else body
-    case ABSOLUTE -> "/" + body
+    case ABSOLUTE -> {
+        match normalized.prefix with
+        case None -> "/" + body
+        case Some { prefix } -> prefix + body
+    }
     case HOME -> if body.is_empty() then "~" else "~/" + body
 
 private fun write_compilation_output(output_dir: Path, program: CompiledProgram): Effect[Result[String]] =
