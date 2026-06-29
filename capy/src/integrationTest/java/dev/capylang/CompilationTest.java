@@ -94,7 +94,7 @@ class CompilationTest {
         assertThat(alphaBranch).isGreaterThanOrEqualTo(0);
         assertThat(betaBranch).isGreaterThan(alphaBranch);
         assertThat(fallbackBranch).isGreaterThan(betaBranch);
-        assertThat(code).contains("ResultUtil.thrownError");
+        assertThat(code).contains("__capy_thrown_error");
 
         var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
                 .map(module -> module.code())
