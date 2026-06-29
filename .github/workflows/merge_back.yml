@@ -97,6 +97,18 @@ jobs:
             fi
           }
 
+          push_state_branch() {
+            local state_head="$1"
+            local remote_state_sha
+            remote_state_sha="$(git ls-remote --heads origin "${STATE_BRANCH}" | awk '{ print $1 }')"
+
+            if [[ -n "${remote_state_sha}" ]]; then
+              git push --force-with-lease="refs/heads/${STATE_BRANCH}:${remote_state_sha}" origin "${state_head}:refs/heads/${STATE_BRANCH}"
+            else
+              git push origin "${state_head}:refs/heads/${STATE_BRANCH}"
+            fi
+          }
+
           git fetch origin \
             "+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}" \
             "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
@@ -113,6 +125,11 @@ jobs:
           STATE_HEAD="$(git rev-parse HEAD)"
 
           if git diff --quiet "origin/${DEFAULT_BRANCH}" "${STATE_HEAD}"; then
+            DEFAULT_HEAD="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+            if [[ "${STATE_HEAD}" != "${DEFAULT_HEAD}" ]]; then
+              push_state_branch "${STATE_HEAD}"
+              echo "Recorded merge-back state for ${RELEASE_BRANCH}."
+            fi
             echo "Default branch already contains ${RELEASE_BRANCH}."
             exit 0
           fi
