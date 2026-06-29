@@ -173,6 +173,41 @@ class CompilationTest {
     }
 
     @Test
+    void shouldAvoidSealingUnionWithExternalJavaVariants() {
+        var ownerSource = """
+                union A { a: String } = B
+
+                data B { b: String }
+                """;
+        var extensionSource = """
+                from /sample/owner/Owner import { A }
+
+                data C { ... A, c: String }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Owner", "/sample/owner", ownerSource, SourceKind.FUNCTIONAL),
+                rawModule("Extension", "/sample/ext", extensionSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        var ownerCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/owner/Owner.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var extensionCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/ext/Extension.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(ownerCode).contains("    public interface A {");
+        assertThat(ownerCode).doesNotContain("public sealed interface A");
+        assertThat(ownerCode).contains("    public record B(String a, String b) implements A {}");
+        assertThat(extensionCode).contains("    public record C(String a, String c) implements sample.owner.Owner.A {}");
+    }
+
+    @Test
     void shouldGenerateGrandparentUnionFieldsInJavaDataDeclarations() {
         var source = """
                 union A { a: String } = B

@@ -642,17 +642,33 @@ private fun java_data_type_generated_in_scope(typeName: String, module: Compiled
 /// Formats Java source text for a functional union declaration.
 private fun java_union_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     let variants = java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", module.functions), module)
+    let externalVariants = java_data_type_has_external_variants(typeName, module, allModules)
     let parentClause = java_union_data_type_parent_clause(typeName, module, allModules)
-    "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + java_union_modifier(variants)
+    "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + java_union_modifier(variants, externalVariants)
         + "interface " + java_data_type_declaration_name(typeName, module, allModules) + parentClause + " {" + newline()
         + java_union_data_type_methods(data_type_direct_fields(typeName, module, allModules), module, allModules)
         + "    }" + newline()
 
 /// Computes the Java union modifier.
-private fun java_union_modifier(variants: List[String]): String =
-    if variants.is_empty()
+private fun java_union_modifier(variants: List[String], externalVariants: bool): String =
+    if variants.is_empty() | externalVariants
     then ""
     else "sealed "
+
+/// Checks whether another module emits a generated subtype of the current union.
+private fun java_data_type_has_external_variants(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match allModules[0] with
+    case None -> false
+    case Some { candidateModule } ->
+        if java_same_module(candidateModule, module)
+        then java_data_type_has_external_variants(typeName, module, allModules[1:])
+        else if !java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", candidateModule.functions), candidateModule).is_empty()
+        then true
+        else java_data_type_has_external_variants(typeName, module, allModules[1:])
+
+/// Checks whether two compiled modules refer to the same generated module.
+private fun java_same_module(first: CompiledModule, second: CompiledModule): bool =
+    first.name == second.name & first.path == second.path
 
 /// Formats the Java extends clause for union parents.
 private fun java_union_data_type_parent_clause(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
