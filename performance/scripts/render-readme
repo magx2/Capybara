@@ -135,16 +135,18 @@ else:
             lines.append("")
             lines.append(f"[Changes since previous benchmark check]({compare_url(previous_sha, short_sha)})")
         lines.append("")
-        lines.append("| Step | Java | Python | JS |")
-        lines.append("| --- | ---: | ---: | ---: |")
-        for step, step_title in steps:
+        step_headers = " | ".join(step_title for _, step_title in steps)
+        step_alignments = " | ".join("---:" for _ in steps)
+        lines.append(f"| Backend | {step_headers} |")
+        lines.append(f"| --- | {step_alignments} |")
+        for backend, backend_title in backends:
             cells = []
-            for backend, _ in backends:
+            for step, _ in steps:
                 metric = f"{backend}-{step}"
                 current = parse_seconds(row.get(metric))
                 previous = delta_by_index[index].get(metric)
                 cells.append(result_cell(current, previous))
-            lines.append(f"| `{step_title}` | {' | '.join(cells)} |")
+            lines.append(f"| `{backend_title}` | {' | '.join(cells)} |")
         lines.append("")
 
 readme_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
