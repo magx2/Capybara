@@ -217,21 +217,29 @@ jobs:
         with:
           cache-disabled: false
 
-      - name: Build Windows native CLI
-        run: .\gradlew.bat :capy:nativeCompile --no-daemon
+      - name: Build and check Windows distribution
+        run: .\gradlew.bat clean check assemble --no-daemon
 
-      - name: Collect Windows artifacts
+      - name: Build Windows native CLI
         shell: pwsh
         run: |
           $version = "${{ needs.release-metadata.outputs.release_version }}"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Copy-Item "capy/build/native/nativeCompile/capyc-$version.exe" "dist/capyc-$version-windows-x64.exe"
+          $jar = "capy/build/libs/capy-$version.jar"
+          if (-not (Test-Path $jar)) {
+            Write-Error "Expected CLI jar was not produced: $jar"
+          }
+          native-image --no-fallback -jar $jar "dist/capyc-$version-windows-x64"
+          $exe = "dist/capyc-$version-windows-x64.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Error "Expected Windows native executable was not produced: $exe"
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: dist/*
+          path: dist/*.exe
           if-no-files-found: error
 
   publish-release:
