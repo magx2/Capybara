@@ -367,6 +367,7 @@ tasks.withType(InProcessCapybaraCompileTask).configureEach {
 
 dependencies {
     antlr group: 'org.antlr', name: 'antlr4', version: antlrVersion
+    implementation "dev.capylang.bootstrap:capy:${capybaraVersion}@jar"
     implementation "dev.capylang:capybara-lib:${capybaraVersion}@jar"
     implementation group: 'org.antlr', name: 'antlr4-runtime', version: antlrVersion
 
@@ -390,6 +391,7 @@ def capybaraLinkedCompilerPythonOutputDir = layout.buildDirectory.dir('generated
 def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript/compiler')
 def capybaraRuntimeCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-runtime/compiler')
 def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/compiler')
+def capybaraGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java')
 def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
 def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
 def pythonAntlrRuntimeDir = layout.buildDirectory.dir('python/antlr4-runtime')
@@ -512,6 +514,12 @@ tasks.named('compileCapybara') {
     inputDir.set(capybaraPreparedMainSourceDir)
     writeLinkedOutput.set(false)
     includeJavaLibResources.set(false)
+}
+
+tasks.named('compileJava', JavaCompile) {
+    exclude { element ->
+        element.file.toPath().startsWith(capybaraGeneratedJavaDir.get().asFile.toPath())
+    }
 }
 
 tasks.named('linkCapybaraLinked') {
