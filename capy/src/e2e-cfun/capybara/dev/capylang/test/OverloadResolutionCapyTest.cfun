@@ -1,0 +1,15 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from OverloadResolution import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/OverloadResolution.cfun", [
+        test("should prefer exact list overload over widenable one", () => should_prefer_exact_list_overload_over_widenable_one()),
+    ])
+
+private fun should_prefer_exact_list_overload_over_widenable_one(): Assert =
+    assert_all([
+        assert_that(choose_ints()).is_equal_to(103),
+        assert_that(choose_longs()).is_equal_to(203),
+    ])

@@ -1,0 +1,66 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from RecFunctions import { * }
+
+// The legacy Java host test still owns the 50_000-call stack-growth guard. That checks
+// generated-Java shape; these portable tests use a recursion depth supported by all backends.
+const PORTABLE_RECURSION_DEPTH = 500
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/RecFunctions.cfun", [
+        test("tail recursive top level function works", () => tail_recursive_top_level_function_works()),
+        test("tail recursive local function works", () => tail_recursive_local_function_works()),
+        test("tail recursive function supports let and match tail positions", () => tail_recursive_function_supports_let_and_match_tail_positions()),
+        test("tail recursive function is lowered without stack growth", () => tail_recursive_function_is_lowered_without_stack_growth()),
+        test("unmarked recursive functions still compile and run", () => unmarked_recursive_functions_still_compile_and_run()),
+        test("tail recursive match preserves option and result bindings", () => tail_recursive_match_preserves_option_and_result_bindings()),
+    ])
+
+private fun tail_recursive_top_level_function_works(): Assert =
+    assert_that(sum(5, 0)).is_equal_to(15)
+
+private fun tail_recursive_local_function_works(): Assert =
+    assert_that(sum_inner(5)).is_equal_to(15)
+
+private fun tail_recursive_function_supports_let_and_match_tail_positions(): Assert =
+    assert_all([
+        assert_that(sum_with_let(5, 0)).is_equal_to(15),
+        assert_that(sum_with_match(5, 0)).is_equal_to(15),
+    ])
+
+private fun tail_recursive_function_is_lowered_without_stack_growth(): Assert =
+    assert_all([
+        assert_that(factorial_large(5, 1)).is_equal_to(120),
+        assert_that(factorial_large_completes()).is_true(),
+    ])
+
+private fun unmarked_recursive_functions_still_compile_and_run(): Assert =
+    assert_all([
+        assert_that(unmarked_tail_sum(5, 0)).is_equal_to(15),
+        assert_that(unmarked_tail_factorial_large(5, 1)).is_equal_to(120),
+        assert_that(unmarked_tail_factorial_large_completes()).is_true(),
+        assert_that(unmarked_local_tail_sum(5)).is_equal_to(15),
+        assert_that(unmarked_local_tail_factorial_large(5)).is_equal_to(120),
+        assert_that(unmarked_local_tail_factorial_large_completes()).is_true(),
+        assert_that(unmarked_non_tail_sum(5)).is_equal_to(15),
+    ])
+
+private fun tail_recursive_match_preserves_option_and_result_bindings(): Assert =
+    assert_all([
+        assert_that(sum_present_values([1, 2, 3], 0)).is_equal_to(6),
+        assert_that(sum_lengths_until_error(["a", "bb", "bad", "cccc"], 0)).is_equal_to("error:bad length:3"),
+        assert_that(sum_lengths_until_error(["a", "bb", "ccc"], 0)).is_equal_to("ok:6"),
+    ])
+
+private fun factorial_large_completes(): bool =
+    let ignored = factorial_large(PORTABLE_RECURSION_DEPTH, 1)
+    true
+
+private fun unmarked_tail_factorial_large_completes(): bool =
+    let ignored = unmarked_tail_factorial_large(PORTABLE_RECURSION_DEPTH, 1)
+    true
+
+private fun unmarked_local_tail_factorial_large_completes(): bool =
+    let ignored = unmarked_local_tail_factorial_large(PORTABLE_RECURSION_DEPTH)
+    true

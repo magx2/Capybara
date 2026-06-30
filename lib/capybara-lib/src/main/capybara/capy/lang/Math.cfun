@@ -1,0 +1,229 @@
+from /capy/lang/Option import { * }
+from /capy/meta_prog/Recursive import { Recursive }
+
+fun digits(number: int): int =
+    @Recursive
+    fun digits(number: int, acc: int): int =
+        if number < 10
+        then acc
+        else digits(number / 10, acc + 1)
+    ---
+    if number == -2147483648
+    // abs function cannot handle -2147483648 because of overflow, so we hardcode the result for this case
+    then 10
+    else digits(abs(number), 1)
+
+fun abs(number: long): long = if number < 0 then -number else number
+
+fun abs(number: int): int = if number < 0 then -number else number
+
+/// Floor division for integers.
+///
+/// Unlike `/`, this always rounds toward negative infinity.
+/// `b` must be non-zero.
+fun floor_div(a: int, b: int): int =
+    let q = a / b
+    let r = a % b
+    if r == 0
+    then q
+    else if (r > 0 & b < 0) | (r < 0 & b > 0)
+        then q - 1
+        else q
+
+/// Floor division for long integers.
+///
+/// Unlike `/`, this always rounds toward negative infinity.
+/// `b` must be non-zero.
+fun floor_div(a: long, b: long): long =
+    let q = a / b
+    let r = a % b
+    if r == 0L
+    then q
+    else if (r > 0L & b < 0L) | (r < 0L & b > 0L)
+        then q - 1L
+        else q
+
+/// Floor modulo for integers.
+///
+/// Result has the same sign as divisor `b` (or is zero).
+/// `b` must be non-zero.
+fun floor_mod(a: int, b: int): int = a - floor_div(a, b) * b
+
+/// Floor modulo for long integers.
+///
+/// Result has the same sign as divisor `b` (or is zero).
+/// `b` must be non-zero.
+fun floor_mod(a: long, b: long): long = a - floor_div(a, b) * b
+
+/// Returns the smaller of two integers.
+fun min(a: int, b: int): int = if a < b then a else b
+
+/// Returns the smallest integer in `values`.
+///
+/// Returns `None` when the List is empty.
+fun min(values: List[int]): Option[int] =
+    @Recursive
+    fun min(min: int, values: List[int]): int =
+        match values[0] with
+        case None -> min
+        case Some { v } -> if min < v then min(min, values[1:]) else min(v, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { min(v, values[1:]) }
+
+/// Returns the greater of two integers.
+fun max(a: int, b: int): int = if a > b then a else b
+
+/// Returns the greatest integer in `values`.
+///
+/// Returns `None` when the List is empty.
+fun max(values: List[int]): Option[int] =
+    @Recursive
+    fun max(max: int, values: List[int]): int =
+        match values[0] with
+        case None -> max
+        case Some { v } -> if max < v then max(v, values[1:]) else max(max, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { max(v, values[1:]) }
+
+/// Returns the smaller of two long integers.
+fun min(a: long, b: long): long = if a < b then a else b
+
+/// Returns the smallest long integer in `values`.
+///
+/// Returns `None` when the List is empty.
+fun min(values: List[long]): Option[long] =
+    @Recursive
+    fun min(min: long, values: List[long]): long =
+        match values[0] with
+        case None -> min
+        case Some { v } -> if min < v then min(min, values[1:]) else min(v, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { min(v, values[1:]) }
+
+/// Returns the greater of two long integers.
+fun max(a: long, b: long): long = if a > b then a else b
+
+/// Returns the greatest long integer in `values`.
+///
+/// Returns `None` when the List is empty.
+fun max(values: List[long]): Option[long] =
+    @Recursive
+    fun max(max: long, values: List[long]): long =
+        match values[0] with
+        case None -> max
+        case Some { v } -> if max < v then max(v, values[1:]) else max(max, values[1:])
+    ---
+    match values[0] with
+    case None -> None {}
+    case Some { v } -> Some { max(v, values[1:]) }
+
+enum RoundMode { FLOOR, CEILING, HALF_UP, HALF_DOWN, HALF_EVEN }
+
+/// Rounds `value` to a `long` using the selected `RoundMode`.
+///
+/// Use `FLOOR` and `CEILING` when the direction matters more than nearest
+/// integer distance. Use the `HALF_*` modes when values should normally round
+/// to the nearest whole number and only need a specific policy for `.5` ties.
+///
+/// The modes are:
+///
+/// - `FLOOR`: always round toward negative infinity.
+/// - `CEILING`: always round toward positive infinity.
+/// - `HALF_UP`: round to the nearest value and move ties away from zero.
+/// - `HALF_DOWN`: round to the nearest value and move ties toward zero.
+/// - `HALF_EVEN`: round to the nearest value and move ties to the even neighbor.
+///
+/// Example:
+/// ```cfun
+/// from /capy/lang/Math import { HALF_EVEN, round }
+///
+/// fun cents_from_dollars(amount: double): long =
+///     round(amount * 100.0, HALF_EVEN)
+/// ```
+///
+/// The `HALF_*` modes all agree when there is a clear nearest whole number.
+/// They only differ for exact ties, which are values exactly halfway between
+/// two whole numbers:
+///
+/// ```cfun
+/// from /capy/lang/Math import { HALF_DOWN, HALF_EVEN, HALF_UP, round }
+///
+/// let half_up = round(2.5, HALF_UP)          // 3L
+/// let half_down = round(2.5, HALF_DOWN)      // 2L
+/// let half_even_low = round(2.5, HALF_EVEN)  // 2L
+/// let half_even_high = round(3.5, HALF_EVEN) // 4L
+/// ```
+///
+/// Negative ties keep the same mode-specific meaning. `HALF_UP` moves away
+/// from zero, while `HALF_DOWN` moves toward zero:
+///
+/// ```cfun
+/// from /capy/lang/Math import { HALF_DOWN, HALF_UP, round }
+///
+/// let away_from_zero = round(-1.5, HALF_UP) // -2L
+/// let toward_zero = round(-1.5, HALF_DOWN)  // -1L
+/// ```
+fun round(value: double, mode: RoundMode): long =
+    match mode with
+    case FLOOR -> floor(value)
+    case CEILING -> ceiling(value)
+    case HALF_UP -> half_up(value)
+    case HALF_DOWN -> half_down(value)
+    case HALF_EVEN -> half_even(value)
+
+private fun floor(value: double): long =
+    let truncated = value.to_long()
+    if value < truncated
+    then truncated - 1L
+    else truncated
+
+private fun ceiling(value: double): long =
+    let truncated = value.to_long()
+    if value > truncated
+    then truncated + 1L
+    else truncated
+
+private fun half_up(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if value < 0.0
+            then lower
+            else upper
+
+private fun half_down(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if value < 0.0
+            then upper
+            else lower
+
+private fun half_even(value: double): long =
+    let lower = floor(value)
+    let upper = ceiling(value)
+    let lower_diff = value - lower
+    let upper_diff = upper - value
+    if lower_diff < upper_diff
+    then lower
+    else if lower_diff > upper_diff
+        then upper
+        else if floor_mod(lower, 2L) == 0L
+            then lower
+            else upper

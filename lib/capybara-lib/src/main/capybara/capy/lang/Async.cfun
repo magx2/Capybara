@@ -1,0 +1,36 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { Result }
+
+/// Handle for an Effect that has been started by the host runtime.
+///
+/// Async values are inert handles. Observing completion is an Effect.
+data Async[T] { <native> }
+
+/// Starts a deferred computation on the host runtime's asynchronous execution facility.
+fun compute(fn: () => T): Async[T] =
+    delay(fn).start()
+
+/// Waits for all asynchronous computations and preserves every Result in input order.
+fun all(tasks: List[Async[T]]): /capy/lang/Effect[List[Result[T]]] = <native>
+
+/// Waits for the first asynchronous computation that completes.
+///
+/// Returns `capy.lang.async.empty` when `tasks` is empty.
+fun any(tasks: List[Async[T]]): /capy/lang/Effect[Result[T]] = <native>
+
+/// Waits for the asynchronous computation and captures host failures as Result.Error.
+fun Async[T].join(): /capy/lang/Effect[Result[T]] = <native>
+
+/// Transforms the successful asynchronous value without blocking the caller.
+fun Async[T].map(map: T => Y): Async[Y] = <native>
+
+/// Applies a Result-returning transformation and preserves mapper Error values.
+fun Async[T].flat_map(flatmap: T => Result[Y]): Async[Y] = <native>
+
+/// Operator alias for `map`.
+fun Async[T].`|`(map: T => Y): Async[Y] =
+    this.map(map)
+
+/// Operator alias for `flat_map`.
+fun Async[T].`|*`(flatmap: T => Result[Y]): Async[Y] =
+    this.flat_map(flatmap)

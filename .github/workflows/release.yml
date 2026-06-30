@@ -1,0 +1,419 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release-metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.version.outputs.release_version }}
+      next_patch_version: ${{ steps.version.outputs.next_patch_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      release_branch: ${{ steps.version.outputs.release_branch }}
+      default_branch: ${{ steps.version.outputs.default_branch }}
+      trigger_sha: ${{ steps.version.outputs.trigger_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Validate release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/[0-9]+\.[0-9]+\.x$ ]]; then
+            echo "::error::Release workflow must be run from a release/{major}.{minor}.x branch."
+            exit 1
+          fi
+
+      - name: Read release metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F= '/^version[[:space:]]*=/ { v=$2; gsub(/\r/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v }' gradle.properties)"
+          if [[ ! "${VERSION}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-SNAPSHOT$ ]]; then
+            echo "::error::Release branch version must be x.y.z-SNAPSHOT, got '${VERSION}'."
+            exit 1
+          fi
+
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          EXPECTED_BRANCH="release/${MAJOR}.${MINOR}.x"
+          if [[ "${GITHUB_REF_NAME}" != "${EXPECTED_BRANCH}" ]]; then
+            echo "::error::Branch '${GITHUB_REF_NAME}' does not match version '${VERSION}'. Expected '${EXPECTED_BRANCH}'."
+            exit 1
+          fi
+
+          RELEASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          NEXT_PATCH_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-SNAPSHOT"
+          TAG="release/${RELEASE_VERSION}"
+
+          {
+            echo "release_version=${RELEASE_VERSION}"
+            echo "next_patch_version=${NEXT_PATCH_VERSION}"
+            echo "tag=${TAG}"
+            echo "release_branch=${GITHUB_REF_NAME}"
+            echo "default_branch=${{ github.event.repository.default_branch }}"
+            echo "trigger_sha=${GITHUB_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Ensure Build & Check succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_REF_NAME}"
+          SHA="${GITHUB_SHA}"
+          WORKFLOW="check.yml"
+
+          find_run() {
+            gh run list \
+              --workflow "${WORKFLOW}" \
+              --branch "${BRANCH}" \
+              --commit "${SHA}" \
+              --json databaseId,status,conclusion,url \
+              --limit 10 \
+              --jq '.[0] // empty'
+          }
+
+          RUN="$(find_run)"
+          RUN_ID="$(jq -r '.databaseId // empty' <<< "${RUN}")"
+          if [[ -z "${RUN_ID}" ]]; then
+            for _ in {1..30}; do
+              sleep 10
+              RUN="$(find_run)"
+              RUN_ID="$(jq -r '.databaseId // empty' <<< "${RUN}")"
+              if [[ -n "${RUN_ID}" ]]; then
+                break
+              fi
+            done
+          fi
+
+          if [[ -z "${RUN_ID}" ]]; then
+            echo "::error::No Build & Check run found for ${BRANCH} at ${SHA}."
+            exit 1
+          fi
+
+          RUN_URL="$(jq -r '.url' <<< "${RUN}")"
+          echo "Watching Build & Check run ${RUN_ID}: ${RUN_URL}"
+          gh run watch "${RUN_ID}" --exit-status
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: release-metadata
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set release version
+        shell: bash
+        run: sed -i "s/^version=.*/version=${{ needs.release-metadata.outputs.release_version }}/" gradle.properties
+
+      - name: Set up GraalVM 21
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm-community
+          java-version: "21"
+          github-token: ${{ github.token }}
+          native-image-job-reports: "false"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build and check project
+        run: ./gradlew clean check assemble --no-daemon
+
+      - name: Build and collect Linux artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.release-metadata.outputs.release_version }}"
+          mkdir -p dist
+          cp "capy/build/libs/capy-${VERSION}.jar" "dist/capyc-${VERSION}.jar"
+          native-image --no-fallback -o "dist/capyc-${VERSION}-linux-x64" -jar "capy/build/libs/capy-${VERSION}.jar"
+          tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C dist "capyc-${VERSION}-linux-x64"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/*
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    needs: release-metadata
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set release version
+        shell: pwsh
+        run: |
+          $version = "${{ needs.release-metadata.outputs.release_version }}"
+          (Get-Content gradle.properties) -replace '^version=.*', "version=$version" | Set-Content gradle.properties
+
+      - name: Set up GraalVM 21
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm-community
+          java-version: "21"
+          github-token: ${{ github.token }}
+          native-image-job-reports: "false"
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Build and check project
+        run: .\gradlew.bat clean check assemble --no-daemon
+
+      - name: Build and collect Windows artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ needs.release-metadata.outputs.release_version }}"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          native-image.cmd --no-fallback -o "dist/capyc-$version-windows-x64" -jar "capy/build/libs/capy-$version.jar"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*
+          if-no-files-found: error
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs:
+      - release-metadata
+      - build-linux
+      - build-windows
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release-metadata.outputs.trigger_sha }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Configure git user
+        run: |
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
+
+      - name: Ensure release branch has not moved
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${{ needs.release-metadata.outputs.release_branch }}"
+          EXPECTED_SHA="${{ needs.release-metadata.outputs.trigger_sha }}"
+          REMOTE_SHA="$(git ls-remote --heads origin "${BRANCH}" | awk '{ print $1 }')"
+          if [[ "${REMOTE_SHA}" != "${EXPECTED_SHA}" ]]; then
+            echo "::error::Release branch ${BRANCH} moved from ${EXPECTED_SHA} to ${REMOTE_SHA}. Re-run Release from the current branch head."
+            exit 1
+          fi
+
+      - name: Commit release version and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${{ needs.release-metadata.outputs.release_version }}"
+          TAG="${{ needs.release-metadata.outputs.tag }}"
+          sed -i "s/^version=.*/version=${RELEASE_VERSION}/" gradle.properties
+          git add gradle.properties
+          if ! git diff --cached --quiet; then
+            git commit -m "release: ${RELEASE_VERSION}"
+          else
+            echo "Release version commit already exists."
+          fi
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists locally."
+          else
+            git tag "${TAG}"
+          fi
+
+      - name: Publish Java artifacts to GitHub Packages
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -o pipefail
+          PUBLISH_LOG="${RUNNER_TEMP:-/tmp}/publish-java-artifacts.log"
+          if ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon 2>&1 | tee "${PUBLISH_LOG}"; then
+            exit 0
+          fi
+
+          if grep -Eiq '409|conflict|already exists|cannot be updated|package version already exists' "${PUBLISH_LOG}"; then
+            echo "Java artifacts already exist for this release version; continuing."
+            exit 0
+          fi
+
+          exit 1
+
+      - name: Bump patch version
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT_PATCH_VERSION="${{ needs.release-metadata.outputs.next_patch_version }}"
+          sed -i "s/^version=.*/version=${NEXT_PATCH_VERSION}/" gradle.properties
+          git add gradle.properties
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump version to ${NEXT_PATCH_VERSION}"
+          else
+            echo "Patch version bump commit already exists."
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Push release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.release-metadata.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} is already pushed."
+          else
+            git push origin "${TAG}"
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          TAG="${{ needs.release-metadata.outputs.tag }}"
+          VERSION="${{ needs.release-metadata.outputs.release_version }}"
+          ASSETS=(dist/*)
+          if (( ${#ASSETS[@]} == 0 )); then
+            echo "::error::No release artifacts were downloaded."
+            exit 1
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            mapfile -t EXISTING_ASSETS < <(gh release view "${TAG}" --json assets --jq '.assets[].name')
+            MISSING_ASSETS=()
+            for asset in "${ASSETS[@]}"; do
+              asset_name="$(basename "${asset}")"
+              if printf '%s\n' "${EXISTING_ASSETS[@]}" | grep -Fxq "${asset_name}"; then
+                echo "Release asset ${asset_name} already exists; skipping upload."
+              else
+                MISSING_ASSETS+=("${asset}")
+              fi
+            done
+
+            if (( ${#MISSING_ASSETS[@]} > 0 )); then
+              gh release upload "${TAG}" "${MISSING_ASSETS[@]}"
+            else
+              echo "All release assets already exist."
+            fi
+          else
+            gh release create "${TAG}" "${ASSETS[@]}" \
+              --verify-tag \
+              --title "Capybara ${VERSION}" \
+              --notes "Release ${VERSION}"
+          fi
+
+      - name: Create patch bump pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_BRANCH="${{ needs.release-metadata.outputs.release_branch }}"
+          RELEASE_VERSION="${{ needs.release-metadata.outputs.release_version }}"
+          NEXT_PATCH_VERSION="${{ needs.release-metadata.outputs.next_patch_version }}"
+          BUMP_BRANCH="automation/post-release-${RELEASE_VERSION}"
+
+          REMOTE_BUMP_SHA="$(git ls-remote --heads origin "${BUMP_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${REMOTE_BUMP_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${REMOTE_BUMP_SHA}" origin "HEAD:refs/heads/${BUMP_BRANCH}"
+          else
+            git push origin "HEAD:refs/heads/${BUMP_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${RELEASE_BRANCH}" \
+              --head "${BUMP_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -n "${PR_NUMBER}" ]]; then
+            echo "Patch bump pull request already exists: ${PR_NUMBER}"
+          else
+            PR_URL="$(
+              gh pr create \
+                --repo "${GITHUB_REPOSITORY}" \
+                --base "${RELEASE_BRANCH}" \
+                --head "${BUMP_BRANCH}" \
+                --title "chore: bump version to ${NEXT_PATCH_VERSION}" \
+                --body "Bumps \`${RELEASE_BRANCH}\` to \`${NEXT_PATCH_VERSION}\` after release \`${RELEASE_VERSION}\`."
+            )"
+            echo "Created patch bump pull request: ${PR_URL}"
+          fi

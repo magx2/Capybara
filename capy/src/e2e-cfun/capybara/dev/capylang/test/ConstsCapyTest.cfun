@@ -1,0 +1,54 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Consts import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Consts.cfun", [
+        test("pi_plus_e adds module constants", () => pi_plus_e_adds_module_constants()),
+        test("uses_private_const can read private constant", () => uses_private_const_can_read_private_constant()),
+        test("local_consts combines argument and local constants", () => local_consts_combines_argument_and_local_constants()),
+        test("local_private_named_const recognizes whitespace", () => local_private_named_const_recognizes_whitespace()),
+        test("primitives_summary formats primitive constants", () => primitives_summary_formats_primitive_constants()),
+        test("collection const helpers use collection constants", () => collection_const_helpers_use_collection_constants()),
+        test("data and union constants expose values", () => data_and_union_constants_expose_values()),
+        test("underscored numeric literals keep numeric values", () => underscored_numeric_literals_keep_numeric_values()),
+    ])
+
+private fun pi_plus_e_adds_module_constants(): Assert =
+    assert_that(pi_plus_e()).is_equal_to(5.14, 0.001)
+
+private fun uses_private_const_can_read_private_constant(): Assert =
+    assert_that(uses_private_const()).is_equal_to(12)
+
+private fun local_consts_combines_argument_and_local_constants(): Assert =
+    assert_that(local_consts(3)).is_equal_to(18)
+
+private fun local_private_named_const_recognizes_whitespace(): Assert =
+    assert_all([
+        assert_that(local_private_named_const(" ")).is_true(),
+        assert_that(local_private_named_const("x")).is_false(),
+    ])
+
+private fun primitives_summary_formats_primitive_constants(): Assert =
+    assert_that(primitives_summary()).is_equal_to("26:42:97387717187:1.5:2.5:true:const")
+
+private fun collection_const_helpers_use_collection_constants(): Assert =
+    assert_all([
+        assert_that(list_const_sum()).is_equal_to(6),
+        assert_that(set_const_has_a()).is_true(),
+        assert_that(dict_const_size()).is_equal_to(2),
+    ])
+
+private fun data_and_union_constants_expose_values(): Assert =
+    assert_all([
+        assert_that(dog_data_name()).is_equal_to("Rex"),
+        assert_that(animal_type_text()).is_equal_to("cat:7"),
+    ])
+
+private fun underscored_numeric_literals_keep_numeric_values(): Assert =
+    assert_all([
+        assert_that(underscored_int_literal()).is_equal_to(100_000),
+        assert_that(underscored_long_literal()).is_equal_to(97_387_717_187L),
+        assert_that(underscored_literals_sum()).is_equal_to(97_387_817_187L),
+    ])

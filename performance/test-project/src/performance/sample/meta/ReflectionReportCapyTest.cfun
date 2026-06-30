@@ -1,0 +1,31 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /performance/sample/meta/ReflectionReport import { * }
+from /performance/sample/support/Fixtures import { benchmark_customer, fixture_order }
+
+fun tests(): Effect[TestFile] =
+    test_file("/performance/sample/meta/ReflectionReport.cfun", [
+        test("reflects customer metadata", () => reflects_customer_metadata()),
+        test("reflects order metadata and workflow methods", () => reflects_order_metadata_and_workflow_methods()),
+    ])
+
+fun reflects_customer_metadata(): Assert =
+    let report = customer_report(benchmark_customer())
+    assert_all([
+        assert_that(report.data_name).is_equal_to("Customer"),
+        assert_that(report.field_count).is_equal_to(5),
+        assert_that(report.annotations).contains("BenchmarkEntity"),
+        assert_that(report.first_field_annotation).is_equal_to("BenchmarkField"),
+        assert_that(report.object_name).is_equal_to("Workflow"),
+        assert_that(report.object_methods).contains("place_order"),
+    ])
+
+fun reflects_order_metadata_and_workflow_methods(): Assert =
+    let report = order_report(fixture_order())
+    assert_all([
+        assert_that(report.data_name).is_equal_to("Order"),
+        assert_that(report.field_count).is_equal_to(5),
+        assert_that(report.annotations).contains("BenchmarkEntity"),
+        assert_that(report.object_methods).contains("place_order"),
+    ])

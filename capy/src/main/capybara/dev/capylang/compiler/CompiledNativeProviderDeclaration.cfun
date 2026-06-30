@@ -1,0 +1,10 @@
+/// Native-provider declaration describing the provider id, optional interface id, and backend bindings.
+data CompiledNativeProviderDeclaration {
+    providerName: String,
+    sourceModulePath: String,
+    sourceModuleName: String,
+    targetTypeName: String,
+    interfaceId: String,
+    qualifier: String,
+    sourceFile: String
+}

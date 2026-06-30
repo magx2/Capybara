@@ -1,0 +1,73 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from NumericWidening import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/NumericWidening.cfun", [
+        test("int values widen to long in returns typed lets operators and calls", () => int_values_widen_to_long_in_returns_typed_lets_operators_and_calls()),
+        test("int arithmetic subexpressions evaluate in widened long context", () => int_arithmetic_subexpressions_evaluate_in_widened_long_context()),
+        test("float values widen to double in returns typed lets and calls", () => float_values_widen_to_double_in_returns_typed_lets_and_calls()),
+        test("int values widen to float and double", () => int_values_widen_to_float_and_double()),
+        test("long values widen to float and double", () => long_values_widen_to_float_and_double()),
+        test("values widen while constructing data", () => values_widen_while_constructing_data()),
+    ])
+
+// The legacy Java host test also reflects generated JVM return types for return_long,
+// invoke_long, return_double, and invoke_double. That is backend-specific generated-shape
+// coverage; these portable tests assert the observable widened values across backends.
+
+private fun int_values_widen_to_long_in_returns_typed_lets_operators_and_calls(): Assert =
+    assert_all([
+        assert_that(return_long(7)).is_equal_to(7L),
+        assert_that(typed_let_long(7)).is_equal_to(7L),
+        assert_that(multiply_with_long(3)).is_equal_to(30L),
+        assert_that(invoke_long(4)).is_equal_to(5L),
+    ])
+
+private fun int_arithmetic_subexpressions_evaluate_in_widened_long_context(): Assert =
+    assert_all([
+        assert_that(multiply_long_chain()).is_equal_to(1_000_000_000_000_000_000L),
+        assert_that(divide_long_by_grouped_int_chain(120_000_000_000L)).is_equal_to(2L),
+        assert_that(multiply_long_by_grouped_int_chain(2L)).is_equal_to(120_000_000_000L),
+        assert_that(divide_long_by_grouped_int_chain_branch(120_000_000_000L, true)).is_equal_to(2L),
+        assert_that(divide_long_by_grouped_int_chain_branch(120L, false)).is_equal_to(2L),
+    ])
+
+private fun float_values_widen_to_double_in_returns_typed_lets_and_calls(): Assert =
+    assert_all([
+        assert_that(return_double(1.25f)).is_equal_to(1.25),
+        assert_that(typed_let_double(1.25f)).is_equal_to(1.25),
+        assert_that(invoke_double(1.25f)).is_equal_to(1.75),
+    ])
+
+private fun int_values_widen_to_float_and_double(): Assert =
+    assert_all([
+        assert_that(int_to_float(6)).is_equal_to(6.0f),
+        assert_that(typed_let_float(6)).is_equal_to(6.0f),
+        assert_that(int_to_double(6)).is_equal_to(6.0),
+        assert_that(invoke_double_from_int(6)).is_equal_to(6.5),
+        assert_that(build_float_box(8).value).is_equal_to(8.0f),
+    ])
+
+private fun long_values_widen_to_float_and_double(): Assert =
+    assert_all([
+        assert_that(long_to_float(6L)).is_equal_to(6.0f),
+        assert_that(typed_let_float_from_long(6L)).is_equal_to(6.0f),
+        assert_that(long_to_double(6L)).is_equal_to(6.0),
+        assert_that(invoke_double_from_long(6L)).is_equal_to(6.5),
+        assert_that(build_float_box_from_long(8L).value).is_equal_to(8.0f),
+    ])
+
+private fun values_widen_while_constructing_data(): Assert =
+    let measurement = build_measurement(9, 2.5f)
+    let positional_measurement = build_measurement_positional(11, 4.5f)
+    assert_all([
+        assert_that(measurement.amount).is_equal_to(9L),
+        assert_that(measurement.ratio).is_equal_to(2.5),
+        assert_that(positional_measurement.amount).is_equal_to(11L),
+        assert_that(positional_measurement.ratio).is_equal_to(4.5),
+        assert_that(amount_from_measurement(12)).is_equal_to(12L),
+        assert_that(ratio_from_measurement(3.5f)).is_equal_to(3.5),
+        assert_that(build_long_box(13).value).is_equal_to(13L),
+    ])

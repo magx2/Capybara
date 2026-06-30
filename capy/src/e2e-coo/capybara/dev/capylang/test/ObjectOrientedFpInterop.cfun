@@ -1,0 +1,34 @@
+from /capy/meta_prog/Recursive import { Recursive }
+
+union InteropPet = InteropDog | InteropCat
+data InteropDog { name: String }
+data InteropCat { age: int }
+union InteropMaybe = InteropSome | InteropNone
+data InteropSome { value: String }
+data InteropNone {}
+data RecInteropValue { value: int }
+type user_id -> int
+
+fun make_dog(name: String): InteropDog = InteropDog { name: name }
+
+fun make_user_id(value: int): user_id = user_id { value }
+
+fun unwrap_user_id(id: user_id): int = id.value
+
+fun add_user_ids(left: user_id, right: user_id): user_id = user_id! { left.value + right.value }
+
+fun pet_text(pet: InteropPet): String =
+    match pet with
+    case InteropDog { name } -> "dog:" + name
+    case InteropCat { age } -> "cat:" + age
+
+fun maybe_text(value: InteropMaybe): String =
+    match value with
+    case InteropSome { value } -> value
+    case InteropNone -> "none"
+
+fun RecInteropValue.step(delta: int): int = this.value + delta
+
+@Recursive
+fun step(n: int, value: RecInteropValue, acc: int): int =
+    if n <= 0 then acc else step(n - 1, value, acc + value.step(n))

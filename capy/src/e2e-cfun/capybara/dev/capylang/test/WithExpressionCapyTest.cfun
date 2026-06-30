@@ -1,0 +1,78 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from WithExpression import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/WithExpression.cfun", [
+        test("data_with_single updates only one field", () => data_with_single_updates_only_one_field()),
+        test("data_with_multiple updates selected fields", () => data_with_multiple_updates_selected_fields()),
+        test("data_with_chain applies chained data updates", () => data_with_chain_applies_chained_data_updates()),
+        test("parent_with updates parent field and preserves subtype", () => parent_with_updates_parent_field_and_preserves_subtype()),
+        test("parent_with_chain applies chained parent updates", () => parent_with_chain_applies_chained_parent_updates()),
+        test("parent_with_preserves_subtype matches updated subtype", () => parent_with_preserves_subtype_matches_updated_subtype()),
+    ])
+
+private fun data_with_single_updates_only_one_field(): Assert =
+    let result = data_with_single(Foo { a: 1, b: "old", c: 2.5 })
+    assert_all([
+        assert_that(result.a).is_equal_to(2),
+        assert_that(result.b).is_equal_to("old"),
+        assert_that(result.c).is_equal_to(2.5),
+    ])
+
+private fun data_with_multiple_updates_selected_fields(): Assert =
+    let result = data_with_multiple(Foo { a: 1, b: "old", c: 2.5 })
+    assert_all([
+        assert_that(result.a).is_equal_to(2),
+        assert_that(result.b).is_equal_to("new value"),
+        assert_that(result.c).is_equal_to(2.5),
+    ])
+
+private fun data_with_chain_applies_chained_data_updates(): Assert =
+    let result = data_with_chain(Foo { a: 1, b: "old", c: 2.5 })
+    assert_all([
+        assert_that(result.a).is_equal_to(2),
+        assert_that(result.b).is_equal_to("new value"),
+        assert_that(result.c).is_equal_to(2.5),
+    ])
+
+private fun parent_with_updates_parent_field_and_preserves_subtype(): Assert =
+    let updated_a = parent_with(A { x: 1, a: "alpha" })
+    let updated_b = parent_with(B { x: 4, b: 99 })
+    assert_all([
+        assert_parent_with_a(updated_a),
+        assert_parent_with_b(updated_b),
+    ])
+
+private fun assert_parent_with_a(letter: Letter): Assert =
+    match letter with
+    case A { x, a } -> assert_all([
+        assert_that(x).is_equal_to(2),
+        assert_that(a).is_equal_to("alpha"),
+    ])
+    case _ -> assert_that(false).is_true()
+
+private fun assert_parent_with_b(letter: Letter): Assert =
+    match letter with
+    case B { x, b } -> assert_all([
+        assert_that(x).is_equal_to(5),
+        assert_that(b).is_equal_to(99),
+    ])
+    case _ -> assert_that(false).is_true()
+
+private fun parent_with_chain_applies_chained_parent_updates(): Assert =
+    let result = parent_with_chain(C { x: 3, c: 7.5 })
+    match result with
+    case C { x, c } -> assert_all([
+        assert_that(x).is_equal_to(100),
+        assert_that(c).is_equal_to(7.5),
+    ])
+    case _ -> assert_that(false).is_true()
+
+private fun parent_with_preserves_subtype_matches_updated_subtype(): Assert =
+    assert_all([
+        assert_that(parent_with_preserves_subtype(A { x: 1, a: "x" })).is_equal_to("A:2:x"),
+        assert_that(parent_with_preserves_subtype(B { x: 2, b: 3 })).is_equal_to("B:3:3"),
+        assert_that(parent_with_preserves_subtype(C { x: 3, c: 4.5 })).is_equal_to("C:4:4.5"),
+    ])

@@ -1,0 +1,27 @@
+from /performance/sample/domain/Order import { Order }
+from /performance/sample/domain/ResultTypes import { WorkflowAccepted, WorkflowRejected, WorkflowResult }
+from /performance/sample/nativeinterop/NativeClock import { FixedClock }
+from /performance/sample/nativeinterop/NativeHasher import { StableHasher }
+from /performance/sample/oo/DiscountEngine import { DiscountEngine }
+from /performance/sample/oo/Inventory import { Inventory }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkMethod, BenchmarkObjectField, BenchmarkType }
+
+@BenchmarkType(label: "workflow")
+class Workflow(inventory: Inventory, discounts: DiscountEngine, clock: FixedClock, hasher: StableHasher) {
+    @BenchmarkObjectField(value: "inventory service")
+    field inventory: Inventory = inventory
+
+    field discounts: DiscountEngine = discounts
+
+    field clock: FixedClock = clock
+
+    field hasher: StableHasher = hasher
+
+    @BenchmarkMethod(value: "place order")
+    def place_order(order: Order): WorkflowResult =
+        WorkflowAccepted {
+            order_id: this.hasher.stable_hash(order.id + ":" + this.clock.fixed_millis()),
+            total_cents: this.discounts.total_cents(order),
+            stamp: this.clock.fixed_millis()
+        }
+}

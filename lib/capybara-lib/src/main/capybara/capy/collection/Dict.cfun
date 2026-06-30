@@ -1,0 +1,123 @@
+from /capy/collection/List import { * }
+from /capy/collection/CollectionTypes import { * }
+from /capy/lang/Option import { * }
+
+/// Native String-keyed map type backed by the runtime Dict implementation.
+/// Dict literals use braces with String keys: {"one": 1, "two": 2}.
+///
+/// Example:
+/// ```cfun
+/// let base = { "name": "Ada" }
+/// base + { "role": "admin" }
+/// ```
+/// Dictionaries are immutable: adding or removing entries returns a new `Dict`.
+data Dict[T] { <native> }
+
+/// Returns the number of entries in this Dict.
+fun Dict[T].size(): size = <native>
+
+/// Returns true when this Dict has no entries.
+fun Dict[T].is_empty(): bool = this.size() == EMPTY
+
+/// Returns this Dict as a List of `(key, value)` tuples.
+///
+/// Example: `{"one": 1}.entries()` returns `[("one", 1)]`.
+fun Dict[T].entries(): List[Tuple[String, T]] = <native>
+
+/// Returns a new Dict with `entry` added or replaced.
+///
+/// Example: `{"name": "Ada"} + ("name", "Grace")` returns a dictionary where
+/// `name` is `Grace`.
+fun Dict[T].`+`(entry: Tuple[String, T]): Dict[T] = <native>
+
+/// Returns a new Dict with all entries from `other` added or replaced.
+fun Dict[T].`+`(other: Dict[T]): Dict[T] = <native>
+
+/// Returns a new Dict with `entry` added or replaced.
+fun Dict[T].plus(entry: Tuple[String, T]): Dict[T] = this + entry
+
+/// Returns a new Dict with all entries from `other` added or replaced.
+fun Dict[T].plus(other: Dict[T]): Dict[T] = this + other
+
+/// Returns a new Dict without `key`.
+fun Dict[T].`-`(key: String): Dict[T] = <native>
+
+/// Returns a new Dict without keys contained in `other`.
+fun Dict[T].`-`(other: Dict[T]): Dict[T] = <native>
+
+/// Returns a new Dict without `key`.
+fun Dict[T].minus(key: String): Dict[T] = this - key
+
+/// Returns a new Dict without keys contained in `other`.
+fun Dict[T].minus(other: Dict[T]): Dict[T] = this - other
+
+/// Returns true when at least one entry satisfies `predicate`.
+fun Dict[T].any(predicate: (String, T) => bool): bool =
+    this.entries().any(entry => predicate(entry[0], entry[1]))
+
+/// Returns true when every entry satisfies `predicate`.
+///
+/// Empty dicts return true.
+fun Dict[T].all(predicate: (String, T) => bool): bool =
+    this.entries().all(entry => predicate(entry[0], entry[1]))
+
+/// Returns true when this Dict contains the given key.
+fun Dict[T].contains_key(key: String): bool =
+    this.any((item_key, _) => item_key == key)
+
+/// Returns true when this Dict contains the given key.
+fun Dict[T].`?`(key: String): bool = this.contains_key(key)
+
+/// Combines all entries from left to right.
+///
+/// Example:
+/// ```cfun
+/// {"a": 1, "b": 2} |> 0, (total, _, value) => total + value
+/// ```
+/// Returns `3`.
+fun Dict[T].reduce(initial: R, reducer: (R, String, T) => R): R =
+    this.entries().reduce(initial, (acc, entry) => reducer(acc, entry[0], entry[1]))
+
+/// Combines all entries from left to right.
+fun Dict[T].`|>`(initial: R, reducer: (R, String, T) => R): R = this.reduce(initial, reducer)
+
+/// Transforms each entry using `map`.
+///
+/// Example:
+/// ```cfun
+/// {"a": 1, "b": 2} | (_, value) => value * 10
+/// ```
+/// Returns `{"a": 10, "b": 20}` while preserving keys.
+fun Dict[T].map(map: (String, T) => Y): Dict[Y] =
+    this.entries().reduce({:}, (acc, entry) => acc + (entry[0], map(entry[0], entry[1])))
+
+/// Transforms each entry using `map`.
+fun Dict[T].`|`(map: (String, T) => Y): Dict[Y] = this.map(map)
+
+/// Returns a new Dict containing only entries that satisfy `predicate`.
+///
+/// Example:
+/// ```cfun
+/// {"debug": true, "prod": false} |- (_, enabled) => enabled
+/// ```
+/// Returns only the `debug` entry.
+fun Dict[T].filter(predicate: (String, T) => bool): Dict[T] =
+    this.entries().reduce({:}, (acc, entry) =>
+        if predicate(entry[0], entry[1])
+        then acc + entry
+        else acc)
+
+/// Returns a new Dict without entries that satisfy `predicate`.
+fun Dict[T].reject(predicate: (String, T) => bool): Dict[T] =
+    this.entries().reduce({:}, (acc, entry) =>
+        if predicate(entry[0], entry[1])
+        then acc
+        else acc + entry)
+
+/// Returns a new Dict containing only entries that satisfy `predicate`.
+fun Dict[T].`|-`(predicate: (String, T) => bool): Dict[T] = this.filter(predicate)
+
+/// Returns the value for key; equivalent to dict[key].
+///
+/// Example: `{"name": "Ada"}.get("name")` returns `Some { value: "Ada" }`.
+fun Dict[T].get(key: String): Option[T] = <native>

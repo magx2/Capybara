@@ -1,0 +1,3 @@
+interface CapybaraParser {
+    def parse(modules: List[RawModule]): ParsedProgram
+}

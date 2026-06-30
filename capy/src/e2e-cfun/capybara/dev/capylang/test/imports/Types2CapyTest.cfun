@@ -1,0 +1,50 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Types2 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/Types2.cfun", [
+        test("TD1 preserves its x field", () => types2_td1_preserves_its_x_field()),
+        test("TD2 preserves its y field", () => types2_td2_preserves_its_y_field()),
+        test("T1 accepts both data variants", () => types2_t1_accepts_both_data_variants()),
+        test("DataX preserves its xyz field", () => types2_datax_preserves_its_xyz_field()),
+    ])
+
+// Legacy host tests asserted generated Java classes for TD1 and DataX.
+// Portable coverage asserts data equality, fields, and union variant matching.
+private fun types2_td1_preserves_its_x_field(): Assert =
+    let actual = TD1 { x: "alpha" }
+    assert_all([
+        assert_that(actual).is_equal_to(TD1 { x: "alpha" }),
+        assert_that(actual.x).is_equal_to("alpha"),
+    ])
+
+private fun types2_td2_preserves_its_y_field(): Assert =
+    let actual = TD2 { y: "beta" }
+    assert_all([
+        assert_that(actual).is_equal_to(TD2 { y: "beta" }),
+        assert_that(actual.y).is_equal_to("beta"),
+    ])
+
+private fun types2_t1_accepts_both_data_variants(): Assert =
+    let first: T1 = TD1 { x: "x: 7" }
+    let second: T1 = TD2 { y: "y: 11" }
+    assert_all([
+        assert_that(first).is_equal_to(TD1 { x: "x: 7" }),
+        assert_that(second).is_equal_to(TD2 { y: "y: 11" }),
+        assert_that(types2_t1_variant_summary(first)).is_equal_to("TD1:x: 7"),
+        assert_that(types2_t1_variant_summary(second)).is_equal_to("TD2:y: 11"),
+    ])
+
+private fun types2_t1_variant_summary(value: T1): String =
+    match value with
+    case TD1 { x } -> "TD1:" + x
+    case TD2 { y } -> "TD2:" + y
+
+private fun types2_datax_preserves_its_xyz_field(): Assert =
+    let actual = DataX { xyz: "123" }
+    assert_all([
+        assert_that(actual).is_equal_to(DataX { xyz: "123" }),
+        assert_that(actual.xyz).is_equal_to("123"),
+    ])

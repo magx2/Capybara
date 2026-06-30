@@ -1,0 +1,90 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from EnumCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/EnumCollection.cfun", [
+        test("match can cover all enum values", () => match_can_cover_all_enum_values()),
+        test("match can use wildcard for enums", () => match_can_use_wildcard_for_enums()),
+        test("enum provides order and name", () => enum_provides_order_and_name()),
+        test("values returns enum set", () => values_returns_enum_set()),
+        test("parse from string and order returns result", () => parse_from_string_and_order_returns_result()),
+        test("enum values can be used without braces in expressions", () => enum_values_can_be_used_without_braces_in_expressions()),
+        test("enum values can be used without braces in compound expressions", () => enum_values_can_be_used_without_braces_in_compound_expressions()),
+    ])
+
+private fun match_can_cover_all_enum_values(): Assert =
+    assert_all([
+        assert_that(color_match(RED)).is_equal_to(1),
+        assert_that(color_match(BLUE)).is_equal_to(2),
+        assert_that(color_match(GREEN_BLUE)).is_equal_to(3),
+        assert_that(color_match(YELLOW)).is_equal_to(4),
+        assert_that(color_match(BLACK)).is_equal_to(5),
+        assert_that(color_match(WHITE)).is_equal_to(6),
+    ])
+
+private fun match_can_use_wildcard_for_enums(): Assert =
+    assert_all([
+        assert_that(color_match_wildcard(RED)).is_equal_to(1),
+        assert_that(color_match_wildcard(BLUE)).is_equal_to(2),
+        assert_that(color_match_wildcard(WHITE)).is_equal_to(0),
+    ])
+
+private fun enum_provides_order_and_name(): Assert =
+    assert_all([
+        assert_that(color_order(RED)).is_equal_to(0),
+        assert_that(color_order(GREEN_BLUE)).is_equal_to(2),
+        assert_that(color_name(GREEN_BLUE)).is_equal_to("GREEN_BLUE"),
+    ])
+
+private fun values_returns_enum_set(): Assert =
+    assert_all([
+        assert_that(color_values())
+            .has_size(6)
+            .contains(RED)
+            .contains(BLUE)
+            .contains(GREEN_BLUE)
+            .contains(YELLOW)
+            .contains(BLACK)
+            .contains(WHITE),
+        assert_that(Color.values)
+            .has_size(6)
+            .contains(Color.BLUE),
+    ])
+
+private fun parse_from_string_and_order_returns_result(): Assert =
+    // Backends use different enum parse error wording; assert failure plus portable enum/input context.
+    assert_all([
+        assert_that(parse_color_name("BLUE")).succeeds(value => assert_that(value.name).is_equal_to("BLUE")),
+        assert_that(parse_color_order(3)).succeeds(value => assert_that(value.name).is_equal_to("YELLOW")),
+        assert_that(Color.parse("BLUE")).succeeds(value => assert_that(value.name).is_equal_to("BLUE")),
+        assert_that(Color.parse(3)).succeeds(value => assert_that(value.name).is_equal_to("YELLOW")),
+        assert_that(parse_color_name("UNKNOWN")).fails(),
+        assert_that(parse_message(parse_color_name("UNKNOWN"))).contains("Color"),
+        assert_that(parse_message(parse_color_name("UNKNOWN"))).contains("UNKNOWN"),
+        assert_that(parse_color_order(99)).fails(),
+        assert_that(parse_message(parse_color_order(99))).contains("Color"),
+        assert_that(parse_message(parse_color_order(99))).contains("99"),
+    ])
+
+private fun parse_message(result: Result[Color]): String =
+    result.reduce(value => value.name, error => error.message)
+
+private fun enum_values_can_be_used_without_braces_in_expressions(): Assert =
+    assert_all([
+        assert_that(qualified_color_without_braces() == BLUE).is_true(),
+        assert_that(Color.BLUE == BLUE).is_true(),
+        assert_that(unqualified_color_without_braces() == GREEN_BLUE).is_true(),
+        assert_that(inferred_color_without_braces() == RED).is_true(),
+        assert_that(color_name_without_braces()).is_equal_to("YELLOW"),
+    ])
+
+private fun enum_values_can_be_used_without_braces_in_compound_expressions(): Assert =
+    let palette = palette_without_braces()
+    assert_all([
+        assert_that(color_list_without_braces()).is_equal_to([RED, BLUE, GREEN_BLUE]),
+        assert_that(palette.primary.name).is_equal_to("WHITE"),
+        assert_that(palette.fallback.name).is_equal_to("BLACK"),
+    ])

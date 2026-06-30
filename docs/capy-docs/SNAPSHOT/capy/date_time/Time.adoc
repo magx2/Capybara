@@ -1,0 +1,251 @@
+= Module Time
+
+== Functions
+
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Time[Time]&#93;
+
+Parses an ISO 8601 time in basic or extended complete form.
+
+Example:
+```cfun
+from_iso_8601("14:05:09Z")
+from_iso_8601("140509+0200")
+```
+Offset-aware inputs preserve their offset in `offset_minutes`.
+
+
+
+
+== Constants
+
+=== const HOURS_IN_DAY: int
+
+
+
+=== const MAX_OFFSET_MINUTES: int
+
+
+
+=== const MIDNIGHT: xref:#type-Time[Time]
+
+
+
+=== const MINUTES_IN_DAY: int
+
+
+
+=== const MINUTES_IN_HOUR: int
+
+
+
+=== const NOON: xref:#type-Time[Time]
+
+
+
+=== const NOON_HOUR: xref:#type-hour[hour]
+
+
+
+=== const SECONDS_IN_DAY: int
+
+
+
+=== const SECONDS_IN_HOUR: int
+
+
+
+=== const SECONDS_IN_MINUTE: int
+
+
+
+=== const ZERO_HOUR: xref:#type-hour[hour]
+
+
+
+=== const ZERO_MINUTE: xref:#type-minute[minute]
+
+
+
+=== const ZERO_SECOND: xref:#type-second[second]
+
+
+
+
+
+== Types
+
+[[type-Time]]
+=== data Time
+
+Clock time represented in 24-hour format.
+Component types validate `hour`, `minute`, `second`, and optional UTC offset.
+
+Example:
+```cfun
+Time {
+    hour: hour! { 9 },
+    minute: minute! { 30 },
+    second: ZERO_SECOND,
+    offset_minutes: None {}
+}
+```
+
+==== Fields
+
+* `hour`: xref:#type-hour[hour]
+* `minute`: xref:#type-minute[minute]
+* `offset_minutes`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-offset_minutes[offset_minutes]&#93;
+* `second`: xref:#type-second[second]
+
+==== Functions
+
+===== fun Time.add_hours(hours: int): xref:#type-Time[Time]
+
+Adds hours and wraps around a 24-hour day.
+
+
+===== fun Time.add_minutes(minutes: int): xref:#type-Time[Time]
+
+Adds minutes and wraps around a 24-hour day.
+
+
+===== fun Time.add_seconds(seconds: int): xref:#type-Time[Time]
+
+Adds seconds and wraps around a 24-hour day.
+
+Example: `MIDNIGHT.add_seconds(-1)` returns `23:59:59`.
+
+
+===== fun Time.round_to_hours(): xref:#type-Time[Time]
+
+Returns a new time with minutes and seconds set to `0`.
+
+
+===== fun Time.round_to_minutes(): xref:#type-Time[Time]
+
+Returns a new time with seconds set to `0`.
+
+
+===== fun Time.to_hours(): int
+
+Returns the hour component.
+
+
+===== fun Time.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Formats this time as an ISO 8601 extended time.
+
+Example:
+```cfun
+Time {
+    hour: hour! { 14 },
+    minute: minute! { 5 },
+    second: second! { 9 },
+    offset_minutes: Some { value: offset_minutes! { 120 } }
+}.to_iso_8601()
+```
+Returns `14:05:09+02:00`.
+
+
+===== fun Time.to_minutes(): int
+
+Converts this time to minutes since midnight, truncating seconds.
+
+
+===== fun Time.to_seconds(): int
+
+Converts this time to seconds since midnight.
+
+Example: `NOON.to_seconds()` returns `43200`.
+
+
+[[type-hour]]
+=== type hour: int
+
+Hour of day in 24-hour clock, in the range 0..23.
+
+==== Functions
+
+===== fun hour.`<=`(other: xref:#type-hour[hour]): bool
+
+
+
+===== fun hour.`<`(other: xref:#type-hour[hour]): bool
+
+
+
+===== fun hour.`==`(other: xref:#type-hour[hour]): bool
+
+
+
+===== fun hour.`>=`(other: xref:#type-hour[hour]): bool
+
+
+
+===== fun hour.`>`(other: xref:#type-hour[hour]): bool
+
+
+
+
+[[type-minute]]
+=== type minute: int
+
+Minute of hour, in the range 0..59.
+
+==== Functions
+
+===== fun minute.`<=`(other: xref:#type-minute[minute]): bool
+
+
+
+===== fun minute.`<`(other: xref:#type-minute[minute]): bool
+
+
+
+===== fun minute.`==`(other: xref:#type-minute[minute]): bool
+
+
+
+===== fun minute.`>=`(other: xref:#type-minute[minute]): bool
+
+
+
+===== fun minute.`>`(other: xref:#type-minute[minute]): bool
+
+
+
+
+[[type-offset_minutes]]
+=== type offset_minutes: int
+
+UTC offset measured in minutes, in the inclusive range -23:59..+23:59.
+
+
+[[type-second]]
+=== type second: int
+
+Second of minute, in the range 0..59.
+
+==== Functions
+
+===== fun second.`<=`(other: xref:#type-second[second]): bool
+
+
+
+===== fun second.`<`(other: xref:#type-second[second]): bool
+
+
+
+===== fun second.`==`(other: xref:#type-second[second]): bool
+
+
+
+===== fun second.`>=`(other: xref:#type-second[second]): bool
+
+
+
+===== fun second.`>`(other: xref:#type-second[second]): bool
+
+
+
+
