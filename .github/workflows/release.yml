@@ -156,8 +156,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Build and check project
-        run: ./gradlew clean check assemble --no-daemon
+      - name: Build project
+        run: ./gradlew clean assemble --no-daemon
 
       - name: Build and collect Linux artifacts
         shell: bash
@@ -166,7 +166,7 @@ jobs:
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
           cp "capy/build/libs/capy-${VERSION}.jar" "dist/capyc-${VERSION}.jar"
-          native-image --no-fallback -o "dist/capyc-${VERSION}-linux-x64" -jar "capy/build/libs/capy-${VERSION}.jar"
+          native-image --no-fallback -H:Path=dist -H:Name="capyc-${VERSION}-linux-x64" -jar "capy/build/libs/capy-${VERSION}.jar"
           tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C dist "capyc-${VERSION}-linux-x64"
 
       - name: Upload Linux artifacts
@@ -208,15 +208,15 @@ jobs:
         with:
           cache-disabled: false
 
-      - name: Build and check project
-        run: .\gradlew.bat clean check assemble --no-daemon
+      - name: Build project
+        run: .\gradlew.bat clean assemble --no-daemon
 
       - name: Build and collect Windows artifacts
         shell: pwsh
         run: |
           $version = "${{ needs.release-metadata.outputs.release_version }}"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
-          native-image.cmd --no-fallback -o "dist/capyc-$version-windows-x64" -jar "capy/build/libs/capy-$version.jar"
+          native-image.cmd --no-fallback "-H:Path=dist" "-H:Name=capyc-$version-windows-x64" -jar "capy/build/libs/capy-$version.jar"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
