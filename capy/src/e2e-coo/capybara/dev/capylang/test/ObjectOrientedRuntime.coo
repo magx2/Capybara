@@ -1,0 +1,197 @@
+from /capy/io/Stdout import { * }
+from /capy/lang/Result import { * }
+
+open class GreeterBase {
+    field prefix: String = "hello"
+
+    open def describe(name: String): String = prefix + " " + name
+}
+
+interface Printable {
+    def print(): String
+}
+
+trait BracketNaming {
+    def bracket(name: String): String = "[" + name + "]"
+}
+
+class Main {
+    def main(args: List[String]): int = args.size()
+}
+
+class Person(name: String): GreeterBase, Printable, BracketNaming {
+    field name: String = name
+
+    def greet(): String = this.describe(this.name)
+
+    def mutable(): String {
+        def x = "a"
+        x = "2"
+        return x
+    }
+
+    def ping(): void = this.describe(this.name)
+
+    def emit_greeting(): void = println(this.greet())
+
+    def emit_boxed_name(): void {
+        print("[")
+        print(this.name)
+        println("]")
+    }
+
+    def emit_star(): void = print("*")
+
+    override def print(): String {
+        let label: String = GreeterBase.describe(this.name)
+        return label + "!"
+    }
+
+    def display(formal: bool): String {
+        if formal {
+            return this.bracket(this.name)
+        } else {
+            return this.name
+        }
+    }
+
+    def nested_label(): String {
+        {
+            let label: String = this.describe(this.name)
+            return label
+        }
+    }
+
+    def local_increment(x: int): int {
+        let step: int = 1
+        def inc(y: int): int = y + step
+        return inc(x)
+    }
+
+    def parity(x: int): bool {
+        def is_even(n: int): bool {
+            if n == 0 {
+                return true
+            } else {
+                return is_odd(n - 1)
+            }
+        }
+        def is_odd(n: int): bool {
+            if n == 0 {
+                return false
+            } else {
+                return is_even(n - 1)
+            }
+        }
+        return is_even(x)
+    }
+
+    def second_name(values: String[]): String = values[1]
+
+    def first_id(values: int[]): int = values[0]
+
+    def copy_people(values: Person[]): Person[] = values
+
+    def names(): String[] = String[]{"zero", "one"}
+
+    def slots(size: int): int[] = int[size]
+
+    def recover(flag: bool): String {
+        try {
+            if flag {
+                throw error_kind("capy.test.runtime.boom", "boom")
+            }
+            return "ok"
+        } catch "capy.test.runtime.boom" error {
+            return "kind:" + error.message
+        } catch error {
+            return "fallback:" + error.kind
+        }
+    }
+
+    def catch_index(values: String[]): String {
+        try {
+            return values[3]
+        } catch error {
+            return error.kind
+        }
+    }
+
+    def throw_structured_error(): Error {
+        let cause: Error = error_kind("capy.test.runtime.cause", "cause")
+        let suppressed: Error = error_kind("capy.test.runtime.suppressed", "suppressed")
+        let thrown: Error = error_kind("capy.test.runtime.structured", "structured boom")
+            .with_cause(cause)
+            .add_suppressed(suppressed)
+        try {
+            throw thrown
+        } catch "capy.test.runtime.structured" error {
+            return error
+        } catch error {
+            return error
+        }
+    }
+
+    def first_positive(values: List[int]): int {
+        for value in values {
+            if value > 0 {
+                return value
+            }
+        }
+        return 0
+    }
+
+    def first_large(values: List[int]): int {
+        foreach value: int in values {
+            if value > 10 {
+                return value
+            }
+        }
+        return 0
+    }
+
+    def while_flag(flag: bool): int {
+        while flag {
+            return 1
+        }
+        return 0
+    }
+
+    def do_once(flag: bool): int {
+        do {
+            if flag {
+                return 1
+            }
+            return 2
+        } while false
+    }
+
+    def warmup(formal: bool): void {
+        if formal {
+            let label: String = this.bracket(this.name)
+            {
+                let copy: String = label
+            }
+        } else {
+            let copy: String = this.name
+        }
+    }
+
+    def foreach_warm(values: List[int]): void {
+        foreach value in values {
+            let label: String = this.bracket(this.name)
+        }
+    }
+
+    def while_warm(flag: bool): void {
+        while flag {
+            let label: String = this.name
+        }
+    }
+
+    def do_warm(): void {
+        do {
+            let label: String = this.describe(this.name)
+        } while false
+    }
+}

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root() {
+    git rev-parse --show-toplevel
+}
+
+ROOT_DIR="$(repo_root)"
+PERFORMANCE_DIR="${ROOT_DIR}/performance"
+SCRIPTS_DIR="${PERFORMANCE_DIR}/scripts"
+TEST_PROJECT_DIR="${PERFORMANCE_DIR}/test-project"
+PROJECT_SRC_DIR="${TEST_PROJECT_DIR}/src"
+PROJECT_BUILD_DIR="${TEST_PROJECT_DIR}/build"
+RESULTS_CSV="${PERFORMANCE_DIR}/results.csv"
+README_MD="${PERFORMANCE_DIR}/README.md"
+COMPILER_JAR_MARKER="${PROJECT_BUILD_DIR}/compiler-jar"
+
+metric_headers() {
+    printf '%s\n' \
+        java-compile \
+        java-generate-java \
+        java-generate-python \
+        java-generate-js \
+        java-compile-test \
+        python-compile \
+        python-generate-java \
+        python-generate-python \
+        python-generate-js \
+        python-compile-test \
+        js-compile \
+        js-generate-java \
+        js-generate-python \
+        js-generate-js \
+        js-compile-test
+}
+
+capy_jar() {
+    if [[ -n "${CAPY_JAR:-}" ]]; then
+        printf '%s\n' "${CAPY_JAR}"
+        return
+    fi
+    if [[ -f "${COMPILER_JAR_MARKER}" ]]; then
+        local jar
+        jar="$(<"${COMPILER_JAR_MARKER}")"
+        if [[ -f "${jar}" ]]; then
+            printf '%s\n' "${jar}"
+            return
+        fi
+    fi
+    echo "No assembled compiler jar found. Run performance/scripts/assemble-compiler first." >&2
+    exit 1
+}
+
+backend_cli_name() {
+    case "$1" in
+        java) printf 'java\n' ;;
+        python) printf 'python\n' ;;
+        js|javascript) printf 'js\n' ;;
+        *) echo "Unsupported backend: $1" >&2; exit 1 ;;
+    esac
+}
+
+prepare_linked_input() {
+    local output_dir="$1"
+    local jar
+    jar="$(capy_jar)"
+    rm -rf "${output_dir}"
+    mkdir -p "${output_dir}"
+    java -jar "${jar}" compile \
+        --input "${PROJECT_SRC_DIR}" \
+        --output "${output_dir}" \
+        --log WARN
+}

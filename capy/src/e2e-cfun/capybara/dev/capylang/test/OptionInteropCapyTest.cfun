@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from OptionInterop import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/OptionInterop.cfun", [
+        test("some_value returns option with value", () => some_value_returns_option_with_value()),
+        test("none_value returns empty option", () => none_value_returns_empty_option()),
+    ])
+
+private fun some_value_returns_option_with_value(): Assert =
+    assert_that(some_value(7)).contains(7)
+
+private fun none_value_returns_empty_option(): Assert =
+    assert_that(none_value()).is_empty()

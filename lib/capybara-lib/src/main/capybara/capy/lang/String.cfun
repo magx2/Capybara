@@ -1,0 +1,339 @@
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/Ordering import { * }
+from /capy/collection/CollectionTypes import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/collection/Seq import { * }
+from /capy/meta_prog/Recursive import { Recursive }
+
+/// Native String type backed by the runtime String implementation.
+/// String literals use quotes: "hello".
+data String { <native> }
+
+/// Returns the number of characters in this String.
+fun String.size(): size = <native>
+
+/// Single-character String value.
+type char -> String with constructor {
+    if value.size() == 1
+    then Success { value }
+    else Error { kind: "capy.lang.argument.invalid", message: "char must contain exactly one character" }
+}
+
+/// Returns true when both chars contain the same character.
+fun char.`==`(other: char): bool = this.value == other.value
+
+/// Compares this char with `other` using case-sensitive lexicographic ordering.
+fun char.compare(other: char): Ordering = this.value.compare(other.value)
+
+private const LOWER_CASE_ASCII_LETTERS: String = "abcdefghijklmnopqrstuvwxyz"
+private const UPPER_CASE_ASCII_LETTERS: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+/// Returns this String with ASCII lowercase letters converted to uppercase.
+///
+/// Characters outside `a` through `z` are unchanged.
+fun String.to_upper_case(): String = string_convert_ascii_case(this, LOWER_CASE_ASCII_LETTERS, UPPER_CASE_ASCII_LETTERS)
+
+/// Returns this String with ASCII uppercase letters converted to lowercase.
+///
+/// Characters outside `A` through `Z` are unchanged.
+fun String.to_lower_case(): String = string_convert_ascii_case(this, UPPER_CASE_ASCII_LETTERS, LOWER_CASE_ASCII_LETTERS)
+
+/// Returns this char converted to uppercase when it is an ASCII lowercase letter.
+///
+/// Characters outside `a` through `z` are unchanged.
+fun char.to_upper_case(): char = char! { this.value.to_upper_case() }
+
+/// Returns this char converted to lowercase when it is an ASCII uppercase letter.
+///
+/// Characters outside `A` through `Z` are unchanged.
+fun char.to_lower_case(): char = char! { this.value.to_lower_case() }
+
+private fun string_convert_ascii_case(value: String, from: String, to: String): String =
+    @Recursive
+    fun convert(value: String, idx: int, from: String, to: String, acc: String): String =
+        match value[idx] with
+        case None -> acc
+        case Some { char } -> convert(value, idx + 1, from, to, acc + string_ascii_case_pair(char, from, to))
+    ---
+    convert(value, 0, from, to, "")
+
+private fun string_ascii_case_pair(char: String, from: String, to: String): String =
+    @Recursive
+    fun find(char: String, from: String, to: String, idx: int): String =
+        match from[idx] with
+        case None -> char
+        case Some { from_char } ->
+            if from_char == char
+            then to[idx, idx + 1]
+            else find(char, from, to, idx + 1)
+    ---
+    find(char, from, to, 0)
+
+private fun string_is_trim_whitespace(char: String): bool =
+    char == " " | char == '\t' | char == '\n' | char == '\r' | char == '\f'
+
+/// Returns the character at idx as a String using the same bounds and negative-index rules as string[idx].
+fun String.get(idx: index): Option[char] = <native>
+
+/// Returns the substring in the half-open range [from, to) using negative-index rules.
+fun String.get(from: int, to: int): String = <native>
+
+/// Returns this String's characters as a finite lazy sequence.
+///
+/// Empty strings return an empty sequence.
+fun String.chars(): Seq[char] =
+    fun chars(s: String, idx: index): Seq[char] =
+        match s.get(idx) with
+        case None -> End {}
+        case Some { char } -> Cons {
+            char,
+            () =>
+                match idx.next() with
+                case Success { next_idx } -> chars(s, next_idx)
+                case Error  -> End {}
+        }
+    ---
+    chars(this, FIRST_ELEMENT)
+
+/// Returns true when this String has no characters.
+fun String.is_empty(): bool = this.size() == EMPTY
+
+/// Returns this String with `value` appended.
+fun String.`+`(value: any): String = <native>
+
+/// Returns this String with `value` appended.
+fun String.plus(value: any): String = this + value
+
+/// Compares this String with `other` using case-sensitive lexicographic ordering.
+fun String.compare(other: String): Ordering = <native>
+
+/// Returns true when at least one character satisfies `predicate`.
+fun String.any(predicate: String => bool): bool =
+    @Recursive
+    fun any_match(value: String, idx: int, predicate: String => bool): bool =
+        match value[idx] with
+        case None -> false
+        case Some { char } ->
+            if predicate(char)
+            then true
+            else any_match(value, idx + 1, predicate)
+    ---
+    any_match(this, 0, predicate)
+
+/// Returns true when at least one character and index pair satisfies `predicate`.
+fun String.any(predicate: (String, int) => bool): bool =
+    @Recursive
+    fun any_match(value: String, idx: int, predicate: (String, int) => bool): bool =
+        match value[idx] with
+        case None -> false
+        case Some { char } ->
+            if predicate(char, idx)
+            then true
+            else any_match(value, idx + 1, predicate)
+    ---
+    any_match(this, 0, predicate)
+
+/// Returns true when every character satisfies `predicate`.
+///
+/// Empty strings return true.
+fun String.all(predicate: String => bool): bool =
+    @Recursive
+    fun all(value: String, idx: int, predicate: String => bool): bool =
+        match value[idx] with
+        case None -> true
+        case Some { char } ->
+            if !predicate(char)
+            then false
+            else all(value, idx + 1, predicate)
+    ---
+    all(this, 0, predicate)
+
+/// Returns true when every character and index pair satisfies `predicate`.
+///
+/// Empty strings return true.
+fun String.all(predicate: (String, int) => bool): bool =
+    @Recursive
+    fun all(value: String, idx: int, predicate: (String, int) => bool): bool =
+        match value[idx] with
+        case None -> true
+        case Some { char } ->
+            if !predicate(char, idx)
+            then false
+            else all(value, idx + 1, predicate)
+    ---
+    all(this, 0, predicate)
+
+/// Returns true when this String contains the given substring.
+fun String.contains(part: String): bool =
+    if part.size() == EMPTY
+    then true
+    else this.any((_, idx) =>
+        if idx + part.size().value <= this.size().value
+        then this[idx, idx + part.size().value] == part
+        else false)
+
+/// Returns true when this String contains the given substring.
+fun String.`?`(part: String): bool = this.contains(part)
+
+/// Combines all characters from left to right.
+fun String.reduce(initial: R, reducer: (R, String) => R): R =
+    @Recursive
+    fun reduce(value: String, idx: int, acc: R, reducer: (R, String) => R): R =
+        match value[idx] with
+        case None -> acc
+        case Some { char } -> reduce(value, idx + 1, reducer(acc, char), reducer)
+    ---
+    reduce(this, 0, initial, reducer)
+
+/// Combines all characters from left to right.
+fun String.`|>`(initial: R, reducer: (R, String) => R): R = this.reduce(initial, reducer)
+
+/// Transforms each character using `map`.
+fun String.map(map: String => Y): Seq[Y] =
+    fun map_chars(value: String, idx: int, map: String => Y): Seq[Y] =
+        match value[idx] with
+        case None -> End {}
+        case Some { char } -> Cons { value: map(char), rest: () => map_chars(value, idx + 1, map) }
+    ---
+    map_chars(this, 0, map)
+
+/// Transforms each character using `map`.
+fun String.`|`(map: String => Y): Seq[Y] = this.map(map)
+
+/// Returns a sequence containing only characters that satisfy `predicate`.
+fun String.filter(predicate: String => bool): Seq[String] =
+    fun filter(value: String, idx: int, predicate: String => bool): Seq[String] =
+        match value[idx] with
+        case None -> End {}
+        case Some { char } ->
+            if predicate(char)
+            then Cons { value: char, rest: () => filter(value, idx + 1, predicate) }
+            else filter(value, idx + 1, predicate)
+    ---
+    filter(this, 0, predicate)
+
+/// Returns a sequence without characters that satisfy `predicate`.
+fun String.reject(predicate: String => bool): Seq[String] =
+    fun reject(value: String, idx: int, predicate: String => bool): Seq[String] =
+        match value[idx] with
+        case None -> End {}
+        case Some { char } ->
+            if predicate(char)
+            then reject(value, idx + 1, predicate)
+            else Cons { value: char, rest: () => reject(value, idx + 1, predicate) }
+    ---
+    reject(this, 0, predicate)
+
+/// Returns a sequence containing only characters that satisfy `predicate`.
+fun String.`|-`(predicate: String => bool): Seq[String] = this.filter(predicate)
+
+/// Applies `map` to each character and concatenates the resulting lists.
+fun String.flat_map(map: String => List[Y]): Seq[Y] = to_seq(this.reduce([], (acc, char) => acc + map(char)))
+
+/// Applies `map` to each character and concatenates the resulting lists.
+fun String.`|*`(map: String => List[Y]): Seq[Y] = this.flat_map(map)
+
+/// Returns true when this String starts with the given substring.
+fun String.starts_with(part: String): bool =
+    if this.size() < part.size()
+    then false
+    else this[0, part.size()] == part
+
+/// Returns true when this String ends with the given substring.
+fun String.end_with(part: String): bool =
+    if this.size() < part.size()
+    then false
+    else this[this.size().value - part.size().value, this.size()] == part
+
+/// Returns true when this String is empty or contains only trim whitespace.
+///
+/// Trim whitespace is space, tab, newline, carriage return, or form feed.
+fun String.is_blank(): bool = this.trim().is_empty()
+
+/// Returns this String without leading trim whitespace.
+///
+/// Trim whitespace is space, tab, newline, carriage return, or form feed.
+fun String.trim_start(): String =
+    @Recursive
+    fun trim_left(value: String): String =
+        if value.size() == EMPTY
+        then ""
+        else if string_is_trim_whitespace(value[0, 1])
+            then trim_left(value[1, value.size()])
+            else value
+    ---
+    trim_left(this)
+
+/// Returns this String without trailing trim whitespace.
+///
+/// Trim whitespace is space, tab, newline, carriage return, or form feed.
+fun String.trim_end(): String =
+    @Recursive
+    fun trim_right(value: String): String =
+        if value.size() == EMPTY
+        then ""
+        else if string_is_trim_whitespace(value[value.size().value - 1, value.size()])
+            then trim_right(value[0, value.size().value - 1])
+            else value
+    ---
+    trim_right(this)
+
+/// Returns this String without leading and trailing whitespace.
+///
+/// Trim whitespace is space, tab, newline, carriage return, or form feed.
+fun String.trim(): String = this.trim_start().trim_end()
+
+/// Returns this String repeated `times` times.
+///
+/// Values less than or equal to zero return an empty String.
+fun String.repeat(times: int): String =
+    @Recursive
+    fun repeat_text(value: String, remaining: int, acc: String): String =
+        if remaining <= 0
+        then acc
+        else repeat_text(value, remaining - 1, acc + value)
+    ---
+    repeat_text(this, times, "")
+
+/// Returns the first zero-based index where `part` occurs.
+///
+/// Empty `part` matches at the first index. Missing `part` returns None.
+fun String.index_of(part: String): Option[index] =
+    if part.is_empty()
+    then Some { FIRST_ELEMENT }
+    else string_index_of(this, part, 0)
+
+/// Returns the last zero-based index where `part` occurs.
+///
+/// Empty `part` matches at this String's size. Missing `part` returns None.
+fun String.last_index_of(part: String): Option[index] =
+    if part.is_empty()
+    then string_index_option(this.size().value)
+    else string_last_index_of(this, part, this.size().value - part.size().value)
+
+/// Replaces every occurrence of old with new.
+fun String.replace(old: String, new: String): String = <native>
+
+@Recursive
+private fun string_index_of(value: String, part: String, idx: int): Option[index] =
+    if idx + part.size().value > value.size().value
+    then None {}
+    else if value[idx, idx + part.size().value] == part
+    then string_index_option(idx)
+    else string_index_of(value, part, idx + 1)
+
+@Recursive
+private fun string_last_index_of(value: String, part: String, idx: int): Option[index] =
+    if idx < 0
+    then None {}
+    else if value[idx, idx + part.size().value] == part
+    then string_index_option(idx)
+    else string_last_index_of(value, part, idx - 1)
+
+private fun string_index_option(value: int): Option[index] =
+    match index { value } with
+    case Success { parsed } -> Some { parsed }
+    case Error -> None {}

@@ -1,0 +1,43 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from MatchCaseAlternatives import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/MatchCaseAlternatives.cfun", [
+        test("digit_label matches alternative literal patterns", () => digit_label_matches_alternative_literal_patterns()),
+        test("int_bucket matches alternative int patterns", () => int_bucket_matches_alternative_int_patterns()),
+        test("long_bucket matches alternative long patterns", () => long_bucket_matches_alternative_long_patterns()),
+        test("sign_name supports alternative constructor patterns", () => sign_name_supports_alternative_constructor_patterns()),
+    ])
+
+fun digit_label_matches_alternative_literal_patterns(): Assert =
+    assert_all([
+        assert_that(digit_label("1")).is_equal_to("digit"),
+        assert_that(digit_label("7")).is_equal_to("digit"),
+        assert_that(digit_label("0")).is_equal_to("zero"),
+        assert_that(digit_label("x")).is_equal_to("other"),
+    ])
+
+fun int_bucket_matches_alternative_int_patterns(): Assert =
+    assert_all([
+        assert_that(int_bucket(1)).is_equal_to("small"),
+        assert_that(int_bucket(3)).is_equal_to("small"),
+        assert_that(int_bucket(20)).is_equal_to("tens"),
+        assert_that(int_bucket(99)).is_equal_to("other"),
+    ])
+
+fun long_bucket_matches_alternative_long_patterns(): Assert =
+    assert_all([
+        assert_that(long_bucket(1L)).is_equal_to("small"),
+        assert_that(long_bucket(3L)).is_equal_to("small"),
+        assert_that(long_bucket(200L)).is_equal_to("hundreds"),
+        assert_that(long_bucket(999L)).is_equal_to("other"),
+    ])
+
+fun sign_name_supports_alternative_constructor_patterns(): Assert =
+    assert_all([
+        assert_that(sign_name(Plus { value: "+" })).is_equal_to("non-zero"),
+        assert_that(sign_name(Minus { value: "-" })).is_equal_to("non-zero"),
+        assert_that(sign_name(Zero { value: "0" })).is_equal_to("zero"),
+    ])

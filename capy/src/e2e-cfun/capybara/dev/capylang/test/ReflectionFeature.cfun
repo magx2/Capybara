@@ -1,0 +1,70 @@
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+
+annotation ReflectionDataMarker on data {
+    label: String
+    order: int = 1
+    active: bool = true
+}
+
+annotation ReflectionFieldMarker on field {
+    value: String
+}
+
+union Letter { name: String } = A | B
+data A { a: int }
+data B { b: List[String] }
+data ReflectedEmpty {}
+data ReflectedEntity { id: String }
+data ReflectedEmployee { department: String, active: bool, ...ReflectedEntity }
+@ReflectionDataMarker(label: "singleton", order: 2)
+data ReflectedSingleton {}
+enum ReflectedStatus { REFLECTED_READY, REFLECTED_DONE }
+data ReflectedEnvelope { label: String, payload: A }
+
+@ReflectionDataMarker(label: "user", order: 7)
+data ReflectedAnnotatedUser {
+    @ReflectionFieldMarker(value: "identifier")
+    id: String,
+    @ReflectionFieldMarker(value: "display")
+    display: String
+}
+
+union ReflectedJson = ReflectedJsonObject | ReflectedJsonString | ReflectedJsonNumber | ReflectedJsonBool | ReflectedJsonNull
+data ReflectedJsonObject { value: Dict[ReflectedJson] }
+data ReflectedJsonString { value: String }
+data ReflectedJsonNumber { value: int }
+data ReflectedJsonBool { value: bool }
+data ReflectedJsonNull {}
+fun reflection_data_a(a: A): DataValueInfo = reflection(a)
+
+fun reflection_data_b(b: B): DataValueInfo = reflection(b)
+
+fun reflection_data_empty(): DataValueInfo = reflection(ReflectedEmpty {})
+
+fun reflection_data_employee(employee: ReflectedEmployee): DataValueInfo = reflection(employee)
+
+fun reflection_data_annotated_user(user: ReflectedAnnotatedUser): DataValueInfo = reflection(user)
+
+fun reflection_data(obj: data): DataValueInfo = reflection(obj)
+
+fun reflection_data_to_json(d: data): ReflectedJsonObject =
+    ReflectedJsonObject {
+        reflection(d).fields
+        |> {:}, (acc, field) => acc + { field.name : reflection_any_to_json(field.value) }
+    }
+
+fun reflection_any_to_json(value: any): ReflectedJson =
+    match value with
+    case String s -> ReflectedJsonString { s }
+    case int i -> ReflectedJsonNumber { i }
+    case bool b -> ReflectedJsonBool { b }
+    case data d -> reflection_data_to_json(d)
+    case _ -> ReflectedJsonNull {}
+
+fun reflection_json_shape(obj: data): ReflectedJsonObject =
+    match reflection_any_to_json(obj) with
+    case ReflectedJsonObject { value } -> ReflectedJsonObject { value }
+    case _ -> ReflectedJsonObject { {:} }

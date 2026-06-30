@@ -1,0 +1,4 @@
+from /dev/capylang/compiler/parser/ParsedModule import { ParsedModule }
+
+/// Parser output for a compilation unit, grouped as parsed modules.
+data ParsedProgram { modules: List[ParsedModule] }

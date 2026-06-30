@@ -1,0 +1,194 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from AnnotationReflectionDefinitions import { * }
+import /dev/capylang/test/support/QualifiedAnnotationDefinitions
+
+@ImportedAnnotationMarker
+@ImportedDataLabel(label: "definition-defaults")
+data DefinitionsDefaultCustomer {
+    @ImportedAnnotationMarker
+    @ImportedFieldName(value: "customer_id")
+    id: String,
+    display: String
+}
+
+@ImportedDataLabel(label: "definition-custom", order: 7, active: false)
+data DefinitionsCustomCustomer {
+    id: String
+}
+
+@QualifiedAnnotationDefinitions.SupportDataLabel(label: "definition-qualified", order: 11)
+data DefinitionsQualifiedCustomer {
+    id: String
+}
+
+@ImportedAnnotationMarker
+@ImportedFunctionLabel(value: "definition-factory")
+fun make_definitions_default_customer(id: String, display: String): DefinitionsDefaultCustomer =
+    DefinitionsDefaultCustomer { id, display }
+
+@ImportedAnnotationMarker
+@ImportedMethodLabel(value: "definition-display")
+fun DefinitionsDefaultCustomer.definition_display_name(): String = this.display
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/AnnotationReflectionDefinitions.cfun", [
+        test("reflects imported data annotation defaults", () => reflects_imported_data_annotation_defaults()),
+        test("reflects imported data annotation arguments", () => reflects_imported_data_annotation_arguments()),
+        test("reflects qualified imported data annotation", () => reflects_qualified_imported_data_annotation()),
+        test("reflects imported field annotations", () => reflects_imported_field_annotations()),
+        test("uses imported function and method annotations", () => uses_imported_function_and_method_annotations()),
+    ])
+
+fun reflects_imported_data_annotation_defaults(): Assert =
+    let info = reflection(make_definitions_default_customer("C-1", "Ada"))
+    let marker = info.annotations[0]
+    let data_label = info.annotations[1]
+    assert_all([
+        assert_that(info.name).is_equal_to("DefinitionsDefaultCustomer"),
+        assert_that(ard_annotation_names(info.annotations)).is_equal_to(["ImportedAnnotationMarker", "ImportedDataLabel"]),
+        assert_that(ard_annotation_pkg_name(marker)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ard_annotation_arguments(marker)).is_empty(),
+        assert_that(ard_annotation_pkg_name(data_label)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ard_annotation_string(data_label, "label")).is_equal_to("definition-defaults"),
+        assert_that(ard_annotation_int(data_label, "order")).is_equal_to(1),
+        assert_that(ard_annotation_bool(data_label, "active")).is_true(),
+    ])
+
+fun reflects_imported_data_annotation_arguments(): Assert =
+    let info = reflection(DefinitionsCustomCustomer { id: "C-2" })
+    let data_label = info.annotations[0]
+    assert_all([
+        assert_that(info.name).is_equal_to("DefinitionsCustomCustomer"),
+        assert_that(ard_annotation_names(info.annotations)).is_equal_to(["ImportedDataLabel"]),
+        assert_that(ard_annotation_pkg_name(data_label)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ard_annotation_string(data_label, "label")).is_equal_to("definition-custom"),
+        assert_that(ard_annotation_int(data_label, "order")).is_equal_to(7),
+        assert_that(ard_annotation_bool(data_label, "active")).is_false(),
+    ])
+
+fun reflects_qualified_imported_data_annotation(): Assert =
+    let info = reflection(DefinitionsQualifiedCustomer { id: "C-5" })
+    let data_label = info.annotations[0]
+    assert_all([
+        assert_that(info.name).is_equal_to("DefinitionsQualifiedCustomer"),
+        assert_that(ard_annotation_names(info.annotations)).is_equal_to(["SupportDataLabel"]),
+        assert_that(ard_annotation_pkg_name(data_label)).is_equal_to("QualifiedAnnotationDefinitions"),
+        assert_that(ard_annotation_string(data_label, "label")).is_equal_to("definition-qualified"),
+        assert_that(ard_annotation_int(data_label, "order")).is_equal_to(11),
+        assert_that(ard_annotation_bool(data_label, "active")).is_true(),
+    ])
+
+fun reflects_imported_field_annotations(): Assert =
+    let info = reflection(make_definitions_default_customer("C-3", "Bea"))
+    let id_marker = ard_field_annotation(info, 0, 0)
+    let field_name = ard_field_annotation(info, 0, 1)
+    assert_all([
+        assert_that(ard_field_names(info)).is_equal_to(["id", "display"]),
+        assert_that(ard_field_annotation_names(info, 0)).is_equal_to(["ImportedAnnotationMarker", "ImportedFieldName"]),
+        assert_that(ard_annotation_pkg_name(id_marker)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ard_annotation_arguments(id_marker)).is_empty(),
+        assert_that(ard_annotation_pkg_name(field_name)).is_equal_to("AnnotationReflectionDefinitions"),
+        assert_that(ard_annotation_string(field_name, "value")).is_equal_to("customer_id"),
+        assert_that(ard_field_string_value(info, 1)).is_equal_to("Bea"),
+    ])
+
+fun uses_imported_function_and_method_annotations(): Assert =
+    let customer = make_definitions_default_customer("C-4", "Cora")
+    assert_all([
+        assert_that(customer.id).is_equal_to("C-4"),
+        assert_that(customer.definition_display_name()).is_equal_to("Cora"),
+    ])
+
+private fun ard_field_names(info: DataValueInfo): List[String] =
+    ard_field_names_at(info.fields, 0, [])
+
+private fun ard_field_names_at(fields: List[FieldValueInfo], idx: int, acc: List[String]): List[String] =
+    match fields[idx] with
+    case Some { field } -> ard_field_names_at(fields, idx + 1, acc + field.name)
+    case None -> acc
+
+private fun ard_field_annotation(info: DataValueInfo, field_idx: int, annotation_idx: int): Option[AnnotationInfo] =
+    match info.fields[field_idx] with
+    case Some { field } -> field.annotations[annotation_idx]
+    case None -> None {}
+
+private fun ard_field_annotation_names(info: DataValueInfo, field_idx: int): List[String] =
+    match info.fields[field_idx] with
+    case Some { field } -> ard_annotation_names(field.annotations)
+    case None -> []
+
+private fun ard_field_string_value(info: DataValueInfo, field_idx: int): String =
+    match info.fields[field_idx] with
+    case Some { field } ->
+        {
+            match field.value with
+            case String value -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun ard_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    ard_annotation_names_at(annotations, 0, [])
+
+private fun ard_annotation_names_at(annotations: List[AnnotationInfo], idx: int, acc: List[String]): List[String] =
+    match annotations[idx] with
+    case Some { annotation } -> ard_annotation_names_at(annotations, idx + 1, acc + annotation.name)
+    case None -> acc
+
+private fun ard_annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun ard_annotation_arguments(annotation: Option[AnnotationInfo]): List[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> value.arguments
+    case None -> []
+
+private fun ard_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> ard_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun ard_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else ard_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun ard_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match ard_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun ard_annotation_int(annotation: Option[AnnotationInfo], name: String): int =
+    match ard_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationInt { value } -> value
+            case _ -> 0
+        }
+    case None -> 0
+
+private fun ard_annotation_bool(annotation: Option[AnnotationInfo], name: String): bool =
+    match ard_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationBool { value } -> value
+            case _ -> false
+        }
+    case None -> false

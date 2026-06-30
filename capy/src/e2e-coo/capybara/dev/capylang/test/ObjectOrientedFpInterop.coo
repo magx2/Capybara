@@ -1,0 +1,51 @@
+from ObjectOrientedFpInterop import { InteropPet, InteropDog, InteropCat, InteropMaybe, InteropNone, RecInteropValue, user_id }
+from /capy/lang/Option import { None }
+
+class PetInteractor {
+    def invoke_fp_function(name: String): String =
+        ObjectOrientedFpInterop.petText(ObjectOrientedFpInterop.makeDog(name))
+
+    def create_fp_data(name: String): InteropPet =
+        InteropDog { name: name }
+
+    def match_fp_type(pet_name: String): String {
+        let pet: InteropPet = InteropDog { name: pet_name }
+        return match pet with
+        case InteropDog { name } -> ("dog:" + name)
+        case InteropCat { age } -> ("cat:" + age)
+    }
+
+    def create_fp_empty(): InteropMaybe =
+        InteropNone {}
+
+    def match_fp_empty(): String {
+        let maybe: InteropMaybe = InteropNone {}
+        return ObjectOrientedFpInterop.maybeText(maybe)
+    }
+
+    def create_runtime_none(): any =
+        None {}
+
+    def invoke_rec_function(seed: int): int {
+        let value: RecInteropValue = RecInteropValue { value: seed }
+        return ObjectOrientedFpInterop.step(3, value, 0)
+    }
+
+    def echo_user_id(id: user_id): user_id = id
+
+    def construct_user_id(value: int): user_id = user_id { value }
+
+    def make_user_id(value: int): user_id = ObjectOrientedFpInterop.makeUserId(value)
+
+    def unwrap_user_id(id: user_id): int = ObjectOrientedFpInterop.unwrapUserId(id)
+
+    def add_user_ids(left: user_id, right: user_id): user_id =
+        ObjectOrientedFpInterop.addUserIds(left, right)
+
+    def user_id_slots(size: int): user_id[] = user_id[size]
+
+    def local_user_id(value: int): int {
+        let id: user_id = user_id { value }
+        return ObjectOrientedFpInterop.unwrapUserId(id)
+    }
+}

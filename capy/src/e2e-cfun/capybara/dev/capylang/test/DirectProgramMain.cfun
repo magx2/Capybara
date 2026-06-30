@@ -1,0 +1,5 @@
+from /capy/collection/List import { * }
+from /capy/lang/Program import { * }
+
+fun main(args: List[String]): /capy/lang/Program =
+    Success {}

@@ -1,0 +1,7 @@
+fun list_index_5(l: List[int]): Option[int] = l[5]
+
+fun list_index_minus_2(l: List[int]): Option[int] = l[-2]
+
+fun string_index_5(s: String): Option[String] = s[5]
+
+fun string_index_minus_2(s: String): Option[String] = s[-2]

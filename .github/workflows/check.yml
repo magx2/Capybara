@@ -1,0 +1,71 @@
+name: Build & Check
+
+on:
+  push:
+    branches:
+      - "**"
+      - "!merge-back/**"
+    paths:
+      - ".github/workflows/**"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-check:
+    if: ${{ github.event_name != 'push' || !startsWith(github.ref_name, 'merge-back/') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Run Gradle check
+        run: ./gradlew clean check --no-daemon
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-check-test-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**/*.xml
+          if-no-files-found: ignore
+          retention-days: 5

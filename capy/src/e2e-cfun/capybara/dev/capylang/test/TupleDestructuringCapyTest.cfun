@@ -1,0 +1,38 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/Seq import { * }
+from TupleDestructuring import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/TupleDestructuring.cfun", [
+        test("map_pairs formats every pair", () => map_pairs_formats_every_pair()),
+        test("filter_pairs keeps pairs where left is less than right", () => filter_pairs_keeps_pairs_where_left_is_less_than_right()),
+        test("flat_map_pairs emits both tuple values", () => flat_map_pairs_emits_both_tuple_values()),
+        test("any_equal detects matching pairs", () => any_equal_detects_matching_pairs()),
+        test("all_less detects only increasing pairs", () => all_less_detects_only_increasing_pairs()),
+    ])
+
+// Invalid tuple destructuring diagnostics stay in TupleDestructuringCompilationErrorTest.java
+// because Capybara test files must compile before they can run on backend executors.
+private fun map_pairs_formats_every_pair(): Assert =
+    assert_that(map_pairs([(10, 2), (99, 2)]).as_list())
+        .is_equal_to(["digits(10) should return 2", "digits(99) should return 2"])
+
+private fun filter_pairs_keeps_pairs_where_left_is_less_than_right(): Assert =
+    assert_that(filter_pairs([(1, 2), (3, 2), (5, 5)]).as_list()).is_equal_to([(1, 2)])
+
+private fun flat_map_pairs_emits_both_tuple_values(): Assert =
+    assert_that(flat_map_pairs([(1, 2), (3, 4)]).as_list()).is_equal_to([1, 2, 3, 4])
+
+private fun any_equal_detects_matching_pairs(): Assert =
+    assert_all([
+        assert_that(any_equal([(1, 2), (3, 3)])).is_true(),
+        assert_that(any_equal([(1, 2), (4, 3)])).is_false(),
+    ])
+
+private fun all_less_detects_only_increasing_pairs(): Assert =
+    assert_all([
+        assert_that(all_less([(1, 2), (3, 4)])).is_true(),
+        assert_that(all_less([(2, 1), (3, 4)])).is_false(),
+    ])

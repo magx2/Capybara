@@ -1,0 +1,68 @@
+/// Process result returned by an executable Capybara `main` function.
+union Program = Success | Failed
+
+/// Successful program completion with exit code `0`.
+data Success {}
+/// Failed program completion with a non-zero exit code.
+data Failed { exit_code: failed_exit_code }
+
+/// Valid process failure exit code in the portable range `1..255`.
+type failed_exit_code -> int with constructor {
+    if value < MIN_FAILED_EXIT_CODE then /capy/lang/Result.Error { kind: "capy.lang.number.out_of_range", message: "failed_exit_code must be greater or equals to {MIN_FAILED_EXIT_CODE}, was `{value}`." }
+    else if value > MAX_FAILED_EXIT_CODE then /capy/lang/Result.Error { kind: "capy.lang.number.out_of_range", message: "failed_exit_code must be less than or equal to {MAX_FAILED_EXIT_CODE}, was `{value}`." }
+    else /capy/lang/Result.Success { value }
+}
+
+/// Returns the next failure exit code, clamped to `LAST_FAILED_EXIT_CODE`.
+fun failed_exit_code.next(): failed_exit_code =
+    if this.value >= MAX_FAILED_EXIT_CODE
+    then LAST_FAILED_EXIT_CODE
+    else failed_exit_code! { this.value + 1 }
+
+/// Returns the previous failure exit code, clamped to `DEFAULT_FAILED_EXIT_CODE`.
+fun failed_exit_code.previous(): failed_exit_code =
+    if this.value <= MIN_FAILED_EXIT_CODE
+    then DEFAULT_FAILED_EXIT_CODE
+    else failed_exit_code! { this.value - 1 }
+
+/// Smallest valid failure exit code.
+private const MIN_FAILED_EXIT_CODE: int = 1
+
+/// Largest valid failure exit code.
+private const MAX_FAILED_EXIT_CODE: int = 255
+
+/// Default failure exit code for generic program errors.
+const DEFAULT_FAILED_EXIT_CODE = failed_exit_code! { MIN_FAILED_EXIT_CODE }
+
+/// Last valid failure exit code.
+const LAST_FAILED_EXIT_CODE = failed_exit_code! { MAX_FAILED_EXIT_CODE }
+
+/// Hangup signal exit code.
+const SIGHUP = failed_exit_code! { 129 } // terminal closed
+
+/// Interrupt signal exit code.
+const SIGINT = failed_exit_code! { 130 }
+
+/// Quit signal exit code.
+const SIGQUIT = failed_exit_code! { 131 }
+
+/// Abort signal exit code.
+const SIGABRT = failed_exit_code! { 134 }
+
+/// Floating point exception signal exit code.
+const SIGFPE = failed_exit_code! { 136 }
+
+/// Forced kill signal exit code.
+const SIGKILL = failed_exit_code! { 137 } // kill -9
+
+/// Segmentation fault signal exit code.
+const SIGSEGV = failed_exit_code! { 139 }
+
+/// Broken pipe signal exit code.
+const SIGPIPE = failed_exit_code! { 141 } // broken pipe
+
+/// Alarm or timeout signal exit code.
+const SIGALRM = failed_exit_code! { 142 } // timeout/alarm
+
+/// Termination signal exit code.
+const SIGTERM = failed_exit_code! { 143 }

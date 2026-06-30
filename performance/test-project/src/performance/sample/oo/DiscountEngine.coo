@@ -1,0 +1,16 @@
+from /performance/sample/domain/Customer import { Customer }
+from /performance/sample/domain/Order import { Order, OrderLine }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkMethod, BenchmarkType }
+
+@BenchmarkType(label: "discount-engine")
+class DiscountEngine {
+    @BenchmarkMethod(value: "customer discount")
+    def discount_for(customer: Customer, line: OrderLine): int =
+        let score: int = Customer.score(customer)
+        if score >= 33 then 15 else if line.quantity >= 3 then 5 else 0
+
+    def apply(line: OrderLine, customer: Customer): OrderLine =
+        Order.applyLineDiscount(line, this.discount_for(customer, line))
+
+    def total_cents(order: Order): long = 9394L
+}

@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from LocalFunctionDocComments import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/LocalFunctionDocComments.cfun", [
+        test("local function doc comments do not affect accumulation", () => local_function_doc_comments_do_not_affect_accumulation()),
+    ])
+
+private fun local_function_doc_comments_do_not_affect_accumulation(): Assert =
+    assert_all([
+        assert_that(accumulate(0)).is_equal_to(0),
+        assert_that(accumulate(1)).is_equal_to(1),
+        assert_that(accumulate(5)).is_equal_to(15),
+    ])

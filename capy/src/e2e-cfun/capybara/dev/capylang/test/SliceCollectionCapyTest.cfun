@@ -1,0 +1,30 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from SliceCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SliceCollection.cfun", [
+        test("list slices support omitted and negative bounds", () => list_slices_support_omitted_and_negative_bounds()),
+        test("string slices support start and negative end bounds", () => string_slices_support_start_and_negative_end_bounds()),
+    ])
+
+private fun list_slices_support_omitted_and_negative_bounds(): Assert =
+    let values = [0, 1, 2, 3, 4, 5]
+    assert_all([
+        assert_that(list_from_1(values)).is_equal_to([1, 2, 3, 4, 5]),
+        assert_that(list_to_5(values)).is_equal_to([0, 1, 2, 3, 4]),
+        assert_that(list_to_minus_3(values)).is_equal_to([0, 1, 2]),
+        assert_that(list_1_2(values)).is_equal_to([1]),
+        assert_that(list_1_minus_2(values)).is_equal_to([1, 2, 3]),
+    ])
+
+private fun string_slices_support_start_and_negative_end_bounds(): Assert =
+    let value = "abcdef"
+    assert_all([
+        assert_that(string_from_1(value)).is_equal_to("bcdef"),
+        assert_that(string_to_5(value)).is_equal_to("abcde"),
+        assert_that(string_to_minus_3(value)).is_equal_to("abc"),
+        assert_that(string_1_2(value)).is_equal_to("b"),
+        assert_that(string_1_minus_2(value)).is_equal_to("bcd"),
+    ])

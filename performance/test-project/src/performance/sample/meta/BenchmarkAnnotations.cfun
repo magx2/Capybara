@@ -1,0 +1,21 @@
+annotation BenchmarkEntity on data {
+    label: String
+    weight: int = 1
+    active: bool = true
+}
+
+annotation BenchmarkField on field {
+    value: String
+}
+
+annotation BenchmarkType on class, interface, trait {
+    label: String
+}
+
+annotation BenchmarkMethod on method {
+    value: String
+}
+
+annotation BenchmarkObjectField on field {
+    value: String
+}

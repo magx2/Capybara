@@ -1,0 +1,71 @@
+from /capy/lang/Option import { Option, Some, None }
+from /capy/lang/Result import { * }
+
+data Pretty { value: String }
+data SemVer {
+    major: int,
+    build_metadata: Option[String]
+}
+
+fun Pretty.to_string(): String = "pretty:" + this.value
+
+fun custom_to_string(value: String): String = Pretty { value }.to_string()
+
+fun parse_local_option(value: int): Result[int] =
+    data Parse[T] { buffer: String, value: T }
+    fun unwrap(parse: Parse[Option[int]]): Result[Parse[int]] =
+        match parse.value with
+        case Some { inner } -> Success { Parse { buffer: parse.buffer, value: inner } }
+        case None -> Error { "missing value" }
+    ---
+    unwrap(Parse { buffer: "", value: Some { value } })
+    | parsed => parsed.value
+
+fun parse_local_option_none(): Result[int] =
+    data Parse[T] { buffer: String, value: T }
+    fun unwrap(parse: Parse[Option[int]]): Result[Parse[int]] =
+        match parse.value with
+        case Some { inner } -> Success { Parse { buffer: parse.buffer, value: inner } }
+        case None -> Error { "missing value" }
+    ---
+    let none_value: Option[int] = None {}
+    unwrap(Parse { buffer: "", value: none_value })
+    | parsed => parsed.value
+
+fun parse_local_semver_build(version: String): Result[String] =
+    data Parse[T] { buffer: String, value: T }
+    fun parse_build(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer: "", value: buffer } }
+    ---
+    let parse: Parse[SemVer] = Parse {
+        buffer: version,
+        value: SemVer { major: 1, build_metadata: None {} }
+    }
+    parse_build(parse.buffer)
+    | parse_build => Parse {
+        buffer: parse_build.buffer,
+        value: parse.value.with(build_metadata: Some { parse_build.value })
+    }
+    |* parse_semver =>
+        match parse_semver.value.build_metadata with
+        case Some { value } -> Success { value }
+        case None -> Error { "missing metadata" }
+
+fun parse_local_semver_build_and_increment(version: String): Result[int] =
+    data Parse[T] { buffer: String, value: T }
+    fun parse_build(buffer: String): Result[Parse[String]] =
+        Success { Parse { buffer: "", value: buffer } }
+    ---
+    let parse: Parse[SemVer] = Parse {
+        buffer: version,
+        value: SemVer { major: 1, build_metadata: None {} }
+    }
+    parse_build(parse.buffer)
+    | parse_build => Parse {
+        buffer: parse_build.buffer,
+        value:
+            parse.value
+                .with(build_metadata: Some { parse_build.value })
+                .with(major: parse.value.major + 1)
+    }
+    | parse_semver => parse_semver.value.major

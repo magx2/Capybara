@@ -1,0 +1,100 @@
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/lang/String import { * }
+
+fun sum_int(acc: int, value: int): int = acc + value
+fun double_int(value: int): int = value * 2
+fun is_positive(value: int): bool = value > 0
+fun expand_list(value: int): List[int] = [value, value + 1]
+fun expand_set(value: int): Set[int] = {value, value + 10}
+fun expand_seq(value: int): Seq[int] = to_seq([value, value + 1])
+fun nested_success(value: int): Result[String] = Success { value: "v=" + value }
+
+fun list_map_named(values: List[int]): Seq[int] = values.map(x => x * 2)
+fun list_map_operator(values: List[int]): Seq[int] = values | x => x * 2
+
+fun list_filter_named(values: List[int]): Seq[int] = values.filter(x => x > 0)
+fun list_filter_operator(values: List[int]): Seq[int] = values |- x => x > 0
+fun list_reject_named(values: List[int]): Seq[int] = values.reject(x => x > 0)
+
+fun list_flat_map_named(values: List[int]): Seq[int] = values.flat_map(x => expand_list(x))
+fun list_flat_map_operator(values: List[int]): Seq[int] = values |* x => expand_list(x)
+
+fun list_reduce_named(values: List[int]): int = values.reduce(0, (acc, value) => acc + value)
+fun list_reduce_operator(values: List[int]): int = values |> 0, (acc, value) => acc + value
+
+fun set_map_named(values: Set[int]): Seq[int] = values.map(x => x * 2)
+fun set_map_operator(values: Set[int]): Seq[int] = values | x => x * 2
+
+fun set_filter_named(values: Set[int]): Seq[int] = values.filter(x => x > 0)
+fun set_filter_operator(values: Set[int]): Seq[int] = values |- x => x > 0
+fun set_reject_named(values: Set[int]): Seq[int] = values.reject(x => x > 0)
+
+fun set_flat_map_named(values: Set[int]): Seq[int] = values.flat_map(x => expand_set(x))
+fun set_flat_map_operator(values: Set[int]): Seq[int] = values |* x => expand_set(x)
+
+fun set_reduce_named(values: Set[int]): int = values.reduce(0, (acc, value) => acc + value)
+fun set_reduce_operator(values: Set[int]): int = values |> 0, (acc, value) => acc + value
+
+fun dict_map_named(values: Dict[int]): Dict[String] = values.map((key, value) => key + ":" + value)
+fun dict_map_operator(values: Dict[int]): Dict[String] = values | (key, value) => key + ":" + value
+
+fun dict_filter_named(values: Dict[int]): Dict[int] = values.filter((_, value) => value > 10)
+fun dict_filter_operator(values: Dict[int]): Dict[int] = values |- (_, value) => value > 10
+fun dict_reject_named(values: Dict[int]): Dict[int] = values.reject((_, value) => value > 10)
+
+fun dict_reduce_named(values: Dict[int]): String = values.reduce("", (acc, key, value) => acc + key + ":" + value + ",")
+fun dict_reduce_operator(values: Dict[int]): String = values |> "", (acc, key, value) => acc + key + ":" + value + ","
+
+fun seq_map_named(values: List[int]): List[int] = to_seq(values).map(x => x * 3).as_list()
+fun seq_map_operator(values: List[int]): List[int] = (to_seq(values) | x => x * 3).as_list()
+
+fun seq_flat_map_named(values: List[int]): List[int] = to_seq(values).flat_map(x => expand_seq(x)).as_list()
+fun seq_flat_map_operator(values: List[int]): List[int] = (to_seq(values) |* x => expand_seq(x)).as_list()
+
+fun seq_reduce_named(values: List[int]): int = to_seq(values).reduce(0, :sum_int)
+
+fun string_filter_named(value: String): Seq[String] = value.filter(ch => ch == "b")
+fun string_filter_symbolic(value: String): Seq[String] = value.`|-`(ch => ch == "b")
+fun string_reject_named(value: String): Seq[String] = value.reject(ch => ch == "b")
+
+fun option_map_named(value: Option[String]): Option[String] = value.map(text => text + "!")
+fun option_map_operator(value: Option[String]): Option[String] = value | text => text + "!"
+fun option_map_named_type_change(value: Option[int]): Option[String] = value.map(number => "v=" + number)
+fun option_map_operator_type_change(value: Option[int]): Option[String] = value | number => "v=" + number
+
+fun option_filter_named(value: Option[String]): Option[String] = value.filter(text => text == "drop")
+fun option_filter_operator(value: Option[String]): Option[String] = value |- text => text == "drop"
+
+fun option_flat_map_named(value: Option[String]): Option[String] =
+    value.flat_map(text => Some { value: text + "!" })
+
+fun option_reduce_named(value: Option[String]): String =
+    value.reduce("start:", (acc, inner) => acc + inner)
+fun option_reduce_left_named(value: Option[String]): String =
+    value.reduce_left("start:", (acc, inner) => acc + inner)
+
+fun result_map_named(value: Result[int]): Result[String] =
+    value.map(x => "v=" + x)
+
+fun result_map_operator(value: Result[int]): Result[String] =
+    value | x => "v=" + x
+
+fun result_flat_map_named(value: Result[int]): Result[String] =
+    value.flat_map(:nested_success)
+
+fun result_flat_map_operator(value: Result[int]): Result[String] =
+    value |* :nested_success
+
+fun result_reduce_named(value: Result[int]): String =
+    value.reduce(x => "ok:" + x, err => "err:" + err)
+
+fun result_reduce_operator(value: Result[int]): String =
+    value |> (x => "ok:" + x, err => "err:" + err)
+
+fun result_reduce_left_named(value: Result[int]): String =
+    value.reduce_left(x => "ok:" + x, err => "err:" + err)

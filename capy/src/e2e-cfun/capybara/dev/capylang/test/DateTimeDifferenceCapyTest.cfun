@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from DateTimeDifference import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/DateTimeDifference.cfun", [
+        test("renders forward difference as canonical ISO duration", () => renders_forward_difference_as_canonical_iso_duration()),
+        test("renders backward difference as negated canonical ISO duration", () => renders_backward_difference_as_negated_canonical_iso_duration()),
+        test("round-trips difference through plus", () => round_trips_difference_through_plus()),
+    ])
+
+fun renders_forward_difference_as_canonical_iso_duration(): Assert =
+    assert_that(forward_difference_iso()).is_equal_to("P1DT1H1M1S")
+
+fun renders_backward_difference_as_negated_canonical_iso_duration(): Assert =
+    assert_that(backward_difference_iso()).is_equal_to("P-1DT-1H-1M-1S")
+
+fun round_trips_difference_through_plus(): Assert =
+    assert_that(difference_round_trips()).is_true()
