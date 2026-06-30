@@ -1,3 +1,5 @@
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     `java-gradle-plugin`
     `maven-publish`
@@ -57,6 +59,12 @@ gradlePlugin {
 }
 
 publishing {
+    publications.withType<MavenPublication>().configureEach {
+        if (name == "pluginMaven") {
+            artifactId = "capy-gradle"
+        }
+    }
+
     repositories {
         maven {
             name = "GitHubPackages"

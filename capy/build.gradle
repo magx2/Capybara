@@ -17,7 +17,7 @@ buildscript {
         }
     }
     dependencies {
-        classpath "dev.capylang:gradle:${capybaraVersion}@jar"
+        classpath "dev.capylang:capy-gradle:${capybaraVersion}@jar"
         classpath "dev.capylang:capy:${capybaraVersion}@jar"
     }
 }
