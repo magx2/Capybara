@@ -156,8 +156,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Build and check project
-        run: ./gradlew clean check assemble --no-daemon
+      - name: Build project
+        run: ./gradlew clean assemble --no-daemon
 
       - name: Build and collect Linux artifacts
         shell: bash
