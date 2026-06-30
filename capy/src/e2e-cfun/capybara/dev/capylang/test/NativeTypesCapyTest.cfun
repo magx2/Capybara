@@ -1,0 +1,103 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from NativeTypes import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/NativeTypes.cfun", [
+        test("string_length returns string size", () => string_length_returns_string_size()),
+        test("string_trim removes surrounding whitespace", () => string_trim_removes_surrounding_whitespace()),
+        test("string_get returns characters by index", () => string_get_returns_characters_by_index()),
+        test("string_get_range returns half-open ranges", () => string_get_range_returns_half_open_ranges()),
+        test("list methods expose size membership indexing and slices", () => list_methods_expose_size_membership_indexing_and_slices()),
+        test("list_get_range_method returns half-open ranges", () => list_get_range_method_returns_half_open_ranges()),
+        test("set methods expose emptiness and membership", () => set_methods_expose_emptiness_and_membership()),
+        test("dict methods expose size membership lookup and indexing", () => dict_methods_expose_size_membership_lookup_and_indexing()),
+        test("tuple aliases return second item", () => tuple_aliases_return_second_item()),
+    ])
+
+private fun string_length_returns_string_size(): Assert =
+    assert_that(any_int(string_length("capybara"))).is_equal_to(8)
+
+private fun string_trim_removes_surrounding_whitespace(): Assert =
+    assert_that(string_trim("  capybara  ")).is_equal_to("capybara")
+
+private fun string_get_returns_characters_by_index(): Assert =
+    // Direct string_get(..., index), including the old -1 case, stays in the host tests because
+    // index constructors are not emitted for every Capybara test backend yet.
+    assert_all([
+        assert_that("capybara"[0]).contains("c"),
+        assert_that("capybara"[99]).is_empty(),
+        assert_that(string_get_range("capybara", 1, -1)).is_equal_to("apybar"),
+    ])
+
+private fun string_get_range_returns_half_open_ranges(): Assert =
+    let value = "abcdef"
+    assert_all([
+        assert_that(string_get_range(value, 0, 6)).is_equal_to("abcdef"),
+        assert_that(string_get_range(value, 0, 0)).is_equal_to(""),
+        assert_that(string_get_range(value, 3, 3)).is_equal_to(""),
+        assert_that(string_get_range(value, 1, 4)).is_equal_to("bcd"),
+        assert_that(string_get_range(value, 0, -1)).is_equal_to("abcde"),
+        assert_that(string_get_range(value, -4, -1)).is_equal_to("cde"),
+        assert_that(string_get_range(value, -3, 6)).is_equal_to("def"),
+    ])
+
+private fun list_methods_expose_size_membership_indexing_and_slices(): Assert =
+    // Direct list_get(..., index), including the old -1 case, stays in the host tests for the
+    // same backend portability reason as string_get(..., index).
+    assert_all([
+        assert_that(any_int(list_size([1, 2, 3]))).is_equal_to(3),
+        assert_that(list_contains([1, 2, 3], 2)).is_equal_to(true),
+        assert_that(list_contains([1, 2, 3], 9)).is_equal_to(false),
+        assert_that([1, 2, 3][1]).contains(2),
+        assert_that([1, 2, 3][9]).is_empty(),
+        assert_that(list_get_range_method([1, 2, 3, 4], 1, -1)).is_equal_to([2, 3]),
+        assert_that(list_get_range([1, 2, 3, 4], 1, -1)).is_equal_to([2, 3]),
+    ])
+
+private fun list_get_range_method_returns_half_open_ranges(): Assert =
+    let values = [1, 2, 3, 4, 5, 6]
+    assert_all([
+        assert_that(list_get_range_method(values, 0, 6)).is_equal_to([1, 2, 3, 4, 5, 6]),
+        assert_that(list_get_range_method(values, 0, 0)).is_equal_to([]),
+        assert_that(list_get_range_method(values, 3, 3)).is_equal_to([]),
+        assert_that(list_get_range_method(values, 1, 4)).is_equal_to([2, 3, 4]),
+        assert_that(list_get_range_method(values, 0, -1)).is_equal_to([1, 2, 3, 4, 5]),
+        assert_that(list_get_range_method(values, -4, -1)).is_equal_to([3, 4, 5]),
+        assert_that(list_get_range_method(values, -3, 6)).is_equal_to([4, 5, 6]),
+    ])
+
+private fun set_methods_expose_emptiness_and_membership(): Assert =
+    let empty_set: Set[int] = {1, 2} - 1 - 2
+    assert_all([
+        assert_that(set_is_empty(empty_set)).is_equal_to(true),
+        assert_that(set_contains({1, 2, 3}, 2)).is_equal_to(true),
+        assert_that(set_contains({1, 2, 3}, 9)).is_equal_to(false),
+    ])
+
+private fun dict_methods_expose_size_membership_lookup_and_indexing(): Assert =
+    assert_all([
+        assert_that(any_int(dict_size({"one": 1, "two": 2}))).is_equal_to(2),
+        assert_that(dict_contains_key({"one": 1}, "one")).is_equal_to(true),
+        assert_that(dict_contains_key({"one": 1}, "two")).is_equal_to(false),
+        assert_that(dict_get({"one": 1}, "one")).contains(1),
+        assert_that(dict_get({"one": 1}, "two")).is_empty(),
+        assert_that(dict_index({"one": 1}, "one")).contains(1),
+        assert_that(dict_index({"one": 1}, "two")).is_empty(),
+    ])
+
+private fun tuple_aliases_return_second_item(): Assert =
+    assert_all([
+        assert_that(tuple_second((1, "two"))).is_equal_to("two"),
+        assert_that(tuple_get_second((1, "two"))).is_equal_to("two"),
+    ])
+
+// NativeTypes size helpers are unannotated, so imported return values are matched from any.
+private fun any_int(value: any): int =
+    match value with
+    case int actual -> actual
+    case _ -> -1

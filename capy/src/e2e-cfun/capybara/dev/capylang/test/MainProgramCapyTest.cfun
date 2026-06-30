@@ -1,0 +1,32 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE, Success }
+import MainProgram
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/MainProgram.cfun", [
+        main_returns_success_when_ok_argument_is_present().map(assertion => test("main returns success when ok argument is present", () => assertion)),
+        main_returns_default_failed_program_when_ok_argument_is_missing().map(assertion => test("main returns default failed program when ok argument is missing", () => assertion)),
+    ])
+
+// The legacy Java host test also asserts the generated main(String...) signature.
+// The legacy Java/JavaScript host tests assert exact stdout/stderr capture, process
+// exit codes, and generated entry-point wrappers; those are backend/tooling details,
+// not portable Capybara assertions.
+fun main_returns_success_when_ok_argument_is_present(): Effect[Assert] =
+    main_with_ok_assertions()
+
+private fun main_with_ok_assertions(): Effect[Assert] =
+    let program <- MainProgram.main(["ok"])
+    assert_that(program).is_equal_to(Success {})
+
+fun main_returns_default_failed_program_when_ok_argument_is_missing(): Effect[Assert] =
+    main_without_ok_assertions()
+
+private fun main_without_ok_assertions(): Effect[Assert] =
+    let program <- MainProgram.main([])
+    assert_all([
+        assert_that(program).is_equal_to(/capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE }),
+        assert_that(DEFAULT_FAILED_EXIT_CODE.value).is_equal_to(1),
+    ])

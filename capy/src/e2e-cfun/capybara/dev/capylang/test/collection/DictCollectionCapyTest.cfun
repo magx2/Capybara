@@ -1,0 +1,185 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/Dict import { * }
+from DictCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/collection/DictCollection.cfun", [
+        test("static_dict returns expected entries", () => static_dict_returns_expected_entries()),
+        test("empty_static_dict returns empty dict", () => empty_static_dict_returns_empty_dict()),
+        test("empty_static_dict_with_spaces returns empty dict", () => empty_static_dict_with_spaces_returns_empty_dict()),
+        test("static_dict_with_trailing_comma returns expected entries", () => static_dict_with_trailing_comma_returns_expected_entries()),
+        test("append adds entries without mutating input", () => append_adds_entries_without_mutating_input()),
+        test("append_dict merges dicts without mutating inputs", () => append_dict_merges_dicts_without_mutating_inputs()),
+        test("append_tuple adds tuple entry without mutating input", () => append_tuple_adds_tuple_entry_without_mutating_input()),
+        test("append_tuple_override replaces existing value without mutating input", () => append_tuple_override_replaces_existing_value_without_mutating_input()),
+        test("remove removes key without mutating input", () => remove_removes_key_without_mutating_input()),
+        test("remove_dict removes right-hand keys without mutating inputs", () => remove_dict_removes_right_hand_keys_without_mutating_inputs()),
+        test("contains detects present and missing keys", () => contains_detects_present_and_missing_keys()),
+        test("any_value reports whether any value matches", () => any_value_reports_whether_any_value_matches()),
+        test("any_entry reports whether any entry matches", () => any_entry_reports_whether_any_entry_matches()),
+        test("all_values reports whether all values match", () => all_values_reports_whether_all_values_match()),
+        test("all_entries reports whether all entries match", () => all_entries_reports_whether_all_entries_match()),
+        test("is_empty reports empty state", () => is_empty_reports_empty_state()),
+        test("not_is_empty negates empty state", () => not_is_empty_negates_empty_state()),
+        test("not_nested_is_empty reads nested dict field", () => not_nested_is_empty_reads_nested_dict_field()),
+        test("let_named_dict returns dict size", () => let_named_dict_returns_dict_size()),
+        test("dict_to_list returns entries", () => dict_to_list_returns_entries()),
+        test("dict_to_string reduces entries in insertion order", () => dict_to_string_reduces_entries_in_insertion_order()),
+    ])
+
+private fun expected_dict(): Dict[int] =
+    {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+    }
+
+private fun static_dict_returns_expected_entries(): Assert =
+    assert_that(static_dict()).is_equal_to(expected_dict())
+
+private fun empty_static_dict_returns_empty_dict(): Assert =
+    assert_that(empty_static_dict()).is_empty()
+
+private fun empty_static_dict_with_spaces_returns_empty_dict(): Assert =
+    assert_that(empty_static_dict_with_spaces()).is_empty()
+
+private fun static_dict_with_trailing_comma_returns_expected_entries(): Assert =
+    assert_that(static_dict_with_trailing_comma()).is_equal_to(expected_dict())
+
+private fun append_adds_entries_without_mutating_input(): Assert =
+    let input = expected_dict()
+    let result = append(input)
+    assert_all([
+        assert_that(result).is_equal_to({
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+        }),
+        assert_that(input).is_equal_to(expected_dict()),
+    ])
+
+private fun append_dict_merges_dicts_without_mutating_inputs(): Assert =
+    let left: Dict[int] = {"one": 1, "two": 2}
+    let right: Dict[int] = {"three": 3, "four": 4}
+    let result = append_dict(left, right)
+    assert_all([
+        assert_that(result).is_equal_to({
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+        }),
+        assert_that(left).is_equal_to({"one": 1, "two": 2}),
+        assert_that(right).is_equal_to({"three": 3, "four": 4}),
+    ])
+
+private fun append_tuple_adds_tuple_entry_without_mutating_input(): Assert =
+    let input = expected_dict()
+    let result = append_tuple(input)
+    assert_all([
+        assert_that(result).is_equal_to({
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "leet": 1337,
+        }),
+        assert_that(input).is_equal_to(expected_dict()),
+    ])
+
+private fun append_tuple_override_replaces_existing_value_without_mutating_input(): Assert =
+    let input = expected_dict()
+    let result = append_tuple_override(input)
+    assert_all([
+        assert_that(result).is_equal_to({
+            "one": 1,
+            "two": 200,
+            "three": 3,
+        }),
+        assert_that(input).is_equal_to(expected_dict()),
+    ])
+
+private fun remove_removes_key_without_mutating_input(): Assert =
+    let input = expected_dict()
+    let result = remove(input)
+    assert_all([
+        assert_that(result).is_equal_to({"one": 1, "three": 3}),
+        assert_that(input).is_equal_to(expected_dict()),
+    ])
+
+private fun remove_dict_removes_right_hand_keys_without_mutating_inputs(): Assert =
+    let left: Dict[int] = {"one": 1, "two": 2, "three": 3}
+    let right: Dict[int] = {"two": 1000, "three": 2000}
+    let result = remove_dict(left, right)
+    assert_all([
+        assert_that(result).is_equal_to({"one": 1}),
+        assert_that(left).is_equal_to({"one": 1, "two": 2, "three": 3}),
+        assert_that(right).is_equal_to({"two": 1000, "three": 2000}),
+    ])
+
+private fun contains_detects_present_and_missing_keys(): Assert =
+    assert_all([
+        assert_that(contains(expected_dict(), "two")).is_true(),
+        assert_that(contains(expected_dict(), "missing")).is_false(),
+    ])
+
+private fun any_value_reports_whether_any_value_matches(): Assert =
+    assert_all([
+        assert_that(any_value(expected_dict())).is_true(),
+        assert_that(any_value({"zero": 0, "one": 1})).is_false(),
+    ])
+
+private fun any_entry_reports_whether_any_entry_matches(): Assert =
+    assert_all([
+        assert_that(any_entry(expected_dict())).is_true(),
+        assert_that(any_entry({"two": 3})).is_false(),
+    ])
+
+private fun all_values_reports_whether_all_values_match(): Assert =
+    assert_all([
+        assert_that(all_values(expected_dict())).is_true(),
+        assert_that(all_values({"zero": 0, "one": 1})).is_false(),
+    ])
+
+private fun all_entries_reports_whether_all_entries_match(): Assert =
+    assert_all([
+        assert_that(all_entries(expected_dict())).is_true(),
+        assert_that(all_entries({"": 1})).is_false(),
+    ])
+
+private fun is_empty_reports_empty_state(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that(is_empty(empty)).is_true(),
+        assert_that(is_empty(expected_dict())).is_false(),
+    ])
+
+private fun not_is_empty_negates_empty_state(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that(not_is_empty(empty)).is_false(),
+        assert_that(not_is_empty(expected_dict())).is_true(),
+    ])
+
+private fun not_nested_is_empty_reads_nested_dict_field(): Assert =
+    let empty: Dict[int] = {:}
+    assert_all([
+        assert_that(not_nested_is_empty(DictHolder { values: empty })).is_false(),
+        assert_that(not_nested_is_empty(DictHolder { values: expected_dict() })).is_true(),
+    ])
+
+private fun let_named_dict_returns_dict_size(): Assert =
+    assert_that(let_named_dict()).is_equal_to(2)
+
+private fun dict_to_list_returns_entries(): Assert =
+    let entries = dict_to_list(expected_dict())
+    assert_that(entries)
+        .has_size(3)
+        .contains(Entry { k: "one", v: 1 })
+        .contains(Entry { k: "two", v: 2 })
+        .contains(Entry { k: "three", v: 3 })
+
+private fun dict_to_string_reduces_entries_in_insertion_order(): Assert =
+    assert_that(dict_to_string(expected_dict())).is_equal_to("one 1, two 2, three 3")

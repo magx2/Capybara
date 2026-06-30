@@ -1,0 +1,28 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from EnumDataField import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/EnumDataField.cfun", [
+        test("enum can be used as data field type", () => enum_can_be_used_as_data_field_type()),
+        test("enum field can be matched and read", () => enum_field_can_be_matched_and_read()),
+    ])
+
+fun enum_can_be_used_as_data_field_type(): Assert =
+    let root = Path { root: ABSOLUTE, segments: [] }
+    let relative = Path { root: RELATIVE, segments: ["home"] }
+    assert_all([
+        assert_that(root.root == ABSOLUTE).is_true(),
+        assert_that(relative.root == RELATIVE).is_true(),
+        assert_that(root.segments).is_empty(),
+    ])
+
+fun enum_field_can_be_matched_and_read(): Assert =
+    let root = Path { root: ABSOLUTE, segments: [] }
+    let relative = Path { root: RELATIVE, segments: [] }
+    assert_all([
+        assert_that(root_name(root)).is_equal_to("ABSOLUTE"),
+        assert_that(is_absolute(root)).is_true(),
+        assert_that(is_absolute(relative)).is_false(),
+    ])

@@ -1,0 +1,11 @@
+from /capy/io/Console import { println }
+from /capy/lang/Effect import { * }
+from /capy/lang/Program import { DEFAULT_FAILED_EXIT_CODE }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+
+fun main(args: List[String]): Effect[/capy/lang/Program] =
+    if args ? "ok"
+    then println("ok").map(printed => /capy/lang/Program.Success {})
+    else pure(/capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })

@@ -1,0 +1,96 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from EmptyLiteralInference import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/EmptyLiteralInference.cfun", [
+        test("reverse_ints uses inline empty literal", () => reverse_ints_uses_inline_empty_literal()),
+        test("duplicate_strings uses inline empty literal", () => duplicate_strings_uses_inline_empty_literal()),
+        test("empty_list_of_type_param infers concrete type from call site", () => empty_list_of_type_param_infers_concrete_type_from_call_site()),
+        test("typed empty dict keeps concrete value type after append", () => typed_empty_dict_keeps_concrete_value_type_after_append()),
+        test("reduce with untyped empty list accumulator infers concrete element type", () => reduce_with_untyped_empty_list_accumulator_infers_concrete_element_type()),
+        test("reduce with untyped empty list accumulator infers concrete record type from key value pairs", () => reduce_with_untyped_empty_list_accumulator_infers_concrete_record_type_from_key_value_pairs()),
+        test("reduce with untyped empty list accumulator supports swapped key value names", () => reduce_with_untyped_empty_list_accumulator_supports_swapped_key_value_names()),
+        test("two independently inferred reduce lists can be concatenated", () => two_independently_inferred_reduce_lists_can_be_concatenated()),
+        test("reduce with inline success empty list infers result list type", () => reduce_with_inline_success_empty_list_infers_result_list_type()),
+        test("reduce with inline success empty set infers result set type", () => reduce_with_inline_success_empty_set_infers_result_set_type()),
+        test("reduce with inline success empty dict infers result dict type", () => reduce_with_inline_success_empty_dict_infers_result_dict_type()),
+        test("reduce with inline some empty list infers option list type", () => reduce_with_inline_some_empty_list_infers_option_list_type()),
+        test("reduce with inline generic data empty list infers box list type", () => reduce_with_inline_generic_data_empty_list_infers_box_list_type()),
+        test("to_seq_using_end_literal compiles and builds sequence", () => to_seq_using_end_literal_compiles_and_builds_sequence()),
+        test("concat inferred subtype lists can flow into parent typed sink", () => concat_inferred_subtype_lists_can_flow_into_parent_typed_sink()),
+        test("three inferred test case lists can be concatenated into test file", () => three_inferred_test_case_lists_can_be_concatenated_into_test_file()),
+    ])
+
+private fun reverse_ints_uses_inline_empty_literal(): Assert =
+    assert_that(reverse_ints([1, 2, 3])).is_equal_to([3, 2, 1])
+
+private fun duplicate_strings_uses_inline_empty_literal(): Assert =
+    assert_that(duplicate_strings(["a", "b"])).is_equal_to(["a", "a", "b", "b"])
+
+private fun empty_list_of_type_param_infers_concrete_type_from_call_site(): Assert =
+    assert_all([
+        assert_that(empty_list_of_type_param(42)).is_empty(),
+        assert_that(empty_list_of_type_param("x")).is_empty(),
+    ])
+
+private fun typed_empty_dict_keeps_concrete_value_type_after_append(): Assert =
+    assert_that(typed_empty_dict_then_append_json_box("capy")).is_equal_to(1)
+
+private fun reduce_with_untyped_empty_list_accumulator_infers_concrete_element_type(): Assert =
+    assert_that(reduce_dict_to_named_values_size({"a": 1, "b": 2})).is_equal_to(2)
+
+private fun reduce_with_untyped_empty_list_accumulator_infers_concrete_record_type_from_key_value_pairs(): Assert =
+    assert_that(reduce_dict_to_parse_cases_size({"a": 1, "b": 2})).is_equal_to(2)
+
+private fun reduce_with_untyped_empty_list_accumulator_supports_swapped_key_value_names(): Assert =
+    assert_that(reduce_dict_to_format_cases_size({"a": 1, "b": 2})).is_equal_to(2)
+
+private fun two_independently_inferred_reduce_lists_can_be_concatenated(): Assert =
+    assert_that(reduce_dict_to_two_lists_and_concat_sizes({"a": 1, "b": 2})).is_equal_to(4)
+
+private fun reduce_with_inline_success_empty_list_infers_result_list_type(): Assert =
+    assert_that(reduce_list_to_success_values([1, 2, 3])).succeeds([1, 2, 3])
+
+private fun reduce_with_inline_success_empty_set_infers_result_set_type(): Assert =
+    assert_that(reduce_set_to_success_values({"a", "b"})).succeeds({"a", "b"})
+
+private fun reduce_with_inline_success_empty_dict_infers_result_dict_type(): Assert =
+    assert_that(reduce_dict_to_success_values({"a": 1, "b": 2}))
+        .succeeds(values => assert_that(values).is_equal_to({"a": 1, "b": 2}))
+
+private fun reduce_with_inline_some_empty_list_infers_option_list_type(): Assert =
+    assert_that(reduce_list_to_some_values([1, 2, 3])).contains([1, 2, 3])
+
+private fun reduce_with_inline_generic_data_empty_list_infers_box_list_type(): Assert =
+    assert_that(reduce_list_to_box_values([1, 2, 3]).value).is_equal_to([1, 2, 3])
+
+private fun to_seq_using_end_literal_compiles_and_builds_sequence(): Assert =
+    let seq = to_seq_using_end_literal([4, 5])
+    assert_that(seq_end_head_or_default(seq, -1)).is_equal_to(5)
+
+private fun concat_inferred_subtype_lists_can_flow_into_parent_typed_sink(): Assert =
+    let batch = concat_inferred_parent_subtype_lists(["ok", "err"])
+    assert_all([
+        assert_that(batch.outcomes.size()).is_equal_to(4),
+        assert_that((batch.outcomes | :outcome_source).as_list()).is_equal_to(["ok", "err", "ok", "err"]),
+        assert_that((batch.outcomes | :outcome_succeeded).as_list()).is_equal_to([true, true, false, false]),
+    ])
+
+private fun outcome_source(outcome: Outcome): String =
+    match outcome with
+    case ParseSucceeded { source } -> source
+    case ParseFailed { source } -> source
+
+private fun outcome_succeeded(outcome: Outcome): bool =
+    match outcome with
+    case ParseSucceeded -> true
+    case ParseFailed -> false
+
+private fun three_inferred_test_case_lists_can_be_concatenated_into_test_file(): Assert =
+    assert_that(build_test_file_from_three_inferred_test_case_lists()).is_equal_to(3)

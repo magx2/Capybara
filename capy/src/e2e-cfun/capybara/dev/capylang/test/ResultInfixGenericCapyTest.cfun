@@ -1,0 +1,56 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ResultInfixGeneric import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ResultInfixGeneric.cfun", [
+        test("apply_mapper maps Ok value", () => apply_mapper_maps_ok_value()),
+        test("apply_mapper returns Fail from mapper", () => apply_mapper_returns_fail_from_mapper()),
+        test("propagate_fail keeps original Fail", () => propagate_fail_keeps_original_fail()),
+        test("apply_flat_mapper unwraps nested Ok", () => apply_flat_mapper_unwraps_nested_ok()),
+        test("apply_flat_mapper returns nested Fail", () => apply_flat_mapper_returns_nested_fail()),
+        test("apply_flat_mapper keeps outer Fail", () => apply_flat_mapper_keeps_outer_fail()),
+        test("nested_identity keeps nested generic Ok", () => nested_identity_keeps_nested_generic_ok()),
+        test("flatten_nested_result accepts nested Fail subtype", () => flatten_nested_result_accepts_nested_fail_subtype()),
+    ])
+
+private fun apply_mapper_maps_ok_value(): Assert =
+    let input: MyResult[int] = Ok { value: 7 }
+    assert_that(describe_result(apply_mapper(input, :map_to_string))).is_equal_to("ok:v=7")
+
+private fun apply_mapper_returns_fail_from_mapper(): Assert =
+    let input: MyResult[int] = Ok { value: 3 }
+    assert_that(describe_result(apply_mapper(input, :map_to_fail))).is_equal_to("fail:bad:3")
+
+private fun propagate_fail_keeps_original_fail(): Assert =
+    let input: MyResult[int] = Fail { message: "boom" }
+    assert_that(describe_result(propagate_fail(input, :map_to_string))).is_equal_to("fail:boom")
+
+private fun apply_flat_mapper_unwraps_nested_ok(): Assert =
+    let input: MyResult[int] = Ok { value: 7 }
+    assert_that(describe_result(apply_flat_mapper(input, :map_to_nested_ok))).is_equal_to("ok:mapped_7")
+
+private fun apply_flat_mapper_returns_nested_fail(): Assert =
+    let input: MyResult[int] = Ok { value: 3 }
+    assert_that(describe_result(apply_flat_mapper(input, :map_to_nested_fail))).is_equal_to("fail:nested_bad:3")
+
+private fun apply_flat_mapper_keeps_outer_fail(): Assert =
+    let input: MyResult[int] = Fail { message: "boom" }
+    assert_that(describe_result(apply_flat_mapper(input, :map_to_nested_ok))).is_equal_to("fail:boom")
+
+private fun nested_identity_keeps_nested_generic_ok(): Assert =
+    assert_that(describe_nested_result(nested_identity(wrap_nested_ok(5)))).is_equal_to("ok:ok:wrapped_5")
+
+private fun flatten_nested_result_accepts_nested_fail_subtype(): Assert =
+    assert_that(describe_result(flatten_nested_result(wrap_nested_fail(5)))).is_equal_to("fail:wrapped_bad:5")
+
+private fun describe_result(result: MyResult[String]): String =
+    match result with
+    case Ok { value } -> "ok:" + value
+    case Fail { message } -> "fail:" + message
+
+private fun describe_nested_result(result: MyResult[MyResult[String]]): String =
+    match result with
+    case Ok { value } -> "ok:" + describe_result(value)
+    case Fail { message } -> "fail:" + message

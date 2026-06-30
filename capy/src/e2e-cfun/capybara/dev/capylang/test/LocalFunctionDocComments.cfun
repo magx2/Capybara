@@ -1,0 +1,7 @@
+/// Accumulate
+fun accumulate(n: int): int =
+    /// Internal accumulate
+    fun accumulate(n: int, acc: int): int =
+        if n <= 0 then acc else accumulate(n - 1, acc + n)
+    ---
+    accumulate(n, 0)

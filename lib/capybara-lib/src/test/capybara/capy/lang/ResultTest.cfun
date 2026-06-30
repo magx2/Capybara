@@ -1,0 +1,126 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/ResultTest.cfun", [
+        test("should map success", () => should_map_success()),
+        test("should map error", () => should_map_error()),
+        test("should map positive", () => should_map_positive()),
+        test("should map negative", () => should_map_negative()),
+        test("should flatmap success", () => should_flatmap_success()),
+        test("should flatmap error", () => should_flatmap_error()),
+        test("should flatmap positive", () => should_flatmap_positive()),
+        test("should flatmap negative", () => should_flatmap_negative()),
+        test("should flatmap zero", () => should_flatmap_zero()),
+        test("should return value when result succeeded", () => should_return_value_when_result_succeeded()),
+        test("should return other when result failed", () => should_return_other_when_result_failed()),
+        test("should return this result if succeeded", () => should_return_this_result_if_succeeded()),
+        test("should return other result if failed", () => should_return_other_result_if_failed()),
+        test("should reduce success result", () => should_reduce_success_result()),
+        test("should reduce error result", () => should_reduce_error_result()),
+        test("should create structured error", () => should_create_structured_error()),
+        test("should map and recover error", () => should_map_and_recover_error()),
+    ])
+
+fun should_map_success(): Assert =
+    let result: Result = Success { "success_value" }
+    let mapped = result | value => "mapped_" + value
+    assert_that(mapped).succeeds("mapped_success_value")
+
+fun should_map_error(): Assert =
+    let result: Result = fail_kind("capy.test.error", "error message")
+    let mapped = result | value => "mapped_" + value
+    assert_that(mapped).fails("error message")
+
+private fun positive(x: int): Result[String] =
+    if x > 0
+    then Success { x + " is positive" }
+    else fail_kind("capy.test.not_positive", x + " is NOT positive")
+
+private fun positive_not_zero(x: int): Result[String] =
+    if x != 0
+    then positive(x)
+    else fail_kind("capy.test.zero", "I don't like zero")
+
+fun should_map_positive(): Assert =
+    let result = Success { 420 }
+    let mapped = result | x => x + " is positive"
+    assert_that(mapped).succeeds("420 is positive")
+
+fun should_map_negative(): Assert =
+    let result = Success { -1337 }
+    let mapped = result | x => x + " is negative"
+    assert_that(mapped).succeeds("-1337 is negative")
+
+fun should_flatmap_success(): Assert =
+    let result: Result = Success { "success_value" }
+    let mapped = result |* value => Success { "mapped_" + value }
+    assert_that(mapped).succeeds("mapped_success_value")
+
+fun should_flatmap_error(): Assert =
+    let result: Result = fail_kind("capy.test.error", "error message")
+    let mapped = result |* value => Success { "mapped_" + value }
+    assert_that(mapped).fails("error message")
+
+fun should_flatmap_positive(): Assert =
+    let result = Success { 420 }
+    let mapped = result |* :positive_not_zero
+    assert_that(mapped).succeeds("420 is positive")
+
+fun should_flatmap_negative(): Assert =
+    let result = Success { -1337 }
+    let mapped = result |* :positive_not_zero
+    assert_that(mapped).fails("-1337 is NOT positive")
+
+fun should_flatmap_zero(): Assert =
+    let result = Success { 0 }
+    let mapped = result |* :positive_not_zero
+    assert_that(mapped).fails("I don't like zero")
+
+fun should_return_value_when_result_succeeded(): Assert =
+    let result = Success { 100 }
+    let value: int = result.or_else(0)
+    assert_that(value).is_equal_to(100)
+
+fun should_return_other_when_result_failed(): Assert =
+    let result = fail_kind("capy.test.error", "Some error")
+    let value: int = result.or_else(0)
+    assert_that(value).is_equal_to(0)
+
+fun should_return_this_result_if_succeeded(): Assert =
+    let result = Success { 100 }
+    let other = Success { 101 }
+    assert_that(result.or(other)).is_equal_to(result)
+
+fun should_return_other_result_if_failed(): Assert =
+    let result = fail_kind("capy.test.error", "Error")
+    let other = Success { 101 }
+    assert_that(result.or(other)).is_equal_to(other)
+
+fun should_reduce_success_result(): Assert =
+    let result: Result[int] = Success { 100 }
+    let reduced: String = result |> (x=>x+"", err=>err.message)
+    assert_that(reduced).is_equal_to("100")
+
+fun should_reduce_error_result(): Assert =
+    let result: Result[int] = fail_kind("capy.test.unknown", "Unknown")
+    let reduced: String = result |> (x=>x+"", err=>err.kind + ":" + err.message)
+    assert_that(reduced).is_equal_to("capy.test.unknown:Unknown")
+
+fun should_create_structured_error(): Assert =
+    let err = error_kind("capy.test.structured", "Unknown")
+    assert_all([
+        assert_that(err.kind).is_equal_to("capy.test.structured"),
+        assert_that(err.message).is_equal_to("Unknown"),
+        assert_that(err.short_message()).is_equal_to("capy.test.structured: Unknown"),
+        assert_that(err.has_kind("capy.test.structured")).is_true(),
+    ])
+
+fun should_map_and_recover_error(): Assert =
+    let result: Result[int] = fail_kind("capy.test.original", "Unknown")
+    let reduced = result
+        .map_error(err => err.with_kind("capy.test.mapped").with_message("Mapped"))
+        .recover(err => err.kind + ":" + err.message)
+    assert_that(reduced).is_equal_to("capy.test.mapped:Mapped")

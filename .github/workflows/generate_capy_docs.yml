@@ -1,0 +1,228 @@
+name: Generate Capy Docs
+
+on:
+  push:
+    branches:
+      - "master"
+      - "release/**"
+    paths:
+      - ".github/workflows/generate_capy_docs.yml"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/capybara-lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: generate-capy-docs-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  generate-capy-docs:
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Resolve docs target
+        id: docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_BRANCH="${GITHUB_REF_NAME}"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          if [[ "${SOURCE_BRANCH}" == "${DEFAULT_BRANCH}" ]]; then
+            DOC_VERSION="SNAPSHOT"
+          elif [[ "${SOURCE_BRANCH}" =~ ^release/([0-9]+)\.([0-9]+)\.x$ ]]; then
+            DOC_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.x"
+          else
+            echo "::error::Generate Capy Docs must run on '${DEFAULT_BRANCH}' or release/{major}.{minor}.x, got '${SOURCE_BRANCH}'."
+            exit 1
+          fi
+
+          DOC_BRANCH="automation/capy-docs-${DOC_VERSION}"
+          DOC_DIR="docs/capy-docs/${DOC_VERSION}"
+          GENERATED_DOC_DIR="build/capy-docs/${DOC_VERSION}"
+
+          {
+            echo "source_branch=${SOURCE_BRANCH}"
+            echo "doc_version=${DOC_VERSION}"
+            echo "doc_branch=${DOC_BRANCH}"
+            echo "doc_dir=${DOC_DIR}"
+            echo "generated_doc_dir=${GENERATED_DOC_DIR}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Assemble Capy project
+        run: ./gradlew :capy:assemble --no-daemon
+
+      - name: Generate Capybara library docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+          rm -rf "${GENERATED_DOC_DIR}"
+          CAPY_JAR="$(find capy/build/libs -maxdepth 1 -name 'capy-*.jar' ! -name '*-plain.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort | head -n 1)"
+          if [[ -z "${CAPY_JAR}" ]]; then
+            echo "::error::Capy jar was not assembled."
+            exit 1
+          fi
+          java -jar "${CAPY_JAR}" docs -i lib/capybara-lib/src/main/capybara -o "${GENERATED_DOC_DIR}"
+          if [[ ! -d "${GENERATED_DOC_DIR}" ]]; then
+            echo "::error::Capy docs were not generated into ${GENERATED_DOC_DIR}."
+            exit 1
+          fi
+
+      - name: Check generated docs changes
+        id: docs_diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOC_VERSION="${{ steps.docs.outputs.doc_version }}"
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+
+          if [[ -d "${DOC_DIR}" ]] && diff -qr -- "${DOC_DIR}" "${GENERATED_DOC_DIR}" >/tmp/capy-docs.diff; then
+            echo "Capy docs are already up to date for ${DOC_VERSION}."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Generated Capy docs differ for ${DOC_VERSION}."
+          if [[ -s /tmp/capy-docs.diff ]]; then
+            cat /tmp/capy-docs.diff
+          fi
+          echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Apply generated docs
+        if: steps.docs_diff.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+          GENERATED_DOC_DIR="${{ steps.docs.outputs.generated_doc_dir }}"
+          rm -rf "${DOC_DIR}"
+          mkdir -p "$(dirname "${DOC_DIR}")"
+          cp -a "${GENERATED_DOC_DIR}" "${DOC_DIR}"
+
+      - name: Configure git user
+        if: steps.docs_diff.outputs.has_changes == 'true'
+        run: |
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
+
+      - name: Create docs pull request
+        if: steps.docs_diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_BRANCH="${{ steps.docs.outputs.source_branch }}"
+          DOC_VERSION="${{ steps.docs.outputs.doc_version }}"
+          DOC_BRANCH="${{ steps.docs.outputs.doc_branch }}"
+          DOC_DIR="${{ steps.docs.outputs.doc_dir }}"
+
+          git switch -C "${DOC_BRANCH}"
+          git add -A "${DOC_DIR}"
+          if git diff --cached --quiet; then
+            echo "No tracked Capy docs changes after applying generated docs for ${DOC_VERSION}."
+            exit 0
+          fi
+          git commit -m "docs: update Capy docs ${DOC_VERSION}"
+
+          REMOTE_DOC_SHA="$(git ls-remote --heads origin "${DOC_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${REMOTE_DOC_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${DOC_BRANCH}:${REMOTE_DOC_SHA}" origin "HEAD:${DOC_BRANCH}"
+          else
+            git push origin "HEAD:${DOC_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${SOURCE_BRANCH}" \
+              --head "${DOC_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -n "${PR_NUMBER}" ]]; then
+            echo "Capy docs pull request already exists: ${PR_NUMBER}"
+          else
+            PR_URL="$(
+              gh pr create \
+                --repo "${GITHUB_REPOSITORY}" \
+                --base "${SOURCE_BRANCH}" \
+                --head "${DOC_BRANCH}" \
+                --title "docs: update Capy docs ${DOC_VERSION}" \
+                --body "Regenerates Capybara library documentation into \`${DOC_DIR}\` from \`${SOURCE_BRANCH}\`."
+            )"
+            echo "Created Capy docs pull request: ${PR_URL}"
+            PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
+          fi
+
+          WORKFLOW="check.yml"
+          SHA="$(git rev-parse HEAD)"
+          gh workflow run "${WORKFLOW}" --ref "${DOC_BRANCH}"
+
+          find_check_run() {
+            gh run list \
+              --workflow "${WORKFLOW}" \
+              --branch "${DOC_BRANCH}" \
+              --commit "${SHA}" \
+              --json databaseId,event,status,conclusion,url \
+              --limit 20 \
+              --jq '[.[] | select(.event == "workflow_dispatch")][0] // empty'
+          }
+
+          CHECK_RUN="$(find_check_run)"
+          CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            for _ in {1..30}; do
+              sleep 10
+              CHECK_RUN="$(find_check_run)"
+              CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+              if [[ -n "${CHECK_RUN_ID}" ]]; then
+                break
+              fi
+            done
+          fi
+
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            echo "::error::No Build & Check run found for ${DOC_BRANCH} at ${SHA}."
+            exit 1
+          fi
+
+          CHECK_RUN_URL="$(jq -r '.url' <<< "${CHECK_RUN}")"
+          echo "Watching Build & Check run ${CHECK_RUN_ID}: ${CHECK_RUN_URL}"
+          gh run watch "${CHECK_RUN_ID}" --exit-status
+
+          gh pr merge "${PR_NUMBER}" --rebase --delete-branch

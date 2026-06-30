@@ -1,0 +1,30 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/System import { current_millis, nano_time }
+from /capy/date_time/Clock import { now }
+from /capy/date_time/DateTime import { * }
+
+fun add_effects(a: int, b: int): Effect[int] =
+    let x <- pure(a)
+    let y <- delay(() => b)
+    x + y
+
+fun nested_effect(value: int): Effect[String] =
+    let x <- pure(value)
+    delay(() => "v=" + x)
+
+fun delayed_divide_by_zero(): Effect[int] =
+    delay(() => 1 / 0)
+
+fun construct_delayed_divide_by_zero(): bool =
+    let effect = delayed_divide_by_zero()
+    true
+
+fun clock_now_iso(): Effect[String] =
+    let current <- now()
+    current.to_iso_8601()
+
+fun current_millis_value(): Effect[long] =
+    current_millis()
+
+fun nano_time_value(): Effect[long] =
+    nano_time()

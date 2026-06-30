@@ -1,0 +1,51 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/test/ResultAssertTest.cfun", [
+        test("should assert result error kind", () => should_assert_result_error_kind()),
+        test("should assert result error kind and message", () => should_assert_result_error_kind_and_message()),
+        test("should assert result error message contains text", () => should_assert_result_error_message_contains_text()),
+        test("should assert result error with nested assertions", () => should_assert_result_error_with_nested_assertions()),
+        test("should reject wrong result error assertions", () => should_reject_wrong_result_error_assertions()),
+        test("should reject result error assertions for success", () => should_reject_result_error_assertions_for_success()),
+    ])
+
+fun should_assert_result_error_kind(): Assert =
+    let result: Result[int] = fail_kind("capy.test.missing", "missing value")
+    assert_that(result).fails_with_kind("capy.test.missing")
+
+fun should_assert_result_error_kind_and_message(): Assert =
+    let result: Result[int] = fail_kind("capy.test.validation", "name is required")
+    assert_that(result).fails_with_kind("capy.test.validation", "name is required")
+
+fun should_assert_result_error_message_contains_text(): Assert =
+    let result: Result[int] = fail_kind("capy.test.io", "write_text failed for `payload.txt`")
+    assert_that(result).fails_with_message_containing("write_text failed")
+
+fun should_assert_result_error_with_nested_assertions(): Assert =
+    let result: Result[int] = fail_kind("capy.test.validation", "name is required")
+    assert_that(result).fails(error => assert_all([
+        assert_that(error.kind).is_equal_to("capy.test.validation"),
+        assert_that(error.message).contains("required"),
+    ]))
+
+fun should_reject_wrong_result_error_assertions(): Assert =
+    let result: Result[int] = fail_kind("capy.test.validation", "name is required")
+    assert_all([
+        assert_that(assert_that(result).fails_with_kind("capy.test.other").failed()).is_true(),
+        assert_that(assert_that(result).fails_with_kind("capy.test.validation", "other").failed()).is_true(),
+        assert_that(assert_that(result).fails_with_message_containing("other").failed()).is_true(),
+        assert_that(assert_that(result).fails(error => assert_that(error.kind).is_equal_to("capy.test.other")).failed()).is_true(),
+    ])
+
+fun should_reject_result_error_assertions_for_success(): Assert =
+    let result: Result[int] = Success { 7 }
+    assert_all([
+        assert_that(assert_that(result).fails_with_kind("capy.test.validation").failed()).is_true(),
+        assert_that(assert_that(result).fails_with_kind("capy.test.validation", "name is required").failed()).is_true(),
+        assert_that(assert_that(result).fails_with_message_containing("required").failed()).is_true(),
+        assert_that(assert_that(result).fails(error => assert_that(error.kind).is_equal_to("capy.test.validation")).failed()).is_true(),
+    ])

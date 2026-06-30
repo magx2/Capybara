@@ -1,0 +1,52 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from OptionToOptional import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/OptionToOptional.cfun", [
+        test("string option handles Some and None", () => string_option_handles_some_and_none()),
+        test("int option handles Some and None", () => int_option_handles_some_and_none()),
+        test("bool option handles Some and None", () => bool_option_handles_some_and_none()),
+        test("string option message handles Some and None", () => string_option_message_handles_some_and_none()),
+        test("int option message handles Some and None", () => int_option_message_handles_some_and_none()),
+        test("match deserialize passes through error typed pattern", () => match_deserialize_passes_through_error_typed_pattern()),
+        test("match deserialize destructures success constructor pattern", () => match_deserialize_destructures_success_constructor_pattern()),
+    ])
+
+private fun string_option_handles_some_and_none(): Assert =
+    assert_all([
+        assert_that(string_option(Some { "abc" })).is_equal_to("abc"),
+        assert_that(string_option(None {})).is_equal_to("<empty>"),
+    ])
+
+private fun int_option_handles_some_and_none(): Assert =
+    assert_all([
+        assert_that(int_option(Some { 7 })).is_equal_to(7),
+        assert_that(int_option(None {})).is_equal_to(-1),
+    ])
+
+private fun bool_option_handles_some_and_none(): Assert =
+    assert_all([
+        assert_that(bool_option(Some { true })).is_true(),
+        assert_that(bool_option(None {})).is_false(),
+    ])
+
+private fun string_option_message_handles_some_and_none(): Assert =
+    assert_all([
+        assert_that(option_to_message(Some { "abc" })).is_equal_to("value=abc"),
+        assert_that(option_to_message(None {})).is_equal_to("missing"),
+    ])
+
+private fun int_option_message_handles_some_and_none(): Assert =
+    assert_all([
+        assert_that(int_option_to_message(Some { 10 })).is_equal_to("value=10"),
+        assert_that(int_option_to_message(None {})).is_equal_to("missing"),
+    ])
+
+private fun match_deserialize_passes_through_error_typed_pattern(): Assert =
+    assert_that(match_deserialize("bad")).is_equal_to("failed: bad")
+
+private fun match_deserialize_destructures_success_constructor_pattern(): Assert =
+    assert_that(match_deserialize("ok")).is_equal_to("prefix:json:7")

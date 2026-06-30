@@ -1,0 +1,64 @@
+from /capy/test/Assert import { * }
+from /capy/lang/BoundedNumber import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/BoundedNumber.cfun", [
+        test("ratio accepts zero", () => should_construct_ratio(0.0, 0.0)),
+        test("ratio accepts one", () => should_construct_ratio(1.0, 1.0)),
+        test("ratio rejects values below zero", () => assert_that(ratio { -0.1 }).fails("ratio must be between 0.0 and 1.0")),
+        test("ratio rejects values above one", () => assert_that(ratio { 1.1 }).fails("ratio must be between 0.0 and 1.0")),
+        test("percentage accepts zero", () => should_construct_percentage(0.0, 0.0)),
+        test("percentage accepts one hundred", () => should_construct_percentage(100.0, 100.0)),
+        test("percentage rejects values below zero", () => assert_that(percentage { -0.1 }).fails("percentage must be between 0.0 and 100.0")),
+        test("percentage rejects values above one hundred", () => assert_that(percentage { 100.1 }).fails("percentage must be between 0.0 and 100.0")),
+        test("probability accepts zero", () => should_construct_probability(0.0, 0.0)),
+        test("probability accepts one", () => should_construct_probability(1.0, 1.0)),
+        test("probability rejects values below zero", () => assert_that(probability { -0.1 }).fails("probability must be between 0.0 and 1.0")),
+        test("probability rejects values above one", () => assert_that(probability { 1.1 }).fails("probability must be between 0.0 and 1.0")),
+        test("ZERO_RATIO is zero", () => assert_that(ZERO_RATIO.value).is_equal_to(0.0)),
+        test("WHOLE_RATIO is one", () => assert_that(WHOLE_RATIO.value).is_equal_to(1.0)),
+        test("ZERO_PERCENTAGE is zero", () => assert_that(ZERO_PERCENTAGE.value).is_equal_to(0.0)),
+        test("FULL_PERCENTAGE is one hundred", () => assert_that(FULL_PERCENTAGE.value).is_equal_to(100.0)),
+        test("IMPOSSIBLE_PROBABILITY is zero", () => assert_that(IMPOSSIBLE_PROBABILITY.value).is_equal_to(0.0)),
+        test("CERTAIN_PROBABILITY is one", () => assert_that(CERTAIN_PROBABILITY.value).is_equal_to(1.0)),
+        test("ratio converts to percentage", () => should_convert_ratio_to_percentage(0.25, 25.0)),
+        test("ratio converts to probability", () => should_convert_ratio_to_probability(0.25, 0.25)),
+        test("percentage converts to ratio", () => should_convert_percentage_to_ratio(25.0, 0.25)),
+        test("probability converts to ratio", () => should_convert_probability_to_ratio(0.25, 0.25)),
+        test("bounded number comparison operators compare values", () => should_compare_bounded_numbers()),
+    ])
+
+private fun should_construct_ratio(value: double, expected: double): Assert =
+    assert_that((ratio { value }).reduce(actual => actual.value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_construct_percentage(value: double, expected: double): Assert =
+    assert_that((percentage { value }).reduce(actual => actual.value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_construct_probability(value: double, expected: double): Assert =
+    assert_that((probability { value }).reduce(actual => actual.value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_convert_ratio_to_percentage(value: double, expected: double): Assert =
+    assert_that((ratio { value }).reduce(actual => actual.to_percentage().value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_convert_ratio_to_probability(value: double, expected: double): Assert =
+    assert_that((ratio { value }).reduce(actual => actual.to_probability().value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_convert_percentage_to_ratio(value: double, expected: double): Assert =
+    assert_that((percentage { value }).reduce(actual => actual.to_ratio().value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_convert_probability_to_ratio(value: double, expected: double): Assert =
+    assert_that((probability { value }).reduce(actual => actual.to_ratio().value, _ => -1.0)).is_equal_to(expected)
+
+private fun should_compare_bounded_numbers(): Assert =
+    assert_all([
+        assert_that(WHOLE_RATIO > ZERO_RATIO).is_true(),
+        assert_that(WHOLE_RATIO >= ZERO_RATIO).is_true(),
+        assert_that(ZERO_RATIO < WHOLE_RATIO).is_true(),
+        assert_that(ZERO_RATIO <= WHOLE_RATIO).is_true(),
+        assert_that(ZERO_RATIO == ZERO_RATIO).is_true(),
+        assert_that(FULL_PERCENTAGE > ZERO_PERCENTAGE).is_true(),
+        assert_that(CERTAIN_PROBABILITY > IMPOSSIBLE_PROBABILITY).is_true(),
+    ])

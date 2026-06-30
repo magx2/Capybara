@@ -1,0 +1,11 @@
+fun mod_int(a: int, b: int): int = a % b
+
+fun mod_long(a: long, b: long): long = a % b
+
+fun mod_byte(a: byte, b: byte): byte = a % b
+
+fun mod_float(a: float, b: float): float = a % b
+
+fun mod_double(a: double, b: double): double = a % b
+
+fun mod_mixed_int_long(a: int, b: long): long = a % b

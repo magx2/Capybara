@@ -1,0 +1,112 @@
+/// Time duration measured in nanoseconds.
+type nano_second -> long
+
+/// Time duration measured in microseconds.
+type micro_second -> long
+
+/// Time duration measured in milliseconds.
+type milli_second -> long
+
+/// Time duration measured in seconds.
+type second -> long
+
+/// Time duration measured in minutes.
+type minute -> long
+
+/// Time duration measured in hours.
+type hour -> long
+
+/// Time duration measured in days.
+type day -> long
+
+/// Time duration measured in weeks.
+type week -> long
+
+private const NANO_SECONDS_PER_MICRO_SECOND: long = 1_000L
+private const NANO_SECONDS_PER_MILLI_SECOND: long = 1_000_000L
+private const NANO_SECONDS_PER_SECOND: long = 1_000_000_000L
+private const MICRO_SECONDS_PER_MILLI_SECOND: long = 1_000L
+private const MICRO_SECONDS_PER_SECOND: long = 1_000_000L
+private const MILLI_SECONDS_PER_SECOND: long = 1_000L
+private const SECONDS_PER_MINUTE: long = 60L
+private const MINUTES_PER_HOUR: long = 60L
+private const HOURS_PER_DAY: long = 24L
+private const DAYS_PER_WEEK: long = 7L
+private const SECONDS_PER_HOUR: long = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+private const SECONDS_PER_DAY: long = SECONDS_PER_HOUR * HOURS_PER_DAY
+private const SECONDS_PER_WEEK: long = SECONDS_PER_DAY * DAYS_PER_WEEK
+private const MINUTES_PER_DAY: long = MINUTES_PER_HOUR * HOURS_PER_DAY
+private const MINUTES_PER_WEEK: long = MINUTES_PER_DAY * DAYS_PER_WEEK
+private const HOURS_PER_WEEK: long = HOURS_PER_DAY * DAYS_PER_WEEK
+
+fun nano_second.to_nano_seconds(): nano_second = this
+fun micro_second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_MICRO_SECOND }
+fun milli_second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_MILLI_SECOND }
+fun second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_SECOND }
+fun minute.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND }
+fun hour.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND }
+fun day.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND }
+fun week.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND }
+
+fun nano_second.to_micro_seconds(): micro_second = micro_second { this.value / NANO_SECONDS_PER_MICRO_SECOND }
+fun micro_second.to_micro_seconds(): micro_second = this
+fun milli_second.to_micro_seconds(): micro_second = micro_second { this.value * MICRO_SECONDS_PER_MILLI_SECOND }
+fun second.to_micro_seconds(): micro_second = micro_second { this.value * MICRO_SECONDS_PER_SECOND }
+fun minute.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND }
+fun hour.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND }
+fun day.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND }
+fun week.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND }
+
+fun nano_second.to_milli_seconds(): milli_second = milli_second { this.value / NANO_SECONDS_PER_MILLI_SECOND }
+fun micro_second.to_milli_seconds(): milli_second = milli_second { this.value / MICRO_SECONDS_PER_MILLI_SECOND }
+fun milli_second.to_milli_seconds(): milli_second = this
+fun second.to_milli_seconds(): milli_second = milli_second { this.value * MILLI_SECONDS_PER_SECOND }
+fun minute.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND }
+fun hour.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND }
+fun day.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND }
+fun week.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND }
+
+fun nano_second.to_seconds(): second = second { this.value / NANO_SECONDS_PER_SECOND }
+fun micro_second.to_seconds(): second = second { this.value / MICRO_SECONDS_PER_SECOND }
+fun milli_second.to_seconds(): second = second { this.value / MILLI_SECONDS_PER_SECOND }
+fun second.to_seconds(): second = this
+fun minute.to_seconds(): second = second { this.value * SECONDS_PER_MINUTE }
+fun hour.to_seconds(): second = second { this.value * SECONDS_PER_HOUR }
+fun day.to_seconds(): second = second { this.value * SECONDS_PER_DAY }
+fun week.to_seconds(): second = second { this.value * SECONDS_PER_WEEK }
+
+fun nano_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND) }
+fun second.to_minutes(): minute = minute { this.value / SECONDS_PER_MINUTE }
+fun minute.to_minutes(): minute = this
+fun hour.to_minutes(): minute = minute { this.value * MINUTES_PER_HOUR }
+fun day.to_minutes(): minute = minute { this.value * MINUTES_PER_DAY }
+fun week.to_minutes(): minute = minute { this.value * MINUTES_PER_WEEK }
+
+fun nano_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND) }
+fun second.to_hours(): hour = hour { this.value / SECONDS_PER_HOUR }
+fun minute.to_hours(): hour = hour { this.value / MINUTES_PER_HOUR }
+fun hour.to_hours(): hour = this
+fun day.to_hours(): hour = hour { this.value * HOURS_PER_DAY }
+fun week.to_hours(): hour = hour { this.value * HOURS_PER_WEEK }
+
+fun nano_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND) }
+fun second.to_days(): day = day { this.value / SECONDS_PER_DAY }
+fun minute.to_days(): day = day { this.value / MINUTES_PER_DAY }
+fun hour.to_days(): day = day { this.value / HOURS_PER_DAY }
+fun day.to_days(): day = this
+fun week.to_days(): day = day { this.value * DAYS_PER_WEEK }
+
+fun nano_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND) }
+fun micro_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND) }
+fun milli_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND) }
+fun second.to_weeks(): week = week { this.value / SECONDS_PER_WEEK }
+fun minute.to_weeks(): week = week { this.value / MINUTES_PER_WEEK }
+fun hour.to_weeks(): week = week { this.value / HOURS_PER_WEEK }
+fun day.to_weeks(): week = week { this.value / DAYS_PER_WEEK }
+fun week.to_weeks(): week = this

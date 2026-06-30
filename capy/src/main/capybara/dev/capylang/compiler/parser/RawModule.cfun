@@ -1,0 +1,7 @@
+from /dev/capylang/compiler/parser/SourceKind import { SourceKind }
+
+/// Marker type for raw source values before parsing.
+data Raw {}
+
+/// Unparsed source module with module name, module path, input text, and source kind.
+data RawModule { name: String, path: String, input: String, sourceKind: SourceKind }

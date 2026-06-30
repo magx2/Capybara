@@ -1,0 +1,5 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/Definition import { Definition }
+
+/// Parsed functional module section containing top-level definitions.
+data Functional { definitions: List[Definition] }

@@ -1,0 +1,72 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/System import { current_millis, nano_time }
+from EffectBind import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/EffectBind.cfun", [
+        binds_effects_lazily().map(assertion => test("binds effects lazily", () => assertion)),
+        test("constructing delayed failure does not run thunk", () => constructing_delayed_failure_does_not_run_thunk()),
+        effect_delay_is_lazy_and_non_memoized().map(assertion => test("effect delay is lazy and non-memoized", () => assertion)),
+        clock_now_returns_iso_date_time_effect().map(assertion => test("clock now returns ISO date-time effect", () => assertion)),
+        current_millis_returns_bounded_current_time_effect().map(assertion => test("current millis returns bounded current time effect", () => assertion)),
+        nano_time_returns_bounded_monotonic_time_effect().map(assertion => test("nano time returns bounded monotonic time effect", () => assertion)),
+    ])
+
+fun binds_effects_lazily(): Effect[Assert] =
+    bind_effects_lazily_assertions()
+
+private fun bind_effects_lazily_assertions(): Effect[Assert] =
+    let sum <- add_effects(2, 3)
+    let nested <- nested_effect(7)
+    assert_all([
+        assert_that(sum).is_equal_to(5),
+        assert_that(nested).is_equal_to("v=7"),
+    ])
+
+fun constructing_delayed_failure_does_not_run_thunk(): Assert =
+    // The legacy Java host test also asserts unsafe_run() throws for delayed_divide_by_zero();
+    // the Capybara assertion framework does not currently expose a portable assert-throws primitive.
+    assert_that(construct_delayed_divide_by_zero()).is_true()
+
+fun effect_delay_is_lazy_and_non_memoized(): Effect[Assert] =
+    effect_delay_assertions()
+
+private fun effect_delay_assertions(): Effect[Assert] =
+    let effect = nano_time_value()
+    let first <- effect
+    let spin = consume_time(256)
+    let second <- effect
+    assert_all([
+        assert_that(spin).is_equal_to(256),
+        assert_that(second).is_greater_than(first),
+    ])
+
+private fun consume_time(count: int): int =
+    if count == 0 then 0 else 1 + consume_time(count - 1)
+
+fun clock_now_returns_iso_date_time_effect(): Effect[Assert] =
+    clock_now_iso().map(value =>
+        assert_that(value).contains("T")
+    )
+
+fun current_millis_returns_bounded_current_time_effect(): Effect[Assert] =
+    current_millis_assertions()
+
+private fun current_millis_assertions(): Effect[Assert] =
+    let before <- current_millis()
+    let actual <- current_millis_value()
+    let after <- current_millis()
+    // The old JavaScript host test inspected BigInt representation; this asserts portable long behavior.
+    assert_that(actual).is_between(before, after)
+
+fun nano_time_returns_bounded_monotonic_time_effect(): Effect[Assert] =
+    nano_time_assertions()
+
+private fun nano_time_assertions(): Effect[Assert] =
+    let before <- nano_time()
+    let actual <- nano_time_value()
+    let after <- nano_time()
+    // The old JavaScript host test inspected BigInt representation; this asserts portable long behavior.
+    assert_that(actual).is_between(before, after)

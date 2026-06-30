@@ -1,0 +1,75 @@
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+
+const BYTES_IN_KIB: double = 1024.0
+const BYTES_IN_MIB: double = 1048576.0
+const BYTES_IN_GIB: double = 1073741824.0
+
+/// Non-negative number of bytes.
+type byte_count -> long with constructor {
+    if value >= 0L
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "byte_count must be greater than or equal to 0" }
+}
+
+const ZERO_BYTES: byte_count = byte_count! { 0L }
+const ONE_KIB: byte_count = byte_count! { 1024L }
+const ONE_MIB: byte_count = byte_count! { 1048576L }
+const ONE_GIB: byte_count = byte_count! { 1073741824L }
+
+/// Adds two byte counts, returning `Error` on long overflow.
+///
+/// Example:
+/// ```cfun
+/// ONE_KIB + ONE_MIB
+/// ```
+/// Returns `Success` containing `1049600` bytes.
+fun byte_count.plus(other: byte_count): Result[byte_count] =
+    if this.value > MAX_LONG_VALUE - other.value
+    then Error { kind: "capy.lang.number.out_of_range", message: "byte_count addition overflow" }
+    else Success { byte_count! { this.value + other.value } }
+
+fun byte_count.`+`(other: byte_count): Result[byte_count] = this.plus(other)
+
+/// Subtracts `other` from this byte count.
+///
+/// The result is an error when subtraction would produce a negative byte count.
+fun byte_count.minus(other: byte_count): Result[byte_count] =
+    byte_count { this.value - other.value }
+
+fun byte_count.`-`(other: byte_count): Result[byte_count] = this.minus(other)
+
+/// Converts this byte count to kibibytes.
+///
+/// Example: `ONE_MIB.to_kib()` returns `1024.0`.
+fun byte_count.to_kib(): double =
+    this.value / BYTES_IN_KIB
+
+/// Converts this byte count to mebibytes.
+fun byte_count.to_mib(): double =
+    this.value / BYTES_IN_MIB
+
+/// Converts this byte count to gibibytes.
+fun byte_count.to_gib(): double =
+    this.value / BYTES_IN_GIB
+
+fun byte_count.`>`(other: byte_count): bool = this.value > other.value
+fun byte_count.`>=`(other: byte_count): bool = this.value >= other.value
+fun byte_count.`<`(other: byte_count): bool = this.value < other.value
+fun byte_count.`<=`(other: byte_count): bool = this.value <= other.value
+fun byte_count.`==`(other: byte_count): bool = this.value == other.value
+
+/// Function form of `left + right`.
+fun add_byte_count(left: byte_count, right: byte_count): Result[byte_count] = left.plus(right)
+
+/// Function form of `left - right`.
+fun subtract_byte_count(left: byte_count, right: byte_count): Result[byte_count] = left.minus(right)
+
+/// Function form of `value.to_kib()`.
+fun byte_count_to_kib(value: byte_count): double = value.to_kib()
+
+/// Function form of `value.to_mib()`.
+fun byte_count_to_mib(value: byte_count): double = value.to_mib()
+
+/// Function form of `value.to_gib()`.
+fun byte_count_to_gib(value: byte_count): double = value.to_gib()

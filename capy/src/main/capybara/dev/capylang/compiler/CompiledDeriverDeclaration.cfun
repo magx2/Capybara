@@ -1,0 +1,12 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+
+/// Linked deriver declaration with the methods exposed to generated code and the original source position.
+data CompiledDeriverDeclaration {
+    name: String,
+    visibility: String,
+    documentation: List[String],
+    methods: List[CompiledFunction],
+    location: CompiledSourceLocation
+}

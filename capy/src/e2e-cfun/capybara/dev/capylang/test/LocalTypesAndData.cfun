@@ -1,0 +1,74 @@
+from /capy/lang/Result import { * }
+
+fun foo_me(name: String): String =
+    union Name = Foo | Boo | Unknown
+    data Foo { foo: String }
+    data Boo { boo: String }
+    data Unknown { unkn: String }
+    fun name(value: Name): String =
+        match value with
+        case Foo { foo } -> foo
+        case Boo { boo } -> boo
+        case Unknown { unkn } -> unkn
+    ---
+    let x =
+        match name with
+        case "foo" -> Foo { "xyz" }
+        case "boo" -> Boo { "zyx" }
+        case _ -> Unknown { name }
+    name(x)
+
+fun local_data_with_imported_result(v: int): String =
+    data Entry { key: String, value: Result[int] }
+    ---
+    let entry = Entry { "k", Success { value: v } }
+    match entry.value with
+    case Success { value } -> "ok:" + value
+    case Error { message } -> "err:" + message
+
+fun local_data_used_in_local_function(v: int): String =
+    data Parse[T] { value: T }
+    fun unwrap(parse: Parse[int]): String =
+        "value:" + parse.value
+    ---
+    unwrap(Parse { v })
+
+fun local_generic_data_used_in_local_function_return_type(v: int): String =
+    data Parse[T] { value: T }
+    fun parse(value: int): Result[Parse[int]] =
+        Success { Parse { value } }
+    ---
+    match parse(v) with
+    case Success { value } -> "value:" + value.value
+    case Error { message } -> "error:" + message
+
+fun local_single_used_in_local_type_and_function(use_stop: bool): String =
+    union Token = Value | Stop
+    data Value { value: int }
+    data Stop {}
+    fun describe(token: Token): String =
+        match token with
+        case Value { value } -> "value:" + value
+        case Stop -> "stop"
+    ---
+    describe(if use_stop then Stop {} else Value { 7 })
+
+fun local_generic_data_field_access_followed_by_index(buffer: String): String =
+    data Parse[T] { buffer: String, value: T }
+    fun parse(value: String): Result[Parse[int]] =
+        Success { Parse { buffer: value, value: 1 } }
+    ---
+    match (parse(buffer) |* parse =>
+        match parse.buffer[0] with
+        case Some { value } -> Success { value }
+        case None -> Error { "" }) with
+    case Success { value } -> value
+    case Error { message } -> message
+
+fun local_generic_option_constructor_pattern_binding(v: int): int =
+    data Parse[T] { value: T }
+    ---
+    let parse: Parse[Option[int]] = Parse { Some { v } }
+    match parse.value with
+    case Some { value } -> value * 10 + v
+    case None -> 0

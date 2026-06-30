@@ -1,0 +1,5 @@
+union T1 = TD1 | TD2
+data TD1 { x: String }
+data TD2 { y: String }
+
+data DataX { xyz: String }

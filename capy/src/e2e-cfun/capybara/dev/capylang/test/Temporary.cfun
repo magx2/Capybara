@@ -1,0 +1,3 @@
+union Temporary { name: String } = Foo | Boo
+data Foo { fooishnes: int }
+data Boo { booishnes: int }

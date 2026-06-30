@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+import /dev/capylang/test/compile_generate/SimpleMainCompileGenerate
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/compile_generate/SimpleMainCompileGenerate.cfun", [
+        test("sum adds integer operands", () => sum_adds_integer_operands()),
+    ])
+
+// The legacy Java fixture asserted compile/generate artifacts, and the legacy
+// JS fixture scanned generated module internals. Running this Capybara test on
+// each backend covers compilation, module loading, and portable behavior.
+
+private fun sum_adds_integer_operands(): Assert =
+    assert_all([
+        assert_that(SimpleMainCompileGenerate.sum(1, 2)).is_equal_to(3),
+        assert_that(SimpleMainCompileGenerate.sum(-5, 2)).is_equal_to(-3),
+        assert_that(SimpleMainCompileGenerate.sum(0, 0)).is_equal_to(0),
+    ])

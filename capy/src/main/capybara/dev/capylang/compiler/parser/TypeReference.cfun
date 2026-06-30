@@ -1,0 +1,4 @@
+from /capy/collection/List import { List }
+
+/// Parsed type reference with a type name and nested type arguments.
+data TypeReference { name: String, arguments: List[TypeReference] }
