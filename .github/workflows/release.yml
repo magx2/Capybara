@@ -166,7 +166,7 @@ jobs:
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
           cp "capy/build/libs/capy-${VERSION}.jar" "dist/capy-${VERSION}.jar"
-          cp "build-tool/gradle/build/libs/gradle-${VERSION}.jar" "dist/gradle-${VERSION}.jar"
+          cp "build-tool/gradle/build/libs/capy-gradle-${VERSION}.jar" "dist/capy-gradle-${VERSION}.jar"
           cp "lib/capybara-lib/build/libs/capybara-lib-${VERSION}.jar" "dist/capybara-lib-${VERSION}.jar"
           native-image --no-fallback -H:Path=dist -jar "capy/build/libs/capy-${VERSION}.jar"
           mv "dist/capy-${VERSION}" "dist/capy-${VERSION}-linux-x64"
