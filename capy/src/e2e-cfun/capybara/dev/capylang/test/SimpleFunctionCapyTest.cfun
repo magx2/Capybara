@@ -1,0 +1,114 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from SimpleFunction import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SimpleFunction.cfun", [
+        test("classify returns positive only for positive integers", () => classify_returns_positive_only_for_positive_integers()),
+        test("always_true returns true", () => always_true_returns_true()),
+        test("arithmetic functions evaluate basic integer operations", () => arithmetic_functions_evaluate_basic_integer_operations()),
+        test("is_positive returns true only for positive integers", () => is_positive_returns_true_only_for_positive_integers()),
+        test("greet prefixes the provided name", () => greet_prefixes_the_provided_name()),
+        test("escaped newline concatenation produces line breaks", () => escaped_newline_concatenation_produces_line_breaks()),
+        test("escaped newline interpolation produces line breaks", () => escaped_newline_interpolation_produces_line_breaks()),
+        test("multiple escaped newline concatenation preserves each break", () => multiple_escaped_newline_concatenation_preserves_each_break()),
+        test("escaped backslash newline stays literal", () => escaped_backslash_newline_stays_literal()),
+        test("double_then_classify classifies the doubled integer", () => double_then_classify_classifies_the_doubled_integer()),
+        test("order_of_expression preserves grouped expression evaluation order", () => order_of_expression_preserves_grouped_expression_evaluation_order()),
+        test("power evaluates integer exponents", () => power_evaluates_integer_exponents()),
+        test("static_list returns the expected list", () => static_list_returns_the_expected_list()),
+        test("call_private_and_public can call private and public functions", () => call_private_and_public_can_call_private_and_public_functions()),
+        test("typed string lets preserve explicit annotations", () => typed_string_lets_preserve_explicit_annotations()),
+        test("typed tuple lets preserve explicit annotations", () => typed_tuple_lets_preserve_explicit_annotations()),
+        test("typed primitive and collection lets preserve explicit annotations", () => typed_primitive_and_collection_lets_preserve_explicit_annotations()),
+    ])
+
+private fun classify_returns_positive_only_for_positive_integers(): Assert =
+    assert_all([
+        assert_that(classify(1)).is_equal_to("positive"),
+        assert_that(classify(0)).is_equal_to("non-positive"),
+        assert_that(classify(-1)).is_equal_to("non-positive"),
+    ])
+
+private fun always_true_returns_true(): Assert =
+    assert_that(always_true()).is_true()
+
+private fun arithmetic_functions_evaluate_basic_integer_operations(): Assert =
+    assert_all([
+        assert_that(add(1, 2)).is_equal_to(3),
+        assert_that(subtract(1, 2)).is_equal_to(-1),
+        assert_that(multiply(5, 3)).is_equal_to(15),
+        assert_that(divide(10, 2)).is_equal_to(5),
+        assert_that(divide(9, 2)).is_equal_to(4),
+    ])
+
+private fun is_positive_returns_true_only_for_positive_integers(): Assert =
+    assert_all([
+        assert_that(is_positive(1)).is_true(),
+        assert_that(is_positive(0)).is_false(),
+        assert_that(is_positive(-1)).is_false(),
+    ])
+
+private fun greet_prefixes_the_provided_name(): Assert =
+    assert_that(greet("World")).is_equal_to("Hello, World")
+
+private fun escaped_newline_concatenation_produces_line_breaks(): Assert =
+    assert_that(escaped_newline_concat()).is_equal_to('first line' + '\n' + 'second line')
+
+private fun escaped_newline_interpolation_produces_line_breaks(): Assert =
+    assert_that(escaped_newline_interpolation("Capybara")).is_equal_to('title: Capybara' + '\n' + 'body')
+
+private fun multiple_escaped_newline_concatenation_preserves_each_break(): Assert =
+    assert_that(multiple_escaped_newline_concat()).is_equal_to('header' + '\n' + '\n' + 'content' + '\n')
+
+private fun escaped_backslash_newline_stays_literal(): Assert =
+    assert_that(escaped_backslash_n_concat()).is_equal_to('literal' + '\\' + 'n' + 'text')
+
+private fun double_then_classify_classifies_the_doubled_integer(): Assert =
+    assert_all([
+        assert_that(double_then_classify(1)).is_equal_to("positive"),
+        assert_that(double_then_classify(0)).is_equal_to("non-positive"),
+        assert_that(double_then_classify(-1)).is_equal_to("non-positive"),
+    ])
+
+private fun order_of_expression_preserves_grouped_expression_evaluation_order(): Assert =
+    assert_that(order_of_expression(3, 5)).is_equal_to(77)
+
+private fun power_evaluates_integer_exponents(): Assert =
+    assert_all([
+        assert_that(power(2, 3)).is_equal_to(8),
+        assert_that(power(1, 100)).is_equal_to(1),
+        assert_that(power(0, 100)).is_equal_to(0),
+        assert_that(power(0, -100)).is_equal_to(1),
+        assert_that(power(0, 0)).is_equal_to(1),
+        assert_that(power(-4, 2)).is_equal_to(16),
+        assert_that(power(-4, 3)).is_equal_to(-64),
+    ])
+
+private fun static_list_returns_the_expected_list(): Assert =
+    assert_that(static_list()).is_equal_to([1, 2, 3])
+
+private fun call_private_and_public_can_call_private_and_public_functions(): Assert =
+    assert_that(call_private_and_public(3)).is_equal_to(9)
+
+private fun typed_string_lets_preserve_explicit_annotations(): Assert =
+    assert_that(typed_let_string()).is_equal_to("d")
+
+private fun typed_tuple_lets_preserve_explicit_annotations(): Assert =
+    assert_all([
+        assert_that(typed_let_tuple_string()).is_equal_to("d"),
+        assert_that(typed_let_tuple_int()).is_equal_to(1),
+    ])
+
+private fun typed_primitive_and_collection_lets_preserve_explicit_annotations(): Assert =
+    assert_all([
+        assert_that(typed_let_bool()).is_true(),
+        assert_that(typed_let_int()).is_equal_to(7),
+        assert_that(typed_let_long()).is_equal_to(7L),
+        assert_that(typed_let_float()).is_equal_to(1.5f),
+        assert_that(typed_let_double()).is_equal_to(1.5d),
+        assert_that(typed_let_list()).is_equal_to([1, 2, 3]),
+        assert_that(typed_let_set()).is_equal_to({1, 2, 3}),
+        assert_that(typed_let_dict()).is_equal_to({"a": 1, "b": 2}),
+    ])

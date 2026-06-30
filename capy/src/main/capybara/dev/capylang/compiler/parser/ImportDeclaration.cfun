@@ -1,0 +1,12 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+/// Parsed import directive with module path, selected names, exclusions, wildcard and qualified flags.
+data ImportDeclaration {
+    modulePath: String,
+    importedNames: List[String],
+    excludedNames: List[String],
+    wildcard: bool,
+    qualified: bool,
+    location: SourceLocation
+}

@@ -1,0 +1,5 @@
+annotation SupportDataLabel on data {
+    label: String
+    order: int = 1
+    active: bool = true
+}

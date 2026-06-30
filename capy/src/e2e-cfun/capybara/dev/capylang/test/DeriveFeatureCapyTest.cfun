@@ -1,0 +1,42 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from DeriveFeature import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/DeriveFeature.cfun", [
+        test("derives Show for data fields", () => derives_show_for_data_fields()),
+        test("shows single empty value", () => shows_single_empty_value()),
+        test("derives Show from linked inherited fields", () => derives_show_from_linked_inherited_fields()),
+        test("derives Show for type fields", () => derives_show_for_type_fields()),
+        test("derives method with runtime parameter", () => derives_method_with_runtime_parameter()),
+        test("derives method with metadata primitive and data parameters", () => derives_method_with_metadata_primitive_and_data_parameters()),
+        test("derives method with reflected field values", () => derives_method_with_reflected_field_values()),
+    ])
+
+fun derives_show_for_data_fields(): Assert =
+    assert_that(show_user()).is_equal_to("DerivedUser { name, age }")
+
+fun shows_single_empty_value(): Assert =
+    assert_that(show_empty()).is_equal_to("Empty {  }")
+
+fun derives_show_from_linked_inherited_fields(): Assert =
+    assert_that(show_employee()).is_equal_to("Employee { id, department }")
+
+fun derives_show_for_type_fields(): Assert =
+    assert_that(show_named()).is_equal_to("Named { id }")
+
+fun derives_method_with_runtime_parameter(): Assert =
+    assert_all([
+        assert_that(user_bigger_than(40)).is_true(),
+        assert_that(user_bigger_than(50)).is_false(),
+    ])
+
+fun derives_method_with_metadata_primitive_and_data_parameters(): Assert =
+    assert_all([
+        assert_that(user_mixed_parameter_derive_true()).is_true(),
+        assert_that(user_mixed_parameter_derive_false()).is_false(),
+    ])
+
+fun derives_method_with_reflected_field_values(): Assert =
+    assert_that(user_field_values_summary()).is_equal_to("name=Ada,age=42")

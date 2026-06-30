@@ -1,0 +1,67 @@
+from /capy/lang/Result import { * }
+
+/// Fractional value between zero and one.
+type ratio -> double with constructor {
+    if value >= 0.0 & value <= 1.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "ratio must be between 0.0 and 1.0" }
+}
+
+/// Percentage value between zero and one hundred.
+type percentage -> double with constructor {
+    if value >= 0.0 & value <= 100.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "percentage must be between 0.0 and 100.0" }
+}
+
+/// Probability value between zero and one.
+type probability -> double with constructor {
+    if value >= 0.0 & value <= 1.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "probability must be between 0.0 and 1.0" }
+}
+
+const ZERO_RATIO: ratio = ratio! { 0.0 }
+const WHOLE_RATIO: ratio = ratio! { 1.0 }
+const ZERO_PERCENTAGE: percentage = percentage! { 0.0 }
+const FULL_PERCENTAGE: percentage = percentage! { 100.0 }
+const IMPOSSIBLE_PROBABILITY: probability = probability! { 0.0 }
+const CERTAIN_PROBABILITY: probability = probability! { 1.0 }
+
+fun ratio.to_percentage(): percentage =
+    percentage! { this.value * 100.0 }
+
+fun ratio.to_probability(): probability =
+    probability! { this.value }
+
+fun percentage.to_ratio(): ratio =
+    ratio! { this.value / 100.0 }
+
+fun probability.to_ratio(): ratio =
+    ratio! { this.value }
+
+fun ratio.`>`(other: ratio): bool = this.value > other.value
+fun ratio.`>=`(other: ratio): bool = this.value >= other.value
+fun ratio.`<`(other: ratio): bool = this.value < other.value
+fun ratio.`<=`(other: ratio): bool = this.value <= other.value
+fun ratio.`==`(other: ratio): bool = this.value == other.value
+
+fun percentage.`>`(other: percentage): bool = this.value > other.value
+fun percentage.`>=`(other: percentage): bool = this.value >= other.value
+fun percentage.`<`(other: percentage): bool = this.value < other.value
+fun percentage.`<=`(other: percentage): bool = this.value <= other.value
+fun percentage.`==`(other: percentage): bool = this.value == other.value
+
+fun probability.`>`(other: probability): bool = this.value > other.value
+fun probability.`>=`(other: probability): bool = this.value >= other.value
+fun probability.`<`(other: probability): bool = this.value < other.value
+fun probability.`<=`(other: probability): bool = this.value <= other.value
+fun probability.`==`(other: probability): bool = this.value == other.value
+
+fun ratio_to_percentage(value: ratio): percentage = value.to_percentage()
+
+fun ratio_to_probability(value: ratio): probability = value.to_probability()
+
+fun percentage_to_ratio(value: percentage): ratio = value.to_ratio()
+
+fun probability_to_ratio(value: probability): ratio = value.to_ratio()

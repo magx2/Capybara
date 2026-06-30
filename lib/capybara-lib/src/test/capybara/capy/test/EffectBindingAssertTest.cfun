@@ -1,0 +1,22 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/test/EffectBindingAssert.cfun", [
+        bound_effect_result_uses_normal_assertion().map(assertion => test("bound effect result uses normal assertion", () => assertion)),
+        bound_effect_value_uses_normal_assertion().map(assertion => test("bound effect value uses normal assertion", () => assertion)),
+    ])
+
+fun bound_effect_result_uses_normal_assertion(): Effect[Assert] =
+    let value <- sequence_two("Capy", "Bara")
+    assert_that(value).is_equal_to("Capy:Bara")
+
+fun bound_effect_value_uses_normal_assertion(): Effect[Assert] =
+    let value <- pure("Capybara")
+    assert_that(value).starts_with("Capy")
+
+private fun sequence_two(left: String, right: String): Effect[String] =
+    let first <- pure(left)
+    let second <- pure(right)
+    first + ":" + second

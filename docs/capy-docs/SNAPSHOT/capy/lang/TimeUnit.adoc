@@ -1,0 +1,324 @@
+= Module TimeUnit
+
+== Types
+
+[[type-day]]
+=== type day: long
+
+Time duration measured in days.
+
+==== Functions
+
+===== fun day.to_days(): xref:#type-day[day]
+
+
+
+===== fun day.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun day.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun day.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun day.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun day.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun day.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun day.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-hour]]
+=== type hour: long
+
+Time duration measured in hours.
+
+==== Functions
+
+===== fun hour.to_days(): xref:#type-day[day]
+
+
+
+===== fun hour.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun hour.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun hour.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun hour.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun hour.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun hour.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun hour.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-micro_second]]
+=== type micro_second: long
+
+Time duration measured in microseconds.
+
+==== Functions
+
+===== fun micro_second.to_days(): xref:#type-day[day]
+
+
+
+===== fun micro_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun micro_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun micro_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun micro_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun micro_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun micro_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun micro_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-milli_second]]
+=== type milli_second: long
+
+Time duration measured in milliseconds.
+
+==== Functions
+
+===== fun milli_second.to_days(): xref:#type-day[day]
+
+
+
+===== fun milli_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun milli_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun milli_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun milli_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun milli_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun milli_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun milli_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-minute]]
+=== type minute: long
+
+Time duration measured in minutes.
+
+==== Functions
+
+===== fun minute.to_days(): xref:#type-day[day]
+
+
+
+===== fun minute.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun minute.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun minute.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun minute.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun minute.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun minute.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun minute.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-nano_second]]
+=== type nano_second: long
+
+Time duration measured in nanoseconds.
+
+==== Functions
+
+===== fun nano_second.to_days(): xref:#type-day[day]
+
+
+
+===== fun nano_second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun nano_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun nano_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun nano_second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun nano_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun nano_second.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun nano_second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-second]]
+=== type second: long
+
+Time duration measured in seconds.
+
+==== Functions
+
+===== fun second.to_days(): xref:#type-day[day]
+
+
+
+===== fun second.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun second.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun second.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun second.to_weeks(): xref:#type-week[week]
+
+
+
+
+[[type-week]]
+=== type week: long
+
+Time duration measured in weeks.
+
+==== Functions
+
+===== fun week.to_days(): xref:#type-day[day]
+
+
+
+===== fun week.to_hours(): xref:#type-hour[hour]
+
+
+
+===== fun week.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+
+
+===== fun week.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+
+
+===== fun week.to_minutes(): xref:#type-minute[minute]
+
+
+
+===== fun week.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+
+
+===== fun week.to_seconds(): xref:#type-second[second]
+
+
+
+===== fun week.to_weeks(): xref:#type-week[week]
+
+
+
+

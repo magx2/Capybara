@@ -1,0 +1,6 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/FunctionAnnotationArgument import { FunctionAnnotationArgument }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+/// Parsed function-level annotation use with name, arguments, and source location.
+data FunctionAnnotationApplication { name: String, arguments: List[FunctionAnnotationArgument], location: SourceLocation }

@@ -1,0 +1,62 @@
+from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
+from /capy/lang/Ordering import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/CollectionTypes import { * }
+
+fun contains(s: String, part: String): bool = s ? part
+
+fun contains_method(s: String, part: String): bool = s.contains(part)
+
+fun any(s: String): bool = s.any(ch => ch == "y")
+
+fun any_with_index(s: String): bool = s.any((ch, idx) => ch == "y" & idx == 3)
+
+fun all(s: String): bool = s.all(ch => ch != " ")
+
+fun all_with_index(s: String): bool = s.all((ch, idx) => ch != " " & idx >= 0)
+
+fun starts_with_method(s: String, part: String): bool = s.starts_with(part)
+
+fun end_with_method(s: String, part: String): bool = s.end_with(part)
+
+fun trim_method(s: String): String = s.trim()
+
+fun replace_method(s: String, old: String, new: String): String = s.replace(old, new)
+
+fun compare_method(s: String, other: String): Ordering = s.compare(other)
+
+fun char_compare_method(left: char, right: char): Ordering = left.compare(right)
+
+fun is_empty_method(s: String): bool = s.is_empty()
+
+data BufferHolder { buffer: String }
+
+fun not_is_empty_method(s: String): bool = !s.is_empty()
+
+fun not_nested_is_empty(holder: BufferHolder): bool = !holder.buffer.is_empty()
+
+fun not_trimmed_is_empty(s: String): bool = !s.trim().is_empty()
+
+fun length(s: String) = s.size()
+
+fun make_char(value: String): Result[char] = char { value }
+
+fun char_to_string(value: char): String = value.to_string()
+
+fun char_length(value: char) = value.size()
+
+fun char_at_or_question(value: String, idx: index): String =
+    match value.get(idx) with
+    case Some { char } -> char.to_string()
+    case None -> "?"
+
+fun to_int_method(s: String): Result[int] = s.to_int()
+
+fun to_long_method(s: String): Result[long] = s.to_long()
+
+fun to_double_method(s: String): Result[double] = s.to_double()
+
+fun to_float_method(s: String): Result[float] = s.to_float()
+
+fun to_bool_method(s: String): Result[bool] = s.to_bool()

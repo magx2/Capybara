@@ -1,0 +1,229 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/Set import { * }
+from SetCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/collection/SetCollection.cfun", [
+        test("set literals return expected values", () => set_literals_return_expected_values()),
+        test("append adds value without mutating input", () => append_adds_value_without_mutating_input()),
+        test("append_set unions sets without mutating inputs", () => append_set_unions_sets_without_mutating_inputs()),
+        test("remove removes value without mutating input", () => remove_removes_value_without_mutating_input()),
+        test("remove_set removes right-hand values without mutating inputs", () => remove_set_removes_right_hand_values_without_mutating_inputs()),
+        test("contains detects present and missing values", () => contains_detects_present_and_missing_values()),
+        test("structural set values compare by value", () => structural_set_values_compare_by_value()),
+        test("subset operations report relationships", () => subset_operations_report_relationships()),
+        test("proper subset operations require a smaller left set", () => proper_subset_operations_require_a_smaller_left_set()),
+        test("superset operations report relationships", () => superset_operations_report_relationships()),
+        test("proper superset operations require a larger left set", () => proper_superset_operations_require_a_larger_left_set()),
+        test("union operations combine values", () => union_operations_combine_values()),
+        test("intersection operations keep shared values", () => intersection_operations_keep_shared_values()),
+        test("difference removes right-hand values", () => difference_removes_right_hand_values()),
+        test("symmetric difference keeps values from exactly one side", () => symmetric_difference_keeps_values_from_exactly_one_side()),
+        test("cartesian product returns tuple pairs", () => cartesian_product_returns_tuple_pairs()),
+        test("power set returns all subsets", () => power_set_returns_all_subsets()),
+        test("any reports whether any value matches", () => any_reports_whether_any_value_matches()),
+        test("any_empty returns false for empty set", () => any_empty_returns_false_for_empty_set()),
+        test("all reports whether all values match", () => all_reports_whether_all_values_match()),
+        test("all_empty returns true for empty set", () => all_empty_returns_true_for_empty_set()),
+        test("is_empty reports empty state", () => set_collection_is_empty_reports_empty_state()),
+        test("not_is_empty negates empty state", () => set_collection_not_is_empty_negates_empty_state()),
+        test("not_nested_is_empty reads nested set field", () => not_nested_is_empty_reads_nested_set_field()),
+        test("size returns set size", () => size_returns_set_size()),
+        test("let_named_set returns local set size", () => let_named_set_returns_local_set_size()),
+    ])
+
+private fun empty_int_set(): Set[int] = {1, 2} - {1, 2}
+
+private fun single_int_set(value: int): Set[int] = empty_int_set() + value
+
+private fun set_literals_return_expected_values(): Assert =
+    assert_all([
+        assert_that(static_set()).is_equal_to({1, 2, 3}),
+        assert_that(empty_static_set()).is_empty(),
+        assert_that(empty_static_set_with_spaces()).is_empty(),
+        assert_that(static_set_with_trailing_comma()).is_equal_to({1, 2, 3}),
+    ])
+
+private fun append_adds_value_without_mutating_input(): Assert =
+    let input = {1, 2, 3}
+    let result = append(input)
+    assert_all([
+        assert_that(result).is_equal_to({1, 2, 3, 5}),
+        assert_that(input).is_equal_to({1, 2, 3}),
+    ])
+
+private fun append_set_unions_sets_without_mutating_inputs(): Assert =
+    let left = {1, 2}
+    let right = {3, 4}
+    let result = append_set(left, right)
+    assert_all([
+        assert_that(result).is_equal_to({1, 2, 3, 4}),
+        assert_that(left).is_equal_to({1, 2}),
+        assert_that(right).is_equal_to({3, 4}),
+    ])
+
+private fun remove_removes_value_without_mutating_input(): Assert =
+    let input = {1, 2, 3}
+    let result = remove(input)
+    assert_all([
+        assert_that(result).is_equal_to({1, 3}),
+        assert_that(input).is_equal_to({1, 2, 3}),
+    ])
+
+private fun remove_set_removes_right_hand_values_without_mutating_inputs(): Assert =
+    let left = {1, 2, 3, 4}
+    let right = {2, 4}
+    let result = remove_set(left, right)
+    assert_all([
+        assert_that(result).is_equal_to({1, 3}),
+        assert_that(left).is_equal_to({1, 2, 3, 4}),
+        assert_that(right).is_equal_to({2, 4}),
+    ])
+
+private fun contains_detects_present_and_missing_values(): Assert =
+    assert_all([
+        assert_that(contains({1, 2, 3}, 2)).is_true(),
+        assert_that(contains({1, 2, 3}, 9)).is_false(),
+        assert_that(contains_method({1, 2, 3}, 2)).is_true(),
+        assert_that(contains_method({1, 2, 3}, 9)).is_false(),
+    ])
+
+private fun structural_set_values_compare_by_value(): Assert =
+    let left = ada_user_set()
+    let right = ada_user_set()
+    assert_all([
+        assert_that(contains_structural_data_operator(left)).is_true(),
+        assert_that(contains_structural_data_method(left)).is_true(),
+        assert_that(contains_structural_tuple({(1, "one"),})).is_true(),
+        assert_that(structural_literal_size()).is_one(),
+        assert_that(structural_append_size(left)).is_one(),
+        assert_that(structural_union_size(left, right)).is_one(),
+        assert_that(structural_mapped_values()).has_size(1),
+        assert_that(structural_proper_subset_after_union(left, right)).is_false(),
+        assert_that(structural_power_set_size(duplicate_ada_user_set())).is_equal_to(2),
+    ])
+
+private fun subset_operations_report_relationships(): Assert =
+    assert_all([
+        assert_that(subset_named({1, 2}, {1, 2, 3})).is_true(),
+        assert_that(subset_named({1, 4}, {1, 2, 3})).is_false(),
+        assert_that(subset_symbol({1, 2}, {1, 2, 3})).is_true(),
+        assert_that(subset_symbol({1, 4}, {1, 2, 3})).is_false(),
+    ])
+
+private fun proper_subset_operations_require_a_smaller_left_set(): Assert =
+    assert_all([
+        assert_that(proper_subset_named({1, 2}, {1, 2, 3})).is_true(),
+        assert_that(proper_subset_named({1, 2}, {1, 2})).is_false(),
+        assert_that(proper_subset_symbol({1, 2}, {1, 2, 3})).is_true(),
+        assert_that(proper_subset_symbol({1, 2}, {1, 2})).is_false(),
+    ])
+
+private fun superset_operations_report_relationships(): Assert =
+    assert_all([
+        assert_that(superset_named({1, 2, 3}, {1, 2})).is_true(),
+        assert_that(superset_named({1, 2, 3}, {1, 4})).is_false(),
+        assert_that(superset_symbol({1, 2, 3}, {1, 2})).is_true(),
+        assert_that(superset_symbol({1, 2, 3}, {1, 4})).is_false(),
+    ])
+
+private fun proper_superset_operations_require_a_larger_left_set(): Assert =
+    assert_all([
+        assert_that(proper_superset_named({1, 2, 3}, {1, 2})).is_true(),
+        assert_that(proper_superset_named({1, 2}, {1, 2})).is_false(),
+        assert_that(proper_superset_symbol({1, 2, 3}, {1, 2})).is_true(),
+        assert_that(proper_superset_symbol({1, 2}, {1, 2})).is_false(),
+    ])
+
+private fun union_operations_combine_values(): Assert =
+    assert_all([
+        assert_that(union_named({1, 2}, {2, 3})).is_equal_to({1, 2, 3}),
+        assert_that(union_symbol({1, 2}, {2, 3})).is_equal_to({1, 2, 3}),
+    ])
+
+private fun intersection_operations_keep_shared_values(): Assert =
+    assert_all([
+        assert_that(intersection_named({1, 2, 3}, {2, 3, 4})).is_equal_to({2, 3}),
+        assert_that(intersection_symbol({1, 2, 3}, {2, 3, 4})).is_equal_to({2, 3}),
+    ])
+
+private fun difference_removes_right_hand_values(): Assert =
+    assert_that(difference_named({1, 2, 3}, single_int_set(2))).is_equal_to({1, 3})
+
+private fun symmetric_difference_keeps_values_from_exactly_one_side(): Assert =
+    assert_all([
+        assert_that(symmetric_difference_named({1, 2, 3}, {2, 3, 4})).is_equal_to({1, 4}),
+        assert_that(symmetric_difference_symbol({1, 2, 3}, {2, 3, 4})).is_equal_to({1, 4}),
+    ])
+
+private fun cartesian_product_returns_tuple_pairs(): Assert =
+    let expected: Set[Tuple[int, String]] = {
+        (1, "a"),
+        (1, "b"),
+        (2, "a"),
+        (2, "b"),
+    }
+    assert_all([
+        assert_that(cartesian_product_named({1, 2}, {"a", "b"})).is_equal_to(expected),
+        assert_that(cartesian_product_symbol({1, 2}, {"a", "b"})).is_equal_to(expected),
+    ])
+
+private fun power_set_returns_all_subsets(): Assert =
+    let empty = empty_int_set()
+    let expected: Set[Set[int]] = {
+        empty,
+        single_int_set(1),
+        single_int_set(2),
+        {1, 2},
+    }
+    assert_all([
+        assert_that(power_set_named({1, 2})).is_equal_to(expected),
+        assert_that(power_set_symbol({1, 2})).is_equal_to(expected),
+    ])
+
+private fun any_reports_whether_any_value_matches(): Assert =
+    assert_all([
+        assert_that(any({1, 2, 3})).is_true(),
+        assert_that(any({0, 1, 2})).is_false(),
+    ])
+
+private fun any_empty_returns_false_for_empty_set(): Assert =
+    assert_that(any_empty(empty_int_set())).is_false()
+
+private fun all_reports_whether_all_values_match(): Assert =
+    assert_all([
+        assert_that(all({1, 2, 3})).is_true(),
+        assert_that(all({0, 1, 2})).is_false(),
+    ])
+
+private fun all_empty_returns_true_for_empty_set(): Assert =
+    assert_that(all_empty(empty_int_set())).is_true()
+
+private fun set_collection_is_empty_reports_empty_state(): Assert =
+    assert_all([
+        assert_that(is_empty(empty_int_set())).is_true(),
+        assert_that(is_empty({1, 2, 3})).is_false(),
+    ])
+
+private fun set_collection_not_is_empty_negates_empty_state(): Assert =
+    assert_all([
+        assert_that(not_is_empty(empty_int_set())).is_false(),
+        assert_that(not_is_empty({1, 2, 3})).is_true(),
+    ])
+
+private fun not_nested_is_empty_reads_nested_set_field(): Assert =
+    assert_all([
+        assert_that(not_nested_is_empty(SetHolder { values: empty_int_set() })).is_false(),
+        assert_that(not_nested_is_empty(SetHolder { values: {1, 2, 3} })).is_true(),
+    ])
+
+private fun size_returns_set_size(): Assert =
+    assert_all([
+        assert_that(size({1, 2, 3})).is_equal_to(3),
+        assert_that(size(empty_int_set())).is_zero(),
+    ])
+
+private fun let_named_set_returns_local_set_size(): Assert =
+    assert_that(let_named_set()).is_equal_to(3)

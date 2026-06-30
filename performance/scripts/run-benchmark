@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+import csv
+import os
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+METRIC_HEADERS = [
+    "java-compile",
+    "java-generate-java",
+    "java-generate-python",
+    "java-generate-js",
+    "java-compile-test",
+    "python-compile",
+    "python-generate-java",
+    "python-generate-python",
+    "python-generate-js",
+    "python-compile-test",
+    "js-compile",
+    "js-generate-java",
+    "js-generate-python",
+    "js-generate-js",
+    "js-compile-test",
+]
+BACKENDS = ("java", "python", "js")
+
+
+def command_output(args):
+    return subprocess.check_output(args, text=True).strip()
+
+
+ROOT_DIR = Path(command_output(["git", "rev-parse", "--show-toplevel"]))
+PERFORMANCE_DIR = ROOT_DIR / "performance"
+SCRIPTS_DIR = PERFORMANCE_DIR / "scripts"
+TEST_PROJECT_DIR = PERFORMANCE_DIR / "test-project"
+PROJECT_SRC_DIR = TEST_PROJECT_DIR / "src"
+PROJECT_BUILD_DIR = TEST_PROJECT_DIR / "build"
+RESULTS_CSV = PERFORMANCE_DIR / "results.csv"
+COMPILER_JAR_MARKER = PROJECT_BUILD_DIR / "compiler-jar"
+
+
+def run(args, **kwargs):
+    subprocess.run([str(arg) for arg in args], check=True, **kwargs)
+
+
+def capy_jar():
+    configured = os.environ.get("CAPY_JAR")
+    if configured:
+        return Path(configured)
+    if COMPILER_JAR_MARKER.is_file():
+        marker_value = COMPILER_JAR_MARKER.read_text().strip()
+        jar = Path(marker_value)
+        if jar.is_file():
+            return jar
+    print("No assembled compiler jar found. Run performance/scripts/assemble-compiler first.", file=sys.stderr)
+    sys.exit(1)
+
+
+def prepare_linked_input(output_dir):
+    jar = capy_jar()
+    shutil.rmtree(output_dir, ignore_errors=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run([
+        "java",
+        "-jar",
+        jar,
+        "compile",
+        "--input",
+        PROJECT_SRC_DIR,
+        "--output",
+        output_dir,
+        "--log",
+        "WARN",
+    ])
+
+
+def measure(args):
+    start = time.perf_counter()
+    run(args)
+    return f"{time.perf_counter() - start:.3f}"
+
+
+def run_benchmark():
+    run([SCRIPTS_DIR / "assemble-compiler"], stdout=subprocess.DEVNULL)
+
+    timings = {}
+    for runner in BACKENDS:
+        run([SCRIPTS_DIR / "clean"])
+        timings[f"{runner}-compile"] = measure([SCRIPTS_DIR / "compile", runner])
+
+        for backend in BACKENDS:
+            run([SCRIPTS_DIR / "clean"])
+            linked_input = PROJECT_BUILD_DIR / "linked" / runner / f"generate-{backend}"
+            prepare_linked_input(linked_input)
+            timings[f"{runner}-generate-{backend}"] = measure([
+                SCRIPTS_DIR / "generate",
+                backend,
+                runner,
+                linked_input,
+            ])
+
+        run([SCRIPTS_DIR / "clean"])
+        timings[f"{runner}-compile-test"] = measure([SCRIPTS_DIR / "test", runner])
+
+    return timings
+
+
+def update_results(timings):
+    run_date = os.environ.get("PERFORMANCE_DATE") or datetime.now(timezone.utc).date().isoformat()
+    short_sha = os.environ.get("PERFORMANCE_COMMIT_SHA") or command_output([
+        "git",
+        "-C",
+        ROOT_DIR,
+        "rev-parse",
+        "--short=7",
+        "HEAD",
+    ])
+
+    fieldnames = ["date", "commit_sha"] + METRIC_HEADERS
+    new_row = {"date": run_date, "commit_sha": short_sha}
+    new_row.update({header: timings[header] for header in METRIC_HEADERS})
+
+    rows = []
+    if RESULTS_CSV.exists():
+        with RESULTS_CSV.open(newline="") as handle:
+            for row in csv.DictReader(handle):
+                rows.append({name: row.get(name, "") for name in fieldnames})
+
+    for index, row in enumerate(rows):
+        if row.get("date") == run_date and row.get("commit_sha") == short_sha:
+            rows[index] = new_row
+            break
+    else:
+        rows.append(new_row)
+
+    RESULTS_CSV.parent.mkdir(parents=True, exist_ok=True)
+    with RESULTS_CSV.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def main():
+    update_results(run_benchmark())
+    run([SCRIPTS_DIR / "render-readme"])
+
+
+if __name__ == "__main__":
+    main()

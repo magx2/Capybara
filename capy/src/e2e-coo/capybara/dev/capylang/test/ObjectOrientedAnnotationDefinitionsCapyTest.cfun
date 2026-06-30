@@ -1,0 +1,134 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/meta_prog/Reflection import { * }
+from ObjectOrientedAnnotationDefinitions import { * }
+from ObjectOrientedAnnotations import { AnnotatedContract, AnnotatedNaming, AnnotatedWidget }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectOrientedAnnotationDefinitions.cfun", [
+        test("reflects interface and trait annotations", () => reflects_interface_and_trait_annotations()),
+        test("reflects class field and method annotations", () => reflects_class_field_and_method_annotations()),
+    ])
+
+fun reflects_interface_and_trait_annotations(): Assert =
+    let contract = AnnotatedContract.type()
+    let naming = AnnotatedNaming.type()
+    assert_all([
+        assert_that(ooad_annotation_names(contract.annotations)).is_equal_to(["OoAnnotationMarker", "OoTypeLabel", "Deprecated"]),
+        assert_that(ooad_annotation_arguments(contract.annotations[0])).is_empty(),
+        assert_that(ooad_annotation_pkg_name(contract.annotations[0])).is_equal_to("ObjectOrientedAnnotationDefinitions"),
+        assert_that(ooad_annotation_string(contract.annotations[1], "label")).is_equal_to("contract"),
+        assert_that(ooad_annotation_string(contract.annotations[2], "message")).is_equal_to("use AnnotatedContractV2"),
+        assert_that(ooad_annotation_string(contract.annotations[2], "since")).is_equal_to(""),
+        assert_that(ooad_method_names(contract.methods)).is_equal_to(["render"]),
+        assert_that(ooad_method_annotation_names(contract.methods, 0)).is_equal_to(["OoMethodName"]),
+        assert_that(ooad_annotation_names(naming.annotations)).is_equal_to(["OoAnnotationMarker", "OoTypeLabel", "Deprecated"]),
+        assert_that(ooad_annotation_string(naming.annotations[1], "label")).is_equal_to("mixin"),
+        assert_that(ooad_annotation_string(naming.annotations[2], "message")).is_equal_to("use AnnotatedNamingV2"),
+        assert_that(ooad_annotation_string(naming.annotations[2], "since")).is_equal_to("3.0"),
+        assert_that(ooad_method_names(naming.methods)).is_equal_to(["prefix"]),
+    ])
+
+fun reflects_class_field_and_method_annotations(): Assert =
+    let widget = AnnotatedWidget.type()
+    let parent_names = ooad_parent_names(widget.parents)
+    assert_all([
+        assert_that(ooad_annotation_names(widget.annotations)).is_equal_to(["OoAnnotationMarker", "OoTypeLabel", "Deprecated"]),
+        assert_that(ooad_annotation_string(widget.annotations[1], "label")).is_equal_to("entity"),
+        assert_that(ooad_annotation_pkg_name(widget.annotations[2])).is_equal_to("Annotations"),
+        assert_that(ooad_annotation_pkg_path(widget.annotations[2])).is_equal_to("capy/meta_prog"),
+        assert_that(ooad_annotation_string(widget.annotations[2], "message")).is_equal_to("use AnnotatedView"),
+        assert_that(ooad_annotation_string(widget.annotations[2], "since")).is_equal_to("3.0"),
+        assert_that(parent_names).has_size(2).contains("AnnotatedContract").contains("AnnotatedNaming"),
+        assert_that(ooad_field_names(widget.fields)).is_equal_to(["name"]),
+        assert_that(ooad_field_annotation_names(widget.fields, 0)).is_equal_to(["OoAnnotationMarker", "OoFieldName", "Deprecated"]),
+        assert_that(ooad_field_annotation_arguments(widget.fields, 0, 0)).is_empty(),
+        assert_that(ooad_field_annotation_string(widget.fields, 0, 1, "value")).is_equal_to("display_name"),
+        assert_that(ooad_field_annotation_string(widget.fields, 0, 2, "message")).is_equal_to("use label"),
+        assert_that(ooad_field_annotation_string(widget.fields, 0, 2, "since")).is_equal_to(""),
+        assert_that(ooad_method_names(widget.methods)).is_equal_to(["render"]),
+        assert_that(ooad_method_annotation_names(widget.methods, 0)).is_equal_to(["OoMethodName", "Deprecated"]),
+        assert_that(ooad_method_annotation_string(widget.methods, 0, 0, "value")).is_equal_to("render"),
+        assert_that(ooad_method_annotation_string(widget.methods, 0, 1, "message")).is_equal_to("use render_label"),
+        assert_that(ooad_method_annotation_string(widget.methods, 0, 1, "since")).is_equal_to("3.1"),
+    ])
+
+private fun ooad_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    (annotations | annotation => annotation.name).as_list()
+
+private fun ooad_annotation_arguments(annotation: Option[AnnotationInfo]): List[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> value.arguments
+    case None -> []
+
+private fun ooad_annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun ooad_annotation_pkg_path(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.path
+    case None -> ""
+
+private fun ooad_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> ooad_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun ooad_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else ooad_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun ooad_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match ooad_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun ooad_method_names(methods: List[MethodInfo]): List[String] =
+    (methods | method => method.name).as_list()
+
+private fun ooad_method_annotation_names(methods: List[MethodInfo], method_idx: int): List[String] =
+    match methods[method_idx] with
+    case Some { method } -> ooad_annotation_names(method.annotations)
+    case None -> []
+
+private fun ooad_method_annotation_string(methods: List[MethodInfo], method_idx: int, annotation_idx: int, name: String): String =
+    match methods[method_idx] with
+    case Some { method } -> ooad_annotation_string(method.annotations[annotation_idx], name)
+    case None -> ""
+
+private fun ooad_field_names(fields: List[FieldInfo]): List[String] =
+    (fields | field => field.name).as_list()
+
+private fun ooad_field_annotation_names(fields: List[FieldInfo], field_idx: int): List[String] =
+    match fields[field_idx] with
+    case Some { field } -> ooad_annotation_names(field.annotations)
+    case None -> []
+
+private fun ooad_field_annotation_arguments(fields: List[FieldInfo], field_idx: int, annotation_idx: int): List[AnnotationArgumentInfo] =
+    match fields[field_idx] with
+    case Some { field } -> ooad_annotation_arguments(field.annotations[annotation_idx])
+    case None -> []
+
+private fun ooad_field_annotation_string(fields: List[FieldInfo], field_idx: int, annotation_idx: int, name: String): String =
+    match fields[field_idx] with
+    case Some { field } -> ooad_annotation_string(field.annotations[annotation_idx], name)
+    case None -> ""
+
+private fun ooad_parent_names(parents: Set[AnyInfo]): List[String] =
+    (parents | parent => parent.name).as_list()

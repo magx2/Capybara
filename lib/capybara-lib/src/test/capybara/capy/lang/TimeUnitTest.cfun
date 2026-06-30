@@ -1,0 +1,125 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/TimeUnit import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/TimeUnit.cfun", [
+        test("to_nano_seconds should convert each time unit", () => should_convert_to_nano_seconds()),
+        test("to_micro_seconds should convert each time unit", () => should_convert_to_micro_seconds()),
+        test("to_milli_seconds should convert each time unit", () => should_convert_to_milli_seconds()),
+        test("to_seconds should convert each time unit", () => should_convert_to_seconds()),
+        test("to_minutes should convert each time unit", () => should_convert_to_minutes()),
+        test("to_hours should convert each time unit", () => should_convert_to_hours()),
+        test("to_days should convert each time unit", () => should_convert_to_days()),
+        test("to_weeks should convert each time unit", () => should_convert_to_weeks()),
+        test("smaller-to-larger conversions should truncate fractional units", () => should_truncate_fractional_units()),
+    ])
+
+private fun should_convert_to_nano_seconds(): Assert =
+    assert_all([
+        assert_that(nano_second { 2L }.to_nano_seconds()).is_equal_to(nano_second { 2L }),
+        assert_that(micro_second { 2L }.to_nano_seconds()).is_equal_to(nano_second { 2000L }),
+        assert_that(milli_second { 2L }.to_nano_seconds()).is_equal_to(nano_second { 2000000L }),
+        assert_that(second { 2L }.to_nano_seconds()).is_equal_to(nano_second { 2000000000L }),
+        assert_that(minute { 2L }.to_nano_seconds()).is_equal_to(nano_second { 120000000000L }),
+        assert_that(hour { 2L }.to_nano_seconds()).is_equal_to(nano_second { 7200000000000L }),
+        assert_that(day { 2L }.to_nano_seconds()).is_equal_to(nano_second { 172800000000000L }),
+        assert_that(week { 2L }.to_nano_seconds()).is_equal_to(nano_second { 1209600000000000L }),
+    ])
+
+private fun should_convert_to_micro_seconds(): Assert =
+    assert_all([
+        assert_that(nano_second { 2000L }.to_micro_seconds()).is_equal_to(micro_second { 2L }),
+        assert_that(micro_second { 2L }.to_micro_seconds()).is_equal_to(micro_second { 2L }),
+        assert_that(milli_second { 2L }.to_micro_seconds()).is_equal_to(micro_second { 2000L }),
+        assert_that(second { 2L }.to_micro_seconds()).is_equal_to(micro_second { 2000000L }),
+        assert_that(minute { 2L }.to_micro_seconds()).is_equal_to(micro_second { 120000000L }),
+        assert_that(hour { 2L }.to_micro_seconds()).is_equal_to(micro_second { 7200000000L }),
+        assert_that(day { 2L }.to_micro_seconds()).is_equal_to(micro_second { 172800000000L }),
+        assert_that(week { 2L }.to_micro_seconds()).is_equal_to(micro_second { 1209600000000L }),
+    ])
+
+private fun should_convert_to_milli_seconds(): Assert =
+    assert_all([
+        assert_that(nano_second { 2000000L }.to_milli_seconds()).is_equal_to(milli_second { 2L }),
+        assert_that(micro_second { 2000L }.to_milli_seconds()).is_equal_to(milli_second { 2L }),
+        assert_that(milli_second { 2L }.to_milli_seconds()).is_equal_to(milli_second { 2L }),
+        assert_that(second { 2L }.to_milli_seconds()).is_equal_to(milli_second { 2000L }),
+        assert_that(minute { 2L }.to_milli_seconds()).is_equal_to(milli_second { 120000L }),
+        assert_that(hour { 2L }.to_milli_seconds()).is_equal_to(milli_second { 7200000L }),
+        assert_that(day { 2L }.to_milli_seconds()).is_equal_to(milli_second { 172800000L }),
+        assert_that(week { 2L }.to_milli_seconds()).is_equal_to(milli_second { 1209600000L }),
+    ])
+
+private fun should_convert_to_seconds(): Assert =
+    assert_all([
+        assert_that(nano_second { 2000000000L }.to_seconds()).is_equal_to(second { 2L }),
+        assert_that(micro_second { 2000000L }.to_seconds()).is_equal_to(second { 2L }),
+        assert_that(milli_second { 2000L }.to_seconds()).is_equal_to(second { 2L }),
+        assert_that(second { 2L }.to_seconds()).is_equal_to(second { 2L }),
+        assert_that(minute { 2L }.to_seconds()).is_equal_to(second { 120L }),
+        assert_that(hour { 2L }.to_seconds()).is_equal_to(second { 7200L }),
+        assert_that(day { 2L }.to_seconds()).is_equal_to(second { 172800L }),
+        assert_that(week { 2L }.to_seconds()).is_equal_to(second { 1209600L }),
+    ])
+
+private fun should_convert_to_minutes(): Assert =
+    assert_all([
+        assert_that(nano_second { 120000000000L }.to_minutes()).is_equal_to(minute { 2L }),
+        assert_that(micro_second { 120000000L }.to_minutes()).is_equal_to(minute { 2L }),
+        assert_that(milli_second { 120000L }.to_minutes()).is_equal_to(minute { 2L }),
+        assert_that(second { 120L }.to_minutes()).is_equal_to(minute { 2L }),
+        assert_that(minute { 2L }.to_minutes()).is_equal_to(minute { 2L }),
+        assert_that(hour { 2L }.to_minutes()).is_equal_to(minute { 120L }),
+        assert_that(day { 2L }.to_minutes()).is_equal_to(minute { 2880L }),
+        assert_that(week { 2L }.to_minutes()).is_equal_to(minute { 20160L }),
+    ])
+
+private fun should_convert_to_hours(): Assert =
+    assert_all([
+        assert_that(nano_second { 7200000000000L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(micro_second { 7200000000L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(milli_second { 7200000L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(second { 7200L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(minute { 120L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(hour { 2L }.to_hours()).is_equal_to(hour { 2L }),
+        assert_that(day { 2L }.to_hours()).is_equal_to(hour { 48L }),
+        assert_that(week { 2L }.to_hours()).is_equal_to(hour { 336L }),
+    ])
+
+private fun should_convert_to_days(): Assert =
+    assert_all([
+        assert_that(nano_second { 172800000000000L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(micro_second { 172800000000L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(milli_second { 172800000L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(second { 172800L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(minute { 2880L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(hour { 48L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(day { 2L }.to_days()).is_equal_to(day { 2L }),
+        assert_that(week { 2L }.to_days()).is_equal_to(day { 14L }),
+    ])
+
+private fun should_convert_to_weeks(): Assert =
+    assert_all([
+        assert_that(nano_second { 1209600000000000L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(micro_second { 1209600000000L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(milli_second { 1209600000L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(second { 1209600L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(minute { 20160L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(hour { 336L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(day { 14L }.to_weeks()).is_equal_to(week { 2L }),
+        assert_that(week { 2L }.to_weeks()).is_equal_to(week { 2L }),
+    ])
+
+private fun should_truncate_fractional_units(): Assert =
+    assert_all([
+        assert_that(nano_second { 1999L }.to_micro_seconds()).is_equal_to(micro_second { 1L }),
+        assert_that(micro_second { 1999L }.to_milli_seconds()).is_equal_to(milli_second { 1L }),
+        assert_that(milli_second { 1999L }.to_seconds()).is_equal_to(second { 1L }),
+        assert_that(second { 119L }.to_minutes()).is_equal_to(minute { 1L }),
+        assert_that(minute { 119L }.to_hours()).is_equal_to(hour { 1L }),
+        assert_that(hour { 47L }.to_days()).is_equal_to(day { 1L }),
+        assert_that(day { 13L }.to_weeks()).is_equal_to(week { 1L }),
+    ])

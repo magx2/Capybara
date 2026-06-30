@@ -1,0 +1,36 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from IndexCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/IndexCollection.cfun", [
+        test("list_index_5 returns item at index five when present", () => list_index_5_returns_item_at_index_five_when_present()),
+        test("list_index_minus_2 returns second item from end when present", () => list_index_minus_2_returns_second_item_from_end_when_present()),
+        test("string_index_5 returns character at index five when present", () => string_index_5_returns_character_at_index_five_when_present()),
+        test("string_index_minus_2 returns second character from end when present", () => string_index_minus_2_returns_second_character_from_end_when_present()),
+    ])
+
+private fun list_index_5_returns_item_at_index_five_when_present(): Assert =
+    assert_all([
+        assert_that(list_index_5([10, 20, 30, 40, 50, 60])).contains(60),
+        assert_that(list_index_5([10, 20])).is_empty(),
+    ])
+
+private fun list_index_minus_2_returns_second_item_from_end_when_present(): Assert =
+    assert_all([
+        assert_that(list_index_minus_2([10, 20, 30, 40])).contains(30),
+        assert_that(list_index_minus_2([10])).is_empty(),
+    ])
+
+private fun string_index_5_returns_character_at_index_five_when_present(): Assert =
+    assert_all([
+        assert_that(string_index_5("capybar")).contains("a"),
+        assert_that(string_index_5("abc")).is_empty(),
+    ])
+
+private fun string_index_minus_2_returns_second_character_from_end_when_present(): Assert =
+    assert_all([
+        assert_that(string_index_minus_2("capybara")).contains("r"),
+        assert_that(string_index_minus_2("a")).is_empty(),
+    ])
