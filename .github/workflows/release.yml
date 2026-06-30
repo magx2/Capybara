@@ -148,16 +148,6 @@ jobs:
           github-token: ${{ github.token }}
           native-image-job-reports: "false"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -169,16 +159,6 @@ jobs:
       - name: Build and check project
         run: ./gradlew clean check assemble --no-daemon
 
-      - name: Build JavaScript and Python compiler packages
-        run: ./gradlew :capy:packageJavaScriptCompiler :capy:packagePythonCompiler --no-daemon
-
-      - name: Smoke test JavaScript and Python compiler packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          capy/build/distributions/javascript-compiler/bin/capyc-js --version
-          capy/build/distributions/python-compiler/bin/capyc-py --version
-
       - name: Build and collect Linux artifacts
         shell: bash
         run: |
@@ -186,8 +166,6 @@ jobs:
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
           cp "capy/build/libs/capy-${VERSION}.jar" "dist/capyc-${VERSION}.jar"
-          cp "capy/build/distributions/capyc-${VERSION}-javascript.zip" dist/
-          cp "capy/build/distributions/capyc-${VERSION}-python.zip" dist/
           native-image --no-fallback -o "dist/capyc-${VERSION}-linux-x64" -jar "capy/build/libs/capy-${VERSION}.jar"
           tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C dist "capyc-${VERSION}-linux-x64"
 
