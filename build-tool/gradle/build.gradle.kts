@@ -1,3 +1,5 @@
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     `java-gradle-plugin`
     `maven-publish`
@@ -35,6 +37,7 @@ repositories {
 
 dependencies {
     implementation(project(":capy"))
+    compileOnly("dev.capylang.bootstrap:capy:${capybaraVersion.get()}@jar")
     compileOnly("dev.capylang:capybara-lib:${capybaraVersion.get()}@jar")
     testImplementation(gradleTestKit())
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
@@ -57,6 +60,12 @@ gradlePlugin {
 }
 
 publishing {
+    publications.withType<MavenPublication>().configureEach {
+        if (name == "pluginMaven") {
+            artifactId = "capy-gradle"
+        }
+    }
+
     repositories {
         maven {
             name = "GitHubPackages"
