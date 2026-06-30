@@ -1,0 +1,69 @@
+= Capybara Documentation
+
+== Modules
+
+=== capy
+
+==== collection
+
+* xref:capy/collection/CollectionTypes.adoc[CollectionTypes]
+* xref:capy/collection/Dict.adoc[Dict]
+* xref:capy/collection/List.adoc[List]
+* xref:capy/collection/Seq.adoc[Seq]
+* xref:capy/collection/Set.adoc[Set]
+* xref:capy/collection/Tuple.adoc[Tuple]
+
+==== date_time
+
+* xref:capy/date_time/Clock.adoc[Clock]
+* xref:capy/date_time/Date.adoc[Date]
+* xref:capy/date_time/DateTime.adoc[DateTime]
+* xref:capy/date_time/Duration.adoc[Duration]
+* xref:capy/date_time/Interval.adoc[Interval]
+* xref:capy/date_time/Time.adoc[Time]
+
+==== io
+
+* xref:capy/io/ByteSize.adoc[ByteSize]
+* xref:capy/io/Console.adoc[Console]
+* xref:capy/io/IO.adoc[IO]
+* xref:capy/io/Path.adoc[Path]
+
+==== lang
+
+* xref:capy/lang/Async.adoc[Async]
+* xref:capy/lang/BoundedNumber.adoc[BoundedNumber]
+* xref:capy/lang/Effect.adoc[Effect]
+* xref:capy/lang/Either.adoc[Either]
+* xref:capy/lang/Math.adoc[Math]
+* xref:capy/lang/Option.adoc[Option]
+* xref:capy/lang/Ordering.adoc[Ordering]
+* xref:capy/lang/Primitives.adoc[Primitives]
+* xref:capy/lang/Program.adoc[Program]
+* xref:capy/lang/Random.adoc[Random]
+* xref:capy/lang/Regex.adoc[Regex]
+* xref:capy/lang/Result.adoc[Result]
+* xref:capy/lang/String.adoc[String]
+* xref:capy/lang/System.adoc[System]
+* xref:capy/lang/TimeUnit.adoc[TimeUnit]
+
+==== meta_prog
+
+* xref:capy/meta_prog/Annotations.adoc[Annotations]
+* xref:capy/meta_prog/NativeProvider.adoc[NativeProvider]
+* xref:capy/meta_prog/Recursive.adoc[Recursive]
+* xref:capy/meta_prog/Reflection.adoc[Reflection]
+
+==== serialization
+
+* xref:capy/serialization/Json.adoc[Json]
+
+==== test
+
+* xref:capy/test/Assert.adoc[Assert]
+* xref:capy/test/CapyTest.adoc[CapyTest]
+
+==== util
+
+* xref:capy/util/SemVer.adoc[SemVer]
+
