@@ -1,0 +1,26 @@
+= Module NativeProvider
+
+== Annotations
+
+=== annotation @NativeProvider
+
+Marks a function returning `Effect[Interface]` as a compile-time native provider.
+
+Example:
+```cfun
+@NativeProvider { qualifier: "systemClock" }
+fun clock_provider(): Effect[Clock] = <native>
+```
+The compiler can use the annotated provider to wire a host-native
+implementation for an interface.
+
+* Repeatable: no
+* Targets: fun
+
+==== Fields
+
+* `qualifier`: `String` (optional, default ``)
+
+
+
+
