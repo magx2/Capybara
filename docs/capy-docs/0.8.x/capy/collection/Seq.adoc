@@ -1,0 +1,266 @@
+= Module Seq
+
+== Functions
+
+=== fun fibonacci_seq(): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite Fibonacci sequence: `1, 1, 2, 3, 5, 8, 13, ...`.
+
+
+=== fun natural_seq(): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite sequence of natural numbers starting at `0`.
+
+To start at `1`, drop the first element.
+
+
+=== fun ones_seq(): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite sequence of ones.
+
+
+=== fun powers_of_2_seq(): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite sequence of powers of `2`: `2^0, 2^1, 2^2, ...`.
+
+The first element is `1` because `2^0 = 1`.
+
+
+=== fun powers_seq(base: int): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite sequence of powers of `base`: `base^0, base^1, base^2, ...`.
+
+The first element is always `1` because `x^0 = 1`.
+
+
+=== fun to_seq(list: xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;): xref:#type-Seq[Seq]&#91;T&#93;
+
+Converts a `List` into a finite `Seq`.
+
+Example:
+```cfun
+to_seq([1, 2, 3]).map(value => value + 1).as_list()
+```
+Returns `[2, 3, 4]`.
+
+
+=== fun to_seq(list: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;T&#93;): xref:#type-Seq[Seq]&#91;T&#93;
+
+Converts a `Set` into a finite `Seq`.
+
+
+=== fun to_seq(list: xref:../../capy/collection/Dict.adoc#type-Dict[Dict]&#91;T&#93;): xref:#type-Seq[Seq]&#91;xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple]&#91;xref:../../capy/lang/String.adoc#type-String[String], T&#93;&#93;
+
+Converts a `Dict` into a finite `Seq` of `(key, value)` tuples.
+
+
+=== fun zeros_seq(): xref:#type-Seq[Seq]&#91;int&#93;
+
+Returns an infinite sequence of zeros.
+
+
+
+
+== Types
+
+[[type-Cons]]
+=== data Cons[T]
+
+Non-empty sequence node.
+
+==== Fields
+
+* `rest`: ()=>Seq[T]
+* `value`: T
+
+[[type-End]]
+=== data End
+
+Empty sequence node.
+
+[[type-Seq]]
+=== union Seq[T]
+
+Lazy sequence that can be finite or infinite.
+
+A `Seq` is either a `Cons` value with a current element and delayed rest, or
+`End` for an empty sequence. Use `take` before materializing an infinite
+sequence.
+
+Example:
+```cfun
+natural_seq()
+    .filter(value => value % 2 == 0)
+    .take(3)
+```
+Returns `[0, 2, 4]`.
+
+==== Variants
+
+* xref:#type-Cons[Cons]&#91;T&#93;
+* xref:#type-End[End]
+
+==== Functions
+
+===== fun Seq[T].`+`(other: xref:#type-Seq[Seq]&#91;T&#93;): xref:#type-Seq[Seq]&#91;T&#93;
+
+Concatenates this sequence with `other`.
+
+If this sequence is infinite, `other` is never reached.
+
+
+===== fun Seq[T].`|*`(map: T=>Seq[Y]): xref:#type-Seq[Seq]&#91;Y&#93;
+
+Applies `map` and flattens the resulting sequences.
+
+Example:
+`natural_seq() |* x => to_seq([x, 2*x, 3*x])`
+produces:
+`[1, 2, 3, 2, 4, 6, 4, 8, 12, ...]`
+
+
+===== fun Seq[T].`|-`(pred: T=>bool): xref:#type-Seq[Seq]&#91;T&#93;
+
+Operator alias for `filter`.
+
+
+===== fun Seq[T].`|>`(initial: R, reducer: (R,T)=>R): R
+
+Operator alias for `reduce`.
+
+
+===== fun Seq[T].`|`(map: T=>Y): xref:#type-Seq[Seq]&#91;Y&#93;
+
+Transforms each element using `map`.
+
+Example:
+```cfun
+(to_seq([1, 2, 3]) | value => value * 2).as_list()
+```
+Returns `[2, 4, 6]`.
+
+
+===== fun Seq[T].any(pred: T=>bool): bool
+
+Returns `true` if at least one element satisfies `pred`.
+
+This is equivalent to checking whether `first_match(pred)` returns `Some`.
+
+
+===== fun Seq[T].as_list(): xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;
+
+Collects the entire sequence into a `List`.
+
+Important: calling this on an infinite sequence does not terminate.
+
+
+===== fun Seq[T].drop(n: xref:../../capy/collection/CollectionTypes.adoc#type-size[size]): xref:#type-Seq[Seq]&#91;T&#93;
+
+Skips the first `n` elements of the sequence.
+
+
+===== fun Seq[T].drop_until(pred: T=>bool): xref:#type-Seq[Seq]&#91;T&#93;
+
+Drops elements until `pred` becomes `true`.
+
+Example:
+`seq = [0, 1, 2, ...]`
+`seq.drop_until(x => x > 9)` produces `[10, 11, 12, ...]`.
+
+The first element that satisfies `pred` is included in the result.
+
+
+===== fun Seq[T].filter(pred: T=>bool): xref:#type-Seq[Seq]&#91;T&#93;
+
+Returns a sequence containing only elements that satisfy `pred`.
+
+Example:
+```cfun
+natural_seq().filter(x => x % 2 == 0)
+```
+
+
+===== fun Seq[T].first(): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;
+
+Returns the first element wrapped in `Option`.
+
+Returns `None` for an empty sequence.
+
+
+===== fun Seq[T].first_match(pred: T=>bool): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;
+
+Returns the first element matching `pred`, wrapped in `Option`.
+
+Returns `None` when no element matches.
+
+
+===== fun Seq[T].flat_map(map: T=>Seq[Y]): xref:#type-Seq[Seq]&#91;Y&#93;
+
+Applies `map` and flattens the resulting sequences.
+
+
+===== fun Seq[T].fold(reducer: (T,T)=>T): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;
+
+Combines elements from left to right using the first element as the accumulator.
+
+Empty sequences return `None`. Non-empty sequences return `Some` with the folded value.
+
+
+===== fun Seq[T].map(map: T=>Y): xref:#type-Seq[Seq]&#91;Y&#93;
+
+Transforms each element using `map`.
+
+
+===== fun Seq[T].reduce(initial: R, reducer: (R,T)=>R): R
+
+Combines all elements from left to right.
+
+Important: reducing an infinite sequence does not terminate.
+
+Example:
+```cfun
+to_seq([1, 2, 3]) |> 0, (total, value) => total + value
+```
+Returns `6`.
+
+
+===== fun Seq[T].reject(pred: T=>bool): xref:#type-Seq[Seq]&#91;T&#93;
+
+Returns a sequence without elements that satisfy `pred`.
+
+
+===== fun Seq[T].take(n: xref:../../capy/collection/CollectionTypes.adoc#type-size[size]): xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;
+
+Collects the first `n` elements into a `List`.
+
+This method is safe to use with infinite sequences.
+
+Example: `powers_of_2_seq().take(4)` returns `[1, 2, 4, 8]`.
+
+
+===== fun Seq[T].take_last(n: xref:../../capy/collection/CollectionTypes.adoc#type-size[size]): xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;
+
+Collects the last `n` elements into a `List`.
+
+Important: calling this on an infinite sequence does not terminate.
+
+
+===== fun Seq[T].until(pred: T=>bool): xref:#type-Seq[Seq]&#91;T&#93;
+
+Returns elements from the start of the sequence until `pred` becomes `true`.
+
+The element that satisfies `pred` is not included.
+
+
+===== fun Seq[T].zip(other: xref:#type-Seq[Seq]&#91;Y&#93;): xref:#type-Seq[Seq]&#91;xref:../../capy/collection/Tuple.adoc#type-Tuple[Tuple]&#91;T, Y&#93;&#93;
+
+Zips two sequences into a sequence of tuples.
+
+If lengths differ, the result length matches the shorter input.
+
+Example:
+`s1 = [1, 2, 3, ...]`
+`s2 = [a, b, c, ..., z]` (finite)
+`s1.zip(s2)` -> [(1, a), (2, b), (3, c), ..., (26, z)]
+
+
