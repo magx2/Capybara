@@ -6,6 +6,10 @@ plugins {
 group = "dev.capylang"
 version = rootProject.version
 
+base {
+    archivesName.set("capy-gradle")
+}
+
 val capybaraVersion = providers.gradleProperty("capybaraVersion")
 val githubPackagesUser = providers.environmentVariable("GITHUB_ACTOR")
     .orElse(providers.gradleProperty("gpr.user"))
