@@ -1,0 +1,78 @@
+from /capy/lang/Async import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from ObjectAsyncInterop import { AsyncCalculator }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectAsyncInterop.coo", [
+        async_constructor_effect_can_be_joined().map(assertion => test("async constructor effect can be joined", () => assertion)),
+        async_object_method_effect_can_be_joined().map(assertion => test("async object method effect can be joined", () => assertion)),
+        async_object_method_effect_can_be_mapped().map(assertion => test("async object method effect can be mapped", () => assertion)),
+        async_all_preserves_object_method_results().map(assertion => test("async all preserves object method results", () => assertion)),
+        coo_method_can_return_async_handle().map(assertion => test("coo method can return async handle", () => assertion)),
+        coo_method_can_join_async_result().map(assertion => test("coo method can join async result", () => assertion)),
+        coo_method_can_join_string_async_result().map(assertion => test("coo method can join string async result", () => assertion)),
+    ])
+
+fun async_constructor_effect_can_be_joined(): Effect[Assert] =
+    let result <- AsyncCalculator(40).start().join()
+    assert_that(is_success(result)).is_true()
+
+fun async_object_method_effect_can_be_joined(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let result <- calculator.add(2).start().join()
+    assert_that(success_or(result, 0)).is_equal_to(42)
+
+fun async_object_method_effect_can_be_mapped(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let result <- calculator.add(2).start().map(value => "value:" + value).join()
+    assert_that(string_success_or(result, "missing")).is_equal_to("value:42")
+
+fun async_all_preserves_object_method_results(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let results <- all([
+        calculator.add(1).start(),
+        calculator.add(2).start(),
+    ])
+    assert_that(success_values(results)).is_equal_to([41, 42])
+
+fun coo_method_can_return_async_handle(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let task <- calculator.start_add(2)
+    let result <- task.join()
+    assert_that(success_or(result, 0)).is_equal_to(42)
+
+fun coo_method_can_join_async_result(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let result <- calculator.join_add(2)
+    assert_that(success_or(result, 0)).is_equal_to(42)
+
+fun coo_method_can_join_string_async_result(): Effect[Assert] =
+    let calculator <- AsyncCalculator(40)
+    let result <- calculator.joined_label(2)
+    assert_that(string_success_or(result, "missing")).is_equal_to("value:42")
+
+private fun success_or(result: Result[int], fallback: int): int =
+    match result with
+    case Success { value } -> value
+    case Error _ -> fallback
+
+private fun is_success(result: Result[T]): bool =
+    match result with
+    case Success _ -> true
+    case Error _ -> false
+
+private fun string_success_or(result: Result[String], fallback: String): String =
+    match result with
+    case Success { value } -> value
+    case Error _ -> fallback
+
+private fun success_values(results: List[Result[int]]): List[int] =
+    match results[0] with
+    case None -> []
+    case Some { value } ->
+        match value with
+        case Success { value } -> [value] + success_values(results[1:])
+        case Error _ -> [-1] + success_values(results[1:])
