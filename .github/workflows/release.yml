@@ -165,10 +165,10 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.release-metadata.outputs.release_version }}"
           mkdir -p dist
-          cp "capy/build/libs/capy-${VERSION}.jar" "dist/capyc-${VERSION}.jar"
+          cp "capy/build/libs/capy-${VERSION}.jar" "dist/capy-${VERSION}.jar"
           native-image --no-fallback -H:Path=dist -jar "capy/build/libs/capy-${VERSION}.jar"
-          mv "dist/capy-${VERSION}" "dist/capyc-${VERSION}-linux-x64"
-          tar -czf "dist/capyc-${VERSION}-linux-x64.tar.gz" -C dist "capyc-${VERSION}-linux-x64"
+          mv "dist/capy-${VERSION}" "dist/capy-${VERSION}-linux-x64"
+          tar -czf "dist/capy-${VERSION}-linux-x64.tar.gz" -C dist "capy-${VERSION}-linux-x64"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -218,7 +218,7 @@ jobs:
           $version = "${{ needs.release-metadata.outputs.release_version }}"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           native-image.cmd --no-fallback "-H:Path=dist" -jar "capy/build/libs/capy-$version.jar"
-          Move-Item -Path "dist/capy-$version.exe" -Destination "dist/capyc-$version-windows-x64.exe" -Force
+          Move-Item -Path "dist/capy-$version.exe" -Destination "dist/capy-$version-windows-x64.exe" -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
