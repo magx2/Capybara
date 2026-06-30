@@ -13,6 +13,9 @@ class AsyncCalculator(seed: int) {
     def join_add(delta: int): Effect[Result[int]] =
         pure(this.seed + delta).start().join()
 
+    def join_external(task: Async[int]): Effect[Result[int]] =
+        task.join()
+
     def joined_label(delta: int): Effect[Result[String]] =
         pure("value:" + (this.seed + delta)).start().join()
 }

@@ -13,6 +13,7 @@ fun tests(): Effect[TestFile] =
         async_all_preserves_object_method_results().map(assertion => test("async all preserves object method results", () => assertion)),
         coo_method_can_return_async_handle().map(assertion => test("coo method can return async handle", () => assertion)),
         coo_method_can_join_async_result().map(assertion => test("coo method can join async result", () => assertion)),
+        coo_method_can_join_cfun_created_async_result().map(assertion => test("coo method can join cfun-created async result", () => assertion)),
         coo_method_can_join_string_async_result().map(assertion => test("coo method can join string async result", () => assertion)),
     ])
 
@@ -47,6 +48,12 @@ fun coo_method_can_return_async_handle(): Effect[Assert] =
 fun coo_method_can_join_async_result(): Effect[Assert] =
     let calculator <- AsyncCalculator(40)
     let result <- calculator.join_add(2)
+    assert_that(success_or(result, 0)).is_equal_to(42)
+
+fun coo_method_can_join_cfun_created_async_result(): Effect[Assert] =
+    let calculator <- AsyncCalculator(0)
+    let task = pure(42).start()
+    let result <- calculator.join_external(task)
     assert_that(success_or(result, 0)).is_equal_to(42)
 
 fun coo_method_can_join_string_async_result(): Effect[Assert] =
