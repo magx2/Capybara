@@ -1,0 +1,18 @@
+from /capy/lang/Async import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+class AsyncCalculator(seed: int) {
+    field seed: int = seed
+
+    def add(delta: int): int = this.seed + delta
+
+    def start_add(delta: int): Async[int] =
+        pure(this.seed + delta).start()
+
+    def join_add(delta: int): Effect[Result[int]] =
+        pure(this.seed + delta).start().join()
+
+    def joined_label(delta: int): Effect[Result[String]] =
+        pure("value:" + (this.seed + delta)).start().join()
+}
