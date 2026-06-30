@@ -37,6 +37,7 @@ repositories {
 
 dependencies {
     implementation(project(":capy"))
+    compileOnly("dev.capylang.bootstrap:capy:${capybaraVersion.get()}@jar")
     compileOnly("dev.capylang:capybara-lib:${capybaraVersion.get()}@jar")
     testImplementation(gradleTestKit())
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
