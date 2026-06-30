@@ -416,4 +416,43 @@ jobs:
                 --body "Bumps \`${RELEASE_BRANCH}\` to \`${NEXT_PATCH_VERSION}\` after release \`${RELEASE_VERSION}\`."
             )"
             echo "Created patch bump pull request: ${PR_URL}"
+            PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
           fi
+
+          WORKFLOW="check.yml"
+          SHA="$(git rev-parse HEAD)"
+          gh workflow run "${WORKFLOW}" --ref "${BUMP_BRANCH}"
+
+          find_check_run() {
+            gh run list \
+              --workflow "${WORKFLOW}" \
+              --branch "${BUMP_BRANCH}" \
+              --commit "${SHA}" \
+              --json databaseId,event,status,conclusion,url \
+              --limit 20 \
+              --jq '[.[] | select(.event == "workflow_dispatch")][0] // empty'
+          }
+
+          CHECK_RUN="$(find_check_run)"
+          CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            for _ in {1..30}; do
+              sleep 10
+              CHECK_RUN="$(find_check_run)"
+              CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+              if [[ -n "${CHECK_RUN_ID}" ]]; then
+                break
+              fi
+            done
+          fi
+
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            echo "::error::No Build & Check run found for ${BUMP_BRANCH} at ${SHA}."
+            exit 1
+          fi
+
+          CHECK_RUN_URL="$(jq -r '.url' <<< "${CHECK_RUN}")"
+          echo "Watching Build & Check run ${CHECK_RUN_ID}: ${CHECK_RUN_URL}"
+          gh run watch "${CHECK_RUN_ID}" --exit-status
+
+          gh pr merge "${PR_NUMBER}" --rebase --delete-branch
