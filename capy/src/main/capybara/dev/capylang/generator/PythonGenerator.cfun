@@ -730,6 +730,8 @@ private fun python_function_body(function: CompiledFunction, env: List[PythonBin
         then "    return " + python_system_property_native_function_body(function) + python_newline()
         else if python_async_native_function(function, module)
         then "    return " + python_async_native_function_body(function) + python_newline()
+        else if python_clock_native_function(function, module)
+        then "    return " + python_clock_native_function_body() + python_newline()
         else python_return_statement(function.body, env, module, allModules, "    ", function.returnType)
 
 /// Checks whether a function is a System native runtime wrapper.
@@ -757,6 +759,17 @@ private fun python_async_native_function(function: CompiledFunction, module: Com
 /// Emits the Async native runtime wrapper body.
 private fun python_async_native_function_body(function: CompiledFunction): String =
     "__capy_async_" + function.name + "(" + python_identifier(python_first_function_parameter_name(function)) + ")"
+
+/// Checks whether a function is a Clock native runtime wrapper.
+private fun python_clock_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/date_time"
+        & module.name == "Clock"
+        & function.name == "now"
+        & python_native_placeholder_function(function)
+
+/// Emits the Clock native runtime wrapper body.
+private fun python_clock_native_function_body(): String =
+    "__capy_clock_now()"
 
 /// Returns the first function parameter name.
 private fun python_first_function_parameter_name(function: CompiledFunction): String =
