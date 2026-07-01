@@ -10,5 +10,4 @@ from /capy/lang/Effect import { * }
 /// ```
 /// The value is effectful because the current time comes from the runtime
 /// environment.
-fun now(): Effect[DateTime] =
-    delay(() => UNIX_EPOCH)
+fun now(): Effect[DateTime] = <native>
