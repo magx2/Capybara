@@ -2,6 +2,8 @@ from /capy/test/Assert import { * }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/System import { current_millis, nano_time }
+from /capy/date_time/Clock import { now }
+from /capy/date_time/DateTime import { * }
 from EffectBind import { * }
 
 fun tests(): Effect[TestFile] =
@@ -9,7 +11,7 @@ fun tests(): Effect[TestFile] =
         binds_effects_lazily().map(assertion => test("binds effects lazily", () => assertion)),
         test("constructing delayed failure does not run thunk", () => constructing_delayed_failure_does_not_run_thunk()),
         effect_delay_is_lazy_and_non_memoized().map(assertion => test("effect delay is lazy and non-memoized", () => assertion)),
-        clock_now_returns_iso_date_time_effect().map(assertion => test("clock now returns ISO date-time effect", () => assertion)),
+        clock_now_returns_current_date_time_effect().map(assertion => test("clock now returns current date-time effect", () => assertion)),
         current_millis_returns_bounded_current_time_effect().map(assertion => test("current millis returns bounded current time effect", () => assertion)),
         nano_time_returns_bounded_monotonic_time_effect().map(assertion => test("nano time returns bounded monotonic time effect", () => assertion)),
     ])
@@ -46,10 +48,13 @@ private fun effect_delay_assertions(): Effect[Assert] =
 private fun consume_time(count: int): int =
     if count == 0 then 0 else 1 + consume_time(count - 1)
 
-fun clock_now_returns_iso_date_time_effect(): Effect[Assert] =
-    clock_now_iso().map(value =>
-        assert_that(value).contains("T")
-    )
+fun clock_now_returns_current_date_time_effect(): Effect[Assert] =
+    let current <- now()
+    let currentIso <- clock_now_iso()
+    assert_all([
+        assert_that(current.greater_than(UNIX_EPOCH)).is_true(),
+        assert_that(currentIso).contains("T"),
+    ])
 
 fun current_millis_returns_bounded_current_time_effect(): Effect[Assert] =
     current_millis_assertions()
