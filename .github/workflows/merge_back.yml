@@ -54,6 +54,53 @@ jobs:
             exit 1
           fi
 
+          resolve_gradle_properties_conflict() {
+            local version_side="$1"
+            local version_stage
+            local content_stage
+            case "${version_side}" in
+              --ours)
+                version_stage=2
+                content_stage=3
+                ;;
+              --theirs)
+                version_stage=3
+                content_stage=2
+                ;;
+              *)
+                echo "::error::Unsupported gradle.properties side: ${version_side}"
+                exit 1
+                ;;
+            esac
+
+            local version_line
+            version_line="$(git show ":${version_stage}:gradle.properties" | grep -m 1 '^version=')"
+            if [[ -z "${version_line}" ]]; then
+              echo "::error::Could not find version in ${version_side} gradle.properties."
+              exit 1
+            fi
+
+            git show ":${content_stage}:gradle.properties" > gradle.properties
+            local resolved_file
+            resolved_file="$(mktemp)"
+            if ! awk -v version_line="${version_line}" '
+              BEGIN { replaced = 0 }
+              /^version=/ {
+                print version_line
+                replaced = 1
+                next
+              }
+              { print }
+              END { if (replaced == 0) exit 1 }
+            ' gradle.properties > "${resolved_file}"; then
+              rm -f "${resolved_file}"
+              echo "::error::Could not replace version in resolved gradle.properties."
+              exit 1
+            fi
+            mv "${resolved_file}" gradle.properties
+            git add gradle.properties
+          }
+
           resolve_conflicts() {
             local gradle_side="$1"
             local conflicts
@@ -63,8 +110,7 @@ jobs:
             fi
 
             if [[ "${conflicts}" == "gradle.properties" ]]; then
-              git checkout "${gradle_side}" gradle.properties
-              git add gradle.properties
+              resolve_gradle_properties_conflict "${gradle_side}"
             else
               echo "::error::Merge conflict outside gradle.properties. Conflicting files:"
               printf '%s\n' "${conflicts}"
