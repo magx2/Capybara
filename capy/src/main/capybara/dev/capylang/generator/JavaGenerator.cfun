@@ -1712,7 +1712,9 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
     match nativeProviderScope.declarations.get(function.name) with
     case Some { declaration } -> java_native_provider_function_body(declaration, returnType, nativeProviderScope)
     case None ->
-    if tail_recursive_function(function, env, module, allModules)
+    if java_clock_native_function(function, module)
+    then java_clock_native_function_body()
+    else if tail_recursive_function(function, env, module, allModules)
     then tail_recursive_function_body(function, returnType, env, module, allModules)
     else match function.body with
     case CompiledBlockExpression block ->
@@ -1727,6 +1729,23 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         if !expression_emittable_as(function.body, returnType, env, module, allModules)
         then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
+
+/// Checks whether a function is a Clock native runtime wrapper.
+private fun java_clock_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/date_time"
+        & module.name == "Clock"
+        & function.name == "now"
+        & java_native_function_body(function)
+
+/// Checks whether a function body is the native marker.
+private fun java_native_function_body(function: CompiledFunction): bool =
+    match function.body with
+    case CompiledUnsupportedExpression unsupported -> unsupported.source == "<native>"
+    case _ -> false
+
+/// Emits the Clock native runtime wrapper body.
+private fun java_clock_native_function_body(): String =
+    "        return capy.lang.Effect.delay(() -> dev.capylang.DateTimeUtil.fromJavaLocalDateTime(java.time.LocalDateTime.now(java.time.Clock.systemUTC())));" + newline()
 
 private fun java_native_provider_index(catalog: NativeProviderCatalog): JavaNativeProviderIndex =
     JavaNativeProviderIndex {

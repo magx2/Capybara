@@ -1487,6 +1487,8 @@ private fun java_script_function_body_expression(function: CompiledFunction, mod
         then java_script_system_property_native_function_body(function)
         else if java_script_async_native_function(function, module)
         then java_script_async_native_function_body(function)
+        else if java_script_clock_native_function(function, module)
+        then java_script_clock_native_function_body()
         else java_script_expression_code(function.body, java_script_function_bindings(function), module, allModules)
 
 /// Checks whether a function is a System native runtime wrapper.
@@ -1514,6 +1516,17 @@ private fun java_script_async_native_function(function: CompiledFunction, module
 /// Emits the Async native runtime wrapper body.
 private fun java_script_async_native_function_body(function: CompiledFunction): String =
     "__capy_async_" + function.name + "(" + java_script_identifier(first_function_parameter_name(function)) + ")"
+
+/// Checks whether a function is a Clock native runtime wrapper.
+private fun java_script_clock_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/date_time"
+        & module.name == "Clock"
+        & function.name == "now"
+        & java_script_native_function_body(function)
+
+/// Emits the Clock native runtime wrapper body.
+private fun java_script_clock_native_function_body(): String =
+    "__capy_clock_now()"
 
 /// Returns the first function parameter name.
 private fun first_function_parameter_name(function: CompiledFunction): String =
