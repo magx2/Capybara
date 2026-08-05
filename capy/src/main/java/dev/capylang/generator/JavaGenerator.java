@@ -43,7 +43,7 @@ public final class JavaGenerator {
             var functionColumn = Integer.parseInt(matcher.group(2));
             var context = findFunction(compiledProgram, module.relativePath(), functionLine, functionColumn);
             var failure = context
-                    .flatMap(value -> explainFailure(value.function(), compiledProgram))
+                    .flatMap(value -> explainFailure(value, compiledProgram))
                     .orElseGet(() -> new GenerationFailure(
                             functionLine,
                             functionColumn,
@@ -80,7 +80,7 @@ public final class JavaGenerator {
                 var function = dataMap(functionValue);
                 var location = dataMap(function.get("location"));
                 if (integer(location.get("line")) == line && integer(location.get("column")) == column) {
-                    return Optional.of(new FunctionContext(modulePath(module, ".cfun"), function));
+                    return Optional.of(new FunctionContext(modulePath(module, ".cfun"), module, function));
                 }
             }
         }
@@ -88,11 +88,16 @@ public final class JavaGenerator {
     }
 
     private static Optional<GenerationFailure> explainFailure(
-            Map<String, Object> function,
+            FunctionContext context,
             Map<String, Object> compiledProgram
     ) {
         var failures = new ArrayList<GenerationFailure>();
-        collectActionableFailures(function.get("body"), knownFunctionNames(compiledProgram), failures);
+        collectActionableFailures(
+                context.function().get("body"),
+                knownFunctionNames(compiledProgram, context.module()),
+                declaredVariableTypes(context.function()),
+                failures
+        );
         return failures.stream()
                 .min(Comparator.comparingInt(GenerationFailure::line)
                         .thenComparingInt(GenerationFailure::column));
@@ -101,10 +106,11 @@ public final class JavaGenerator {
     private static void collectActionableFailures(
             Object value,
             Set<String> knownFunctions,
+            Map<String, TypeShape> declaredTypes,
             List<GenerationFailure> failures
     ) {
         if (value instanceof List<?> values) {
-            values.forEach(item -> collectActionableFailures(item, knownFunctions, failures));
+            values.forEach(item -> collectActionableFailures(item, knownFunctions, declaredTypes, failures));
             return;
         }
         if (!(value instanceof Map<?, ?> rawMap)) {
@@ -127,15 +133,22 @@ public final class JavaGenerator {
                                 + "` requires a lambda or function reference on its right-hand side; found "
                                 + expressionDescription(rightType)
                 ));
+            } else if (operator.equals("|*")) {
+                collectionFlatMapWrapperFailure(map, declaredTypes).ifPresent(failures::add);
             }
-        } else if (expressionType.equals("CompiledLambdaExpression")
-                && list(map.get("parameters")).stream().map(JavaGenerator::string).anyMatch("_"::equals)) {
-            var location = location(map);
-            failures.add(new GenerationFailure(
-                    location.line(),
-                    location.column(),
-                    "the Java backend does not support `_` as a lambda parameter; use a named parameter"
-            ));
+        } else if (expressionType.equals("CompiledMethodCallExpression")
+                && string(map.get("name")).equals("flat_map")) {
+            mapValue(first(map.get("arguments")))
+                    .filter(argument -> string(argument.get("__type")).equals("CompiledVariableExpression"))
+                    .ifPresent(argument -> {
+                        var location = location(map);
+                        failures.add(new GenerationFailure(
+                                location.line(),
+                                location.column(),
+                                "method `flat_map` requires a callable mapper; variable `"
+                                        + string(argument.get("name")) + "` is not callable in this context"
+                        ));
+                    });
         } else if (expressionType.equals("CompiledFunctionCallExpression")) {
             var name = string(map.get("name"));
             if (unqualifiedName(name) && !knownFunctions.contains(name)) {
@@ -148,7 +161,53 @@ public final class JavaGenerator {
             }
         }
 
-        map.values().forEach(item -> collectActionableFailures(item, knownFunctions, failures));
+        map.values().forEach(item -> collectActionableFailures(item, knownFunctions, declaredTypes, failures));
+    }
+
+    private static Optional<GenerationFailure> collectionFlatMapWrapperFailure(
+            Map<String, Object> binary,
+            Map<String, TypeShape> declaredTypes
+    ) {
+        var left = mapValue(binary.get("left"));
+        var right = mapValue(binary.get("right"));
+        if (left.isEmpty() || right.isEmpty()
+                || !string(left.orElseThrow().get("__type")).equals("CompiledVariableExpression")
+                || !string(right.orElseThrow().get("__type")).equals("CompiledLambdaExpression")) {
+            return Optional.empty();
+        }
+
+        var receiverType = declaredTypes.get(string(left.orElseThrow().get("name")));
+        if (receiverType == null || !Set.of("List", "Set", "Seq").contains(receiverType.name())
+                || receiverType.arguments().isEmpty()) {
+            return Optional.empty();
+        }
+        var valueType = receiverType.arguments().getFirst();
+        if (!Set.of("Result", "Option", "Effect", "Async").contains(valueType.name())) {
+            return Optional.empty();
+        }
+
+        var lambda = right.orElseThrow();
+        var parameters = list(lambda.get("parameters"));
+        var body = mapValue(lambda.get("body"));
+        if (parameters.size() != 1 || body.isEmpty()
+                || !string(body.orElseThrow().get("__type")).equals("CompiledMethodCallExpression")
+                || !string(body.orElseThrow().get("name")).equals("map")) {
+            return Optional.empty();
+        }
+        var bodyReceiver = mapValue(body.orElseThrow().get("receiver"));
+        if (bodyReceiver.isEmpty()
+                || !string(bodyReceiver.orElseThrow().get("__type")).equals("CompiledVariableExpression")
+                || !string(bodyReceiver.orElseThrow().get("name")).equals(string(parameters.getFirst()))) {
+            return Optional.empty();
+        }
+
+        var location = location(binary);
+        return Optional.of(new GenerationFailure(
+                location.line(),
+                location.column(),
+                "collection operator `|*` requires its mapper to return a collection; `"
+                        + valueType.name() + ".map` returns `" + valueType.name() + "`"
+        ));
     }
 
     private static boolean supportedPipeRight(Optional<Map<String, Object>> right) {
@@ -170,7 +229,10 @@ public final class JavaGenerator {
                 .isPresent();
     }
 
-    private static Set<String> knownFunctionNames(Map<String, Object> compiledProgram) {
+    private static Set<String> knownFunctionNames(
+            Map<String, Object> compiledProgram,
+            Map<String, Object> currentModule
+    ) {
         var names = new HashSet<String>();
         for (Object moduleValue : list(compiledProgram.get("modules"))) {
             var module = dataMap(moduleValue);
@@ -178,7 +240,44 @@ public final class JavaGenerator {
                 names.add(string(dataMap(functionValue).get("name")));
             }
         }
+        for (Object importValue : list(currentModule.get("imports"))) {
+            var declaration = dataMap(importValue);
+            list(declaration.get("importedNames")).stream()
+                    .map(JavaGenerator::string)
+                    .forEach(names::add);
+        }
         return names;
+    }
+
+    private static Map<String, TypeShape> declaredVariableTypes(Map<String, Object> function) {
+        var types = new LinkedHashMap<String, TypeShape>();
+        for (Object parameterValue : list(function.get("parameters"))) {
+            var parameter = dataMap(parameterValue);
+            types.put(string(parameter.get("name")), typeShape(parameter.get("typeReference")));
+        }
+        mapValue(function.get("body"))
+                .filter(body -> string(body.get("__type")).equals("CompiledBlockExpression"))
+                .ifPresent(body -> {
+                    for (Object bindingValue : list(body.get("bindings"))) {
+                        var binding = dataMap(bindingValue);
+                        types.put(string(binding.get("name")), typeShape(binding.get("typeReference")));
+                    }
+                });
+        return types;
+    }
+
+    private static TypeShape typeShape(Object value) {
+        return mapValue(value)
+                .map(type -> new TypeShape(
+                        string(type.get("name")),
+                        list(type.get("arguments")).stream().map(JavaGenerator::typeShape).toList()
+                ))
+                .orElseGet(() -> new TypeShape("", List.of()));
+    }
+
+    private static Object first(Object value) {
+        var values = list(value);
+        return values.isEmpty() ? null : values.getFirst();
     }
 
     private static boolean unqualifiedName(String name) {
@@ -308,12 +407,19 @@ public final class JavaGenerator {
         return value instanceof Number number ? number.intValue() : 0;
     }
 
-    private record FunctionContext(String sourcePath, Map<String, Object> function) {
+    private record FunctionContext(
+            String sourcePath,
+            Map<String, Object> module,
+            Map<String, Object> function
+    ) {
     }
 
     private record GenerationFailure(int line, int column, String reason) {
     }
 
     private record SourceLocation(int line, int column) {
+    }
+
+    private record TypeShape(String name, List<TypeShape> arguments) {
     }
 }

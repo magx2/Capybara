@@ -47,6 +47,65 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(generatedPath(source)).doesNotExist();
     }
 
+    @Test
+    void doesNotReportImportedConsoleFunctionAsUnresolved() throws Exception {
+        var source = writeSource("sample/ImportedConsoleFailure.cfun", """
+                from /capy/io/Console import { println }
+                from /capy/lang/Effect import { Effect }
+
+                fun broken(value: String): String =
+                    let printed: Effect[String] = println(value)
+                    missing()
+                """);
+
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("in function `broken`: unresolved function call `missing`")
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain("unresolved function call `println`"));
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void reportsNonCallableFlatMapArgument() throws Exception {
+        var source = writeSource("sample/FlatMapFailure.cfun", """
+                from /capy/io/Console import { println }
+                from /capy/lang/Effect import { Effect, pure }
+
+                fun broken(values: List[String]): Effect[String] =
+                    values | value => println(value)
+                    |> pure(''), (acc, print_effect) => acc.flat_map(print_effect)
+                """);
+
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("in function `broken`: method `flat_map` requires a callable mapper; "
+                        + "variable `print_effect` is not callable in this context")
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain("unresolved function call `println`"));
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void reportsCollectionFlatMapReturningResult() throws Exception {
+        var source = writeSource("sample/CollectionFlatMapFailure.cfun", """
+                from /capy/lang/Result import { Result }
+
+                fun broken(values: List[Result[int]]): Seq[Result[int]] =
+                    values |* result => result.map(value => value + 1)
+                """);
+
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Java generation failed for `sample/CollectionFlatMapFailure.cfun` at 4:4 "
+                        + "in function `broken`: collection operator `|*` requires its mapper to return "
+                        + "a collection; `Result.map` returns `Result`. No Java source was written for this module.");
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
     private void compileGenerate() {
         Capy.runCompileGenerate(new Capy.CompileGenerateOptions(
                 "java",
