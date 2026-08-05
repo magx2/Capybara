@@ -70,6 +70,12 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NativeCompilerValidator {
+    private static final Map<String, Set<String>> JAVA_SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
+            Map.entry("Effect", Set.of("map", "start")),
+            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "or_else", "or")),
+            Map.entry("Option", Set.of("map", "filter", "flat_map")),
+            Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`"))
+    );
     private static final Set<String> BUILTIN_TYPES = Set.of(
             "byte", "char", "int", "long", "double", "bool", "float", "void", "any", "data",
             "nothing", "String", "List", "Set", "Dict", "Tuple", "Option", "Result", "Either",
@@ -195,6 +201,149 @@ public final class NativeCompilerValidator {
         }
         validateFunctionAnnotations(context, module, function, errors, nativeProviderKeys);
         validateExpression(context, module, function.body(), errors);
+        if (javaBackendSelected()) {
+            validateJavaBackendExpression(
+                    module,
+                    function.body(),
+                    parameterTypes(function),
+                    errors
+            );
+        }
+    }
+
+    private boolean javaBackendSelected() {
+        return BackendCompilationContext.outputType()
+                .map(outputType -> outputType.equalsIgnoreCase("java"))
+                .orElse(false);
+    }
+
+    private Map<String, TypeReference> parameterTypes(FunctionDeclaration function) {
+        var types = new LinkedHashMap<String, TypeReference>();
+        for (var parameter : function.parameters()) {
+            types.put(parameter.name(), parameter.typeReference());
+        }
+        return types;
+    }
+
+    private void validateJavaBackendExpression(
+            ParsedModule module,
+            Expression expression,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        switch (expression) {
+            case BinaryExpression binary -> {
+                validateJavaBackendExpression(module, binary.left(), types, errors);
+                validateJavaBackendExpression(module, binary.right(), types, errors);
+            }
+            case BlockExpression block -> {
+                var blockTypes = new LinkedHashMap<>(types);
+                for (var binding : block.bindings()) {
+                    validateJavaBackendExpression(module, binding.value(), blockTypes, errors);
+                    if (!binding.typeReference().name().isBlank()) {
+                        blockTypes.put(binding.name(), binding.typeReference());
+                    }
+                }
+                validateJavaBackendExpression(module, block.result(), blockTypes, errors);
+            }
+            case DataLiteral literal -> literal.fields().forEach(field ->
+                    validateJavaBackendExpression(module, field.value(), types, errors));
+            case DictLiteral literal -> literal.entries().forEach(entry -> {
+                validateJavaBackendExpression(module, entry.key(), types, errors);
+                validateJavaBackendExpression(module, entry.value(), types, errors);
+            });
+            case FieldAccessExpression access ->
+                    validateJavaBackendExpression(module, access.receiver(), types, errors);
+            case FunctionCallExpression call -> call.arguments().forEach(argument ->
+                    validateJavaBackendExpression(module, argument, types, errors));
+            case IfExpression ifExpression -> {
+                validateJavaBackendExpression(module, ifExpression.condition(), types, errors);
+                validateJavaBackendExpression(module, ifExpression.thenBranch(), types, errors);
+                validateJavaBackendExpression(module, ifExpression.elseBranch(), types, errors);
+            }
+            case IndexExpression index -> {
+                validateJavaBackendExpression(module, index.receiver(), types, errors);
+                validateJavaBackendExpression(module, index.index(), types, errors);
+                if (index.hasEndIndex()) {
+                    validateJavaBackendExpression(module, index.endIndex(), types, errors);
+                }
+            }
+            case LambdaExpression lambda ->
+                    validateJavaBackendExpression(module, lambda.body(), types, errors);
+            case ListLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendExpression(module, value, types, errors));
+            case MatchExpression match -> {
+                validateJavaBackendExpression(module, match.value(), types, errors);
+                for (var matchCase : match.cases()) {
+                    if (matchCase.hasLiteral()) {
+                        validateJavaBackendExpression(module, matchCase.literal(), types, errors);
+                    }
+                    if (matchCase.hasGuard()) {
+                        validateJavaBackendExpression(module, matchCase.guard(), types, errors);
+                    }
+                    validateJavaBackendExpression(module, matchCase.body(), types, errors);
+                }
+            }
+            case MethodCallExpression call -> {
+                javaBackendMethodError(module, call, types).ifPresent(errors::add);
+                validateJavaBackendExpression(module, call.receiver(), types, errors);
+                call.arguments().forEach(argument ->
+                        validateJavaBackendExpression(module, argument, types, errors));
+            }
+            case ReduceExpression reduce -> {
+                validateJavaBackendExpression(module, reduce.receiver(), types, errors);
+                validateJavaBackendExpression(module, reduce.initial(), types, errors);
+                var reduceTypes = new LinkedHashMap<>(types);
+                inferJavaBackendExpressionType(reduce.initial(), types)
+                        .ifPresent(type -> reduceTypes.put(reduce.accumulatorName(), type));
+                validateJavaBackendExpression(module, reduce.body(), reduceTypes, errors);
+            }
+            case SetLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendExpression(module, value, types, errors));
+            case TupleLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendExpression(module, value, types, errors));
+            case UnaryExpression unary ->
+                    validateJavaBackendExpression(module, unary.expression(), types, errors);
+            case WithExpression with -> {
+                validateJavaBackendExpression(module, with.receiver(), types, errors);
+                with.fields().forEach(field ->
+                        validateJavaBackendExpression(module, field.value(), types, errors));
+            }
+            default -> {
+            }
+        }
+    }
+
+    private java.util.Optional<CompilerError> javaBackendMethodError(
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types
+    ) {
+        return inferJavaBackendExpressionType(call.receiver(), types).flatMap(type -> {
+            var receiverType = unqualified(type.name());
+            var supportedMethods = JAVA_SUPPORTED_METHODS_BY_RECEIVER.get(receiverType);
+            if (supportedMethods == null || supportedMethods.contains(call.name())) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(error(
+                    module,
+                    call.location(),
+                    "Method `" + call.name() + "` on `" + receiverType
+                            + "` is not supported by the Java backend."
+            ));
+        });
+    }
+
+    private java.util.Optional<TypeReference> inferJavaBackendExpressionType(
+            Expression expression,
+            Map<String, TypeReference> types
+    ) {
+        return switch (expression) {
+            case VariableExpression variable -> java.util.Optional.ofNullable(types.get(variable.name()));
+            case FunctionCallExpression call when Set.of("pure", "Effect.pure", "delay", "Effect.delay")
+                    .contains(call.name()) -> java.util.Optional.of(new TypeReference("Effect", List.of()));
+            default -> java.util.Optional.empty();
+        };
     }
 
     private void validateFunctionAnnotations(

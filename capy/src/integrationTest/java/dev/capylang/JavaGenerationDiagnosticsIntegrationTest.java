@@ -1,10 +1,14 @@
 package dev.capylang;
 
 import dev.capylang.cli.Capy;
+import dev.capylang.compiler.BackendCompilationContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -95,7 +99,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
-    void reportsNonCallableFlatMapArgument() throws Exception {
+    void reportsUnsupportedFlatMapBeforeCallableShape() throws Exception {
         var source = writeSource("sample/FlatMapFailure.cfun", """
                 from /capy/io/Console import { println }
                 from /capy/lang/Effect import { Effect, pure }
@@ -105,12 +109,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     |> pure(''), (acc, print_effect) => acc.flat_map(print_effect)
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("in function `broken`: method `flat_map` requires a callable mapper; "
-                        + "variable `print_effect` is not callable in this context")
-                .satisfies(exception -> assertThat(exception.getMessage())
-                        .doesNotContain("unresolved function call `println`"));
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/FlatMapFailure.cfun:6:40: Method `flat_map` on `Effect` is not supported by the Java backend.
+                """);
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -126,11 +128,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     |> Effect.pure(''), (acc, print_effect) => acc.flat_map(_ => print_effect)
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/EffectFlatMapFailure.cfun` at 6:47 "
-                        + "in function `broken`: method `flat_map` on `Effect` is not supported by the Java backend. "
-                        + "No Java source was written for this module.");
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/EffectFlatMapFailure.cfun:6:47: Method `flat_map` on `Effect` is not supported by the Java backend.
+                """);
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -138,17 +139,32 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     void reportsUnsupportedMethodForAnotherKnownReceiverType() throws Exception {
         var source = writeSource("sample/StringMethodFailure.cfun", """
-                fun broken(value: String): String =
+                from /capy/lang/Result import { Result }
+
+                fun broken(value: Result[int]): Result[int] =
                     value.not_a_java_method()
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/StringMethodFailure.cfun` at 2:4 "
-                        + "in function `broken`: method `not_a_java_method` on `String` is not supported "
-                        + "by the Java backend. No Java source was written for this module.");
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/StringMethodFailure.cfun:4:4: Method `not_a_java_method` on `Result` is not supported by the Java backend.
+                """);
 
         assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void allowsJavaUnsupportedMethodForJavaScriptTarget() throws Exception {
+        var source = writeSource("sample/EffectFlatMapJavaScript.cfun", """
+                import /capy/lang/Effect
+
+                fun supported(effect: Effect[String]): Effect[String] =
+                    effect.flat_map(value => Effect.pure(value))
+                """);
+
+        assertThat(compileGenerateStderr("javascript")).isEmpty();
+
+        assertThat(generatedPath(source, ".js")).exists();
     }
 
     @Test
@@ -170,8 +186,13 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     private void compileGenerate() {
-        Capy.runCompileGenerate(new Capy.CompileGenerateOptions(
-                "java",
+        compileGenerate("java");
+    }
+
+    private void compileGenerate(String outputType) {
+        BackendCompilationContext.withOutputType(outputType, () -> Capy.runCompileGenerate(
+                new Capy.CompileGenerateOptions(
+                outputType,
                 inputDir().toString(),
                 outputDir().toString(),
                 Optional.empty(),
@@ -182,7 +203,23 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 false,
                 false,
                 Capy.LogLevel.WARN
-        )).unsafeRun();
+        )).unsafeRun());
+    }
+
+    private String compileGenerateStderr() {
+        return compileGenerateStderr("java");
+    }
+
+    private String compileGenerateStderr(String outputType) {
+        var originalError = System.err;
+        var buffer = new ByteArrayOutputStream();
+        try (var errorStream = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
+            System.setErr(errorStream);
+            compileGenerate(outputType);
+        } finally {
+            System.setErr(originalError);
+        }
+        return buffer.toString(StandardCharsets.UTF_8);
     }
 
     private Path writeSource(String relativePath, String source) throws IOException {
@@ -193,8 +230,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     private Path generatedPath(Path source) {
+        return generatedPath(source, ".java");
+    }
+
+    private Path generatedPath(Path source, String extension) {
         var relative = inputDir().relativize(source);
-        var fileName = relative.getFileName().toString().replaceFirst("\\.cfun$", ".java");
+        var fileName = relative.getFileName().toString().replaceFirst("\\.cfun$", extension);
         return outputDir().resolve(relative).resolveSibling(fileName);
     }
 

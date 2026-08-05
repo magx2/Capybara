@@ -3,6 +3,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
+from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
@@ -81,6 +82,12 @@ private data CompiledRawDeriverDeclaration { name: String, methods: List[Functio
 private data CompiledNativeProviderAnnotation { found: bool, qualifier: String }
 /// Last separator positions for parsed type names.
 private data CompilerTypeNameSeparators { lastTypeSeparator: int, lastDotSeparator: int }
+/// Compiler state used while validating expressions against an output backend.
+private data BackendValidationContext {
+    moduleName: String,
+    variableTypes: Dict[CompiledTypeReference],
+    knownFunctions: Dict[bool]
+}
 /// Raw deriver declarations indexed once per module for derive expansion.
 private data CompiledDefinitionIndexes {
     functions: Dict[FunctionDeclaration],
@@ -148,6 +155,271 @@ private fun validate_program(
         libraryModules,
         nativeProviders
     )
+
+/// Validates a compiled program against capabilities of the selected output backend.
+fun validate_backend(program: CompiledProgram, outputType: String): Effect[List[CompilerError]] =
+    pure(
+        if outputType == "java" | outputType == "JAVA"
+        then backend_java_module_errors(
+            program.modules,
+            backend_known_function_names(program.modules, {:})
+        )
+        else []
+    )
+
+/// Collects function and imported symbol names available to backend validation.
+private fun backend_known_function_names(modules: List[CompiledModule], names: Dict[bool]): Dict[bool] =
+    match modules[0] with
+    case None -> names
+    case Some { module } ->
+        backend_known_function_names(
+            modules[1:],
+            backend_known_import_names(
+                module.imports,
+                backend_known_module_function_names(module.functions, names)
+            )
+        )
+
+/// Adds compiled function names to a backend symbol index.
+private fun backend_known_module_function_names(functions: List[CompiledFunction], names: Dict[bool]): Dict[bool] =
+    match functions[0] with
+    case None -> names
+    case Some { function } -> backend_known_module_function_names(functions[1:], names + (function.name, true))
+
+/// Adds explicitly imported names to a backend symbol index.
+private fun backend_known_import_names(imports: List[CompiledImportDeclaration], names: Dict[bool]): Dict[bool] =
+    match imports[0] with
+    case None -> names
+    case Some { declaration } ->
+        backend_known_import_names(
+            imports[1:],
+            backend_known_imported_names(declaration.importedNames, names)
+        )
+
+/// Adds one import declaration's names to a backend symbol index.
+private fun backend_known_imported_names(importedNames: List[String], names: Dict[bool]): Dict[bool] =
+    match importedNames[0] with
+    case None -> names
+    case Some { name } -> backend_known_imported_names(importedNames[1:], names + (name, true))
+
+/// Validates all compiled modules against Java backend capabilities.
+private fun backend_java_module_errors(modules: List[CompiledModule], knownFunctions: Dict[bool]): List[CompilerError] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        backend_java_function_errors(
+            module.functions,
+            BackendValidationContext {
+                moduleName: backend_module_file_name(module),
+                variableTypes: {:},
+                knownFunctions: knownFunctions
+            }
+        ) + backend_java_module_errors(modules[1:], knownFunctions)
+
+/// Formats the source path used by backend compiler diagnostics.
+private fun backend_module_file_name(module: CompiledModule): String =
+    let path = normalize_module_path(module.path)
+    if path.is_empty()
+    then module.name + ".cfun"
+    else path + "/" + module.name + ".cfun"
+
+/// Validates compiled function bodies against Java backend capabilities.
+private fun backend_java_function_errors(functions: List[CompiledFunction], context: BackendValidationContext): List[CompilerError] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        let variableTypes = backend_function_variable_types(function.parameters, function.body)
+        backend_java_expression_errors(function.body, context.with(variableTypes: variableTypes))
+            + backend_java_function_errors(functions[1:], context)
+
+/// Builds the declared variable type index visible from a compiled function body.
+private fun backend_function_variable_types(parameters: List[CompiledFunctionParameter], body: CompiledExpression): Dict[CompiledTypeReference] =
+    backend_block_variable_types(body, backend_parameter_variable_types(parameters, {:}))
+
+/// Adds compiled function parameters to a variable type index.
+private fun backend_parameter_variable_types(parameters: List[CompiledFunctionParameter], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> types
+    case Some { parameter } -> backend_parameter_variable_types(parameters[1:], types + (parameter.name, parameter.typeReference))
+
+/// Adds top-level block bindings to a variable type index.
+private fun backend_block_variable_types(expression: CompiledExpression, types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match expression with
+    case CompiledBlockExpression block -> backend_binding_variable_types(block.bindings, types)
+    case _ -> types
+
+/// Adds compiled let bindings to a variable type index.
+private fun backend_binding_variable_types(bindings: List[CompiledLetBinding], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match bindings[0] with
+    case None -> types
+    case Some { binding } -> backend_binding_variable_types(bindings[1:], types + (binding.name, binding.typeReference))
+
+/// Recursively validates one expression against Java backend capabilities.
+private fun backend_java_expression_errors(expression: CompiledExpression, context: BackendValidationContext): List[CompilerError] =
+    match expression with
+    case CompiledIfExpression value ->
+        backend_java_expression_errors(value.condition, context)
+            + backend_java_expression_errors(value.thenBranch, context)
+            + backend_java_expression_errors(value.elseBranch, context)
+    case CompiledBinaryExpression value ->
+        backend_java_expression_errors(value.left, context)
+            + backend_java_expression_errors(value.right, context)
+    case CompiledUnaryExpression value -> backend_java_expression_errors(value.expression, context)
+    case CompiledFunctionCallExpression value -> backend_java_expression_list_errors(value.arguments, context)
+    case CompiledMethodCallExpression value ->
+        backend_java_method_errors(value, context)
+            + backend_java_expression_errors(value.receiver, context)
+            + backend_java_expression_list_errors(value.arguments, context)
+    case CompiledWithExpression value ->
+        backend_java_expression_errors(value.receiver, context)
+            + backend_java_data_field_errors(value.fields, context)
+    case CompiledLambdaExpression value -> backend_java_expression_errors(value.body, context)
+    case CompiledListLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledSetLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledDictLiteral value -> backend_java_dict_entry_errors(value.entries, context)
+    case CompiledTupleLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledIndexExpression value ->
+        backend_java_expression_errors(value.receiver, context)
+            + backend_java_expression_errors(value.index, context)
+            + (if value.hasEndIndex then backend_java_expression_errors(value.endIndex, context) else [])
+    case CompiledDataLiteral value -> backend_java_data_field_errors(value.fields, context)
+    case CompiledFieldAccessExpression value -> backend_java_expression_errors(value.receiver, context)
+    case CompiledReduceExpression value -> backend_java_reduce_errors(value, context)
+    case CompiledMatchExpression value ->
+        backend_java_expression_errors(value.value, context)
+            + backend_java_match_case_errors(value.cases, context)
+    case CompiledThrowExpression value -> backend_java_expression_errors(value.value, context)
+    case CompiledTryCatchExpression value ->
+        backend_java_expression_errors(value.body, context)
+            + backend_java_try_catch_branch_errors(value.branches, context)
+    case CompiledBlockExpression value ->
+        backend_java_binding_errors(value.bindings, context)
+            + backend_java_expression_errors(
+                value.result,
+                context.with(variableTypes: backend_binding_variable_types(value.bindings, context.variableTypes))
+            )
+    case _ -> []
+
+/// Validates a list of compiled expressions against Java backend capabilities.
+private fun backend_java_expression_list_errors(expressions: List[CompiledExpression], context: BackendValidationContext): List[CompilerError] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } ->
+        backend_java_expression_errors(expression, context)
+            + backend_java_expression_list_errors(expressions[1:], context)
+
+/// Validates compiled data field values against Java backend capabilities.
+private fun backend_java_data_field_errors(fields: List[CompiledDataField], context: BackendValidationContext): List[CompilerError] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        backend_java_expression_errors(field.value, context)
+            + backend_java_data_field_errors(fields[1:], context)
+
+/// Validates compiled dictionary entries against Java backend capabilities.
+private fun backend_java_dict_entry_errors(entries: List[CompiledDictEntry], context: BackendValidationContext): List[CompilerError] =
+    match entries[0] with
+    case None -> []
+    case Some { entry } ->
+        backend_java_expression_errors(entry.key, context)
+            + backend_java_expression_errors(entry.value, context)
+            + backend_java_dict_entry_errors(entries[1:], context)
+
+/// Validates a reduce expression and tracks the inferred accumulator type.
+private fun backend_java_reduce_errors(reduce: CompiledReduceExpression, context: BackendValidationContext): List[CompilerError] =
+    let reduceContext = context.with(
+        variableTypes: backend_reduce_variable_types(reduce, context.variableTypes)
+    )
+    backend_java_expression_errors(reduce.receiver, context)
+        + backend_java_expression_errors(reduce.initial, context)
+        + backend_java_expression_errors(reduce.body, reduceContext)
+
+/// Adds an inferred reduce accumulator type to a variable type index.
+private fun backend_reduce_variable_types(reduce: CompiledReduceExpression, types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match backend_expression_type(reduce.initial, types) with
+    case Some { typeReference } -> types + (reduce.accumulatorName, typeReference)
+    case None -> types
+
+/// Validates compiled match cases against Java backend capabilities.
+private fun backend_java_match_case_errors(cases: List[CompiledMatchCase], context: BackendValidationContext): List[CompilerError] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } ->
+        (if matchCase.hasLiteral then backend_java_expression_errors(matchCase.literal, context) else [])
+            + (if matchCase.hasGuard then backend_java_expression_errors(matchCase.guard, context) else [])
+            + backend_java_expression_errors(matchCase.body, context)
+            + backend_java_match_case_errors(cases[1:], context)
+
+/// Validates compiled try/catch branch bodies against Java backend capabilities.
+private fun backend_java_try_catch_branch_errors(branches: List[CompiledTryCatchBranch], context: BackendValidationContext): List[CompilerError] =
+    match branches[0] with
+    case None -> []
+    case Some { branch } ->
+        backend_java_expression_errors(branch.catchBody, context)
+            + backend_java_try_catch_branch_errors(branches[1:], context)
+
+/// Validates compiled let binding values against Java backend capabilities.
+private fun backend_java_binding_errors(bindings: List[CompiledLetBinding], context: BackendValidationContext): List[CompilerError] =
+    match bindings[0] with
+    case None -> []
+    case Some { binding } ->
+        backend_java_expression_errors(binding.value, context)
+            + backend_java_binding_errors(bindings[1:], context)
+
+/// Reports a Java capability error for a method call when its receiver type is known.
+private fun backend_java_method_errors(call: CompiledMethodCallExpression, context: BackendValidationContext): List[CompilerError] =
+    match backend_expression_type(call.receiver, context.variableTypes) with
+    case None -> []
+    case Some { typeReference } ->
+        let receiverType = backend_unqualified_type_name(typeReference.name)
+        if backend_known_function(context.knownFunctions, call.name)
+            & (!backend_java_type_has_method_table(receiverType) | backend_java_method_supported(receiverType, call.name))
+        then []
+        else [CompilerError {
+            message: "Method `" + call.name + "` on `" + receiverType + "` is not supported by the Java backend.",
+            moduleName: context.moduleName,
+            line: call.location.line,
+            column: call.location.column
+        }]
+
+/// Resolves the limited expression types required by backend capability validation.
+private fun backend_expression_type(expression: CompiledExpression, types: Dict[CompiledTypeReference]): Option[CompiledTypeReference] =
+    match expression with
+    case CompiledVariableExpression variable -> types.get(variable.name)
+    case CompiledFunctionCallExpression call ->
+        if call.name == "pure" | call.name == "Effect.pure" | call.name == "delay" | call.name == "Effect.delay"
+        then Some { CompiledTypeReference { name: "Effect", arguments: [] } }
+        else None {}
+    case _ -> None {}
+
+/// Returns the last unqualified segment of a compiled type name.
+private fun backend_unqualified_type_name(name: String): String =
+    let slash = compiler_last_index_of(name, "/", 0, -1)
+    let dot = compiler_last_index_of(name, ".", 0, -1)
+    let separator = if slash > dot then slash else dot
+    if separator < 0 then name else name[separator + 1, name.size().value]
+
+/// Checks whether a name is present in the linked function symbol index.
+private fun backend_known_function(functions: Dict[bool], name: String): bool =
+    match functions.get(name) with
+    case Some _ -> true
+    case None -> false
+
+/// Checks whether Java has an explicit method capability table for a receiver type.
+private fun backend_java_type_has_method_table(receiverType: String): bool =
+    receiverType == "Effect" | receiverType == "Result" | receiverType == "Option" | receiverType == "Async"
+
+/// Checks whether Java supports a method on a receiver type with an explicit capability table.
+private fun backend_java_method_supported(receiverType: String, methodName: String): bool =
+    if receiverType == "Effect"
+    then compiler_string_list_contains(["map", "start"], methodName)
+    else if receiverType == "Result"
+    then compiler_string_list_contains(["map", "flat_map", "reduce", "reduce_left", "or_else", "or"], methodName)
+    else if receiverType == "Option"
+    then compiler_string_list_contains(["map", "filter", "flat_map"], methodName)
+    else if receiverType == "Async"
+    then compiler_string_list_contains(["join", "map", "flat_map", "`|`", "`|*`"], methodName)
+    else false
 
 private fun validation_library_modules(libraries: List[CompiledModule]): List[String] =
     match libraries[0] with

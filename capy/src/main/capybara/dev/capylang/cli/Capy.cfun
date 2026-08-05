@@ -3051,20 +3051,25 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                             print_compiler_errors(errors)
                                 .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
                         case Left { program } ->
-                            write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
-                                match linkedResult with
-                                case Error { message } -> runtime_error(message)
-                                case Success _ ->
-                                    compile_generate_tests(options, configuration, program).flat_map(testResult =>
-                                        match testResult with
-                                        case Error { message } -> runtime_error(message)
-                                        case Success { testProgram } ->
-                                            write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
-                                                match writeResult with
-                                                case Error { message } -> runtime_error(message)
-                                                case Success _ -> pure(/capy/lang/Program.Success {})
-                                            )
-                                    )
+                            /dev/capylang/compiler/CapybaraCompiler.validate_backend(program, options.output_type).flat_map(backendErrors =>
+                                if !backendErrors.is_empty()
+                                then print_compiler_errors(backendErrors)
+                                    .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                                else write_compile_generate_linked_output(options.linked_output, program).flat_map(linkedResult =>
+                                    match linkedResult with
+                                    case Error { message } -> runtime_error(message)
+                                    case Success _ ->
+                                        compile_generate_tests(options, configuration, program).flat_map(testResult =>
+                                            match testResult with
+                                            case Error { message } -> runtime_error(message)
+                                            case Success { testProgram } ->
+                                                write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
+                                                    match writeResult with
+                                                    case Error { message } -> runtime_error(message)
+                                                    case Success _ -> pure(/capy/lang/Program.Success {})
+                                                )
+                                        )
+                                )
                             )
                     )
             )

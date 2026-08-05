@@ -1,5 +1,7 @@
 package dev.capylang.cli;
 
+import dev.capylang.compiler.BackendCompilationContext;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
@@ -13,7 +15,14 @@ public final class CapyMain {
             System.out.println("Capybara compiler version: " + packagedVersion());
             return;
         }
-        Capy.main(arguments);
+        BackendCompilationContext.withOutputType(outputType(arguments), () -> Capy.main(arguments));
+    }
+
+    private static String outputType(String[] arguments) {
+        if (arguments.length >= 2 && arguments[0].equals("compile-generate")) {
+            return arguments[1];
+        }
+        return "";
     }
 
     private static String packagedVersion() {

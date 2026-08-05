@@ -19,12 +19,6 @@ import java.util.regex.Pattern;
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
 public final class JavaGenerator {
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
-    private static final Map<String, Set<String>> SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
-            Map.entry("Effect", Set.of("map", "start")),
-            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "or_else", "or")),
-            Map.entry("Option", Set.of("map", "filter", "flat_map")),
-            Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`"))
-    );
     private static final Pattern UNSUPPORTED_FUNCTION = Pattern.compile(
             "throw new UnsupportedOperationException\\(\\\"Unsupported CFUN expression at (\\d+):(\\d+)\\\"\\);"
     );
@@ -166,8 +160,6 @@ public final class JavaGenerator {
                         "method `flat_map` requires a callable mapper; variable `"
                                 + string(argument.orElseThrow().get("name")) + "` is not callable in this context"
                 ));
-            } else {
-                unsupportedMethodFailure(map, knownFunctions, declaredTypes).ifPresent(failures::add);
             }
         } else if (expressionType.equals("CompiledFunctionCallExpression")) {
             var name = string(map.get("name"));
@@ -202,41 +194,6 @@ public final class JavaGenerator {
             }
             return Optional.empty();
         });
-    }
-
-    private static Optional<GenerationFailure> unsupportedMethodFailure(
-            Map<String, Object> methodCall,
-            Set<String> knownFunctions,
-            Map<String, TypeShape> declaredTypes
-    ) {
-        var receiverType = inferredExpressionType(methodCall.get("receiver"), declaredTypes)
-                .map(TypeShape::name)
-                .map(JavaGenerator::unqualifiedTypeName);
-        if (receiverType.isEmpty()) {
-            return Optional.empty();
-        }
-
-        var supportedMethods = SUPPORTED_METHODS_BY_RECEIVER.get(receiverType.orElseThrow());
-        var methodName = string(methodCall.get("name"));
-        var unknownMethod = !knownFunctions.contains(methodName);
-        var unsupportedTypeSpecificMethod = supportedMethods != null && !supportedMethods.contains(methodName);
-        if (!unknownMethod && !unsupportedTypeSpecificMethod) {
-            return Optional.empty();
-        }
-
-        var location = location(methodCall);
-        return Optional.of(new GenerationFailure(
-                location.line(),
-                location.column(),
-                "method `" + methodName + "` on `" + receiverType.orElseThrow()
-                        + "` is not supported by the Java backend"
-        ));
-    }
-
-    private static String unqualifiedTypeName(String name) {
-        var slash = name.lastIndexOf('/');
-        var dot = name.lastIndexOf('.');
-        return name.substring(Math.max(slash, dot) + 1);
     }
 
     private static Optional<GenerationFailure> collectionFlatMapWrapperFailure(
