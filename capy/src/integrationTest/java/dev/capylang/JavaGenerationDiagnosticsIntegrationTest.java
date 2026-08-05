@@ -17,6 +17,33 @@ class JavaGenerationDiagnosticsIntegrationTest {
     Path tempDir;
 
     @Test
+    void generatesQualifiedStandardLibraryCallsThroughCompileGenerate() throws Exception {
+        var source = writeSource("sample/QualifiedEffect.cfun", """
+                import /capy/lang/Effect
+                import /capy/io/Console
+                import /capy/lang/Primitives
+
+                fun qualified_pure(value: String): Effect[String] =
+                    Effect.pure(value)
+
+                fun qualified_print(value: String): Effect[String] =
+                    Console.println(value)
+
+                fun qualified_parse(value: String): /capy/lang/Result[int] =
+                    Primitives.to_int(value)
+                """);
+
+        compileGenerate();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("return capy.lang.Effect.pure(value);")
+                .contains("dev.capylang.ConsoleUtil.println")
+                .contains("return __capy_parse_int(value);")
+                .doesNotContain("Unsupported CFUN expression at");
+    }
+
+    @Test
     void reportsMalformedPipeExpressionAndDoesNotWriteJavaOutput() throws Exception {
         var source = writeSource("sample/PipeFailure.cfun", """
                 fun broken(values: List[int]): List[int] =

@@ -200,6 +200,85 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateQualifiedStandardLibraryCalls() {
+        var source = """
+                import /capy/lang/Effect
+                import /capy/io/Console
+                import /capy/lang/Primitives
+                import /capy/lang/Async
+                from /capy/lang/Async import { Async }
+                import /capy/lang/System
+                import /capy/lang/Result
+                from /capy/lang/Result import { Error }
+                import /capy/io/Path
+                import /capy/io/IO
+                import /capy/collection/Seq
+                import /capy/collection/List
+
+                private fun pure(value: String): String = value
+
+                fun qualified_pure(value: String): Effect[String] =
+                    Effect.pure(value)
+
+                fun qualified_delay(value: String): Effect[String] =
+                    Effect.delay(() => value)
+
+                fun qualified_print(value: String): Effect[String] =
+                    Console.println(value)
+
+                fun qualified_parse(value: String): /capy/lang/Result[int] =
+                    Primitives.to_int(value)
+
+                fun qualified_compute(value: int): Async[int] =
+                    Async.compute(() => value + 1)
+
+                fun qualified_millis(): Effect[long] =
+                    System.current_millis()
+
+                fun qualified_property() =
+                    System.system_property("java.version")
+
+                fun qualified_error(value: String): Error =
+                    Result.error(value)
+
+                fun qualified_path(value: String): Path =
+                    Path.from_string(value)
+
+                fun qualified_exists(path: Path): Effect[bool] =
+                    IO.exists(path)
+
+                fun qualified_seq(values: List[int]): Seq[int] =
+                    Seq.to_seq(values)
+                """;
+        var program = compileProgram(List.of(rawModule(
+                "QualifiedEffect",
+                "/sample/app",
+                source,
+                SourceKind.FUNCTIONAL
+        )));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/QualifiedEffect.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("return capy.lang.Effect.pure(value);")
+                .contains("return capy.lang.Effect.delay(")
+                .contains("dev.capylang.ConsoleUtil.println")
+                .contains("return __capy_parse_int(value);")
+                .contains("return capy.lang.Async.start(capy.lang.Effect.delay(")
+                .contains("return capy.lang.System.currentMillis();")
+                .contains("return capy.lang.System.systemProperty(\"java.version\");")
+                .contains("return __capy_error(value);")
+                .contains("dev.capylang.PathUtil.fromString(value)")
+                .contains("return capy.io.IO.exists(")
+                .contains("return capy.collection.Seq.toSeq(values);")
+                .doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+    }
+
+    @Test
     void shouldFailJavaGenerationInsteadOfEmittingUnsupportedFunctionStubs() {
         var source = "fun broken(): int = missing()";
         var program = compileProgram(List.of(rawModule("Broken", "/sample/app", source, SourceKind.FUNCTIONAL)));
