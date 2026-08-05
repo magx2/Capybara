@@ -4,14 +4,23 @@
 
 === fun abs(number: long): long
 
+Returns the absolute value of a long integer.
+
+Example: `abs(-42L)` returns `42L`.
 
 
 === fun abs(number: int): int
 
+Returns the absolute value of an integer.
+
+Example: `abs(-42)` returns `42`.
 
 
 === fun digits(number: int): int
 
+Returns the number of decimal digits in an integer, excluding its sign.
+
+Example: `digits(-123)` returns `3`.
 
 
 === fun floor_div(a: int, b: int): int
@@ -149,6 +158,7 @@ let toward_zero = round(-1.5, HALF_DOWN)  // -1L
 [[type-RoundMode]]
 === enum RoundMode
 
+Rounding policy used by `round` when converting a double to a long.
 
 ==== Values
 

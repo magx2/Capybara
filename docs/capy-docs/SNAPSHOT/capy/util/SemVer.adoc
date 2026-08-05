@@ -35,6 +35,12 @@ Given a version number MAJOR.MINOR.PATCH, increment the:
 Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 Full specification: https://semver.org/
 
+Example:
+```cfun
+let version <- sem_ver(1, 2, 3, None {}, Some { "build.7" })
+version.to_string() == "1.2.3+build.7"
+```
+
 ==== Fields
 
 * `build_metadata`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
@@ -91,22 +97,27 @@ Semantic version major component, greater than or equal to zero.
 
 ===== fun major.`<=`(other: xref:#type-major[major]): bool
 
+Returns whether this major component is less than or equal to `other`.
 
 
 ===== fun major.`<`(other: xref:#type-major[major]): bool
 
+Returns whether this major component is less than `other`.
 
 
 ===== fun major.`==`(other: xref:#type-major[major]): bool
 
+Returns whether this major component has the same value as `other`.
 
 
 ===== fun major.`>=`(other: xref:#type-major[major]): bool
 
+Returns whether this major component is greater than or equal to `other`.
 
 
 ===== fun major.`>`(other: xref:#type-major[major]): bool
 
+Returns whether this major component is greater than `other`.
 
 
 
@@ -119,22 +130,27 @@ Semantic version minor component, greater than or equal to zero.
 
 ===== fun minor.`<=`(other: xref:#type-minor[minor]): bool
 
+Returns whether this minor component is less than or equal to `other`.
 
 
 ===== fun minor.`<`(other: xref:#type-minor[minor]): bool
 
+Returns whether this minor component is less than `other`.
 
 
 ===== fun minor.`==`(other: xref:#type-minor[minor]): bool
 
+Returns whether this minor component has the same value as `other`.
 
 
 ===== fun minor.`>=`(other: xref:#type-minor[minor]): bool
 
+Returns whether this minor component is greater than or equal to `other`.
 
 
 ===== fun minor.`>`(other: xref:#type-minor[minor]): bool
 
+Returns whether this minor component is greater than `other`.
 
 
 
@@ -147,22 +163,27 @@ Semantic version patch component, greater than or equal to zero.
 
 ===== fun patch.`<=`(other: xref:#type-patch[patch]): bool
 
+Returns whether this patch component is less than or equal to `other`.
 
 
 ===== fun patch.`<`(other: xref:#type-patch[patch]): bool
 
+Returns whether this patch component is less than `other`.
 
 
 ===== fun patch.`==`(other: xref:#type-patch[patch]): bool
 
+Returns whether this patch component has the same value as `other`.
 
 
 ===== fun patch.`>=`(other: xref:#type-patch[patch]): bool
 
+Returns whether this patch component is greater than or equal to `other`.
 
 
 ===== fun patch.`>`(other: xref:#type-patch[patch]): bool
 
+Returns whether this patch component is greater than `other`.
 
 
 

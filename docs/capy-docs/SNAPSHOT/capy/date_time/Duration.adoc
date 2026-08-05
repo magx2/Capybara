@@ -36,6 +36,7 @@ extended duration respectively.
 
 === const ZERO: xref:#type-Duration[Duration]
 
+Duration with every component set to zero.
 
 
 

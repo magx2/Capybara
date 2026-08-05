@@ -4,10 +4,12 @@
 
 === fun clamp_long_to_int(value: long): int
 
+Clamps a long to the inclusive int range.
 
 
 === fun safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
 
+Converts a long to int, returning an error when it is outside the int range.
 
 
 === fun to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;
@@ -28,6 +30,8 @@ Parses this String as a float.
 === fun to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
 
 Parses this String as an int.
+
+Example: `to_int("42")` returns `Success { value: 42 }`.
 
 
 === fun to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;long&#93;
@@ -61,18 +65,22 @@ Floating-point representation of `FLOAT_BOUND`.
 
 === const MAX_INT_VALUE: int
 
+Largest value representable by `int`.
 
 
 === const MAX_LONG_VALUE: long
 
+Largest value representable by `long`.
 
 
 === const MIN_INT_VALUE: int
 
+Smallest value representable by `int`.
 
 
 === const MIN_LONG_VALUE: long
 
+Smallest value representable by `long`.
 
 
 

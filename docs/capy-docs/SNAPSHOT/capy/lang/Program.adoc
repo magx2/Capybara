@@ -80,6 +80,11 @@ Failed program completion with a non-zero exit code.
 
 Process result returned by an executable Capybara `main` function.
 
+Example:
+```cfun
+fun main(): Program = Success {}
+```
+
 ==== Variants
 
 * xref:#type-Failed[Failed]

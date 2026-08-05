@@ -15,6 +15,12 @@ Returns an effect that reads the current system time in milliseconds since the U
 
 The value is captured when the effect is run.
 
+Example:
+```cfun
+let timestamp <- current_millis()
+timestamp
+```
+
 
 === fun nano_time(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;long&#93;
 

@@ -207,6 +207,7 @@ Integers and longs use `JsonNumberLong`; fractional values use
 [[type-JsonNumberDouble]]
 === data JsonNumberDouble
 
+JSON number represented as a double-precision value.
 
 ==== Fields
 
@@ -215,6 +216,7 @@ Integers and longs use `JsonNumberLong`; fractional values use
 [[type-JsonNumberLong]]
 === data JsonNumberLong
 
+JSON number represented as a long integer value.
 
 ==== Fields
 
@@ -292,6 +294,7 @@ JSON array value wrapper.
 
 ===== fun JsonValueArray.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Json[Json]&#93;
 
+Returns the JSON value at `idx`, or `None` when the index is out of bounds.
 
 
 [[type-JsonValueObject]]
@@ -307,6 +310,7 @@ JSON object value wrapper.
 
 ===== fun JsonValueObject.get(key: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Json[Json]&#93;
 
+Returns the JSON value stored under `key`, or `None` when the key is absent.
 
 
 [[type-TypedJson]]

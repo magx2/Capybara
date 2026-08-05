@@ -33,30 +33,37 @@ Function form of `left - right`.
 
 === const BYTES_IN_GIB: double
 
+Number of bytes in one gibibyte.
 
 
 === const BYTES_IN_KIB: double
 
+Number of bytes in one kibibyte.
 
 
 === const BYTES_IN_MIB: double
 
+Number of bytes in one mebibyte.
 
 
 === const ONE_GIB: xref:#type-byte_count[byte_count]
 
+Byte count representing one gibibyte.
 
 
 === const ONE_KIB: xref:#type-byte_count[byte_count]
 
+Byte count representing one kibibyte.
 
 
 === const ONE_MIB: xref:#type-byte_count[byte_count]
 
+Byte count representing one mebibyte.
 
 
 === const ZERO_BYTES: xref:#type-byte_count[byte_count]
 
+Byte count representing zero bytes.
 
 
 
@@ -72,30 +79,37 @@ Non-negative number of bytes.
 
 ===== fun byte_count.`+`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
+Operator form of `byte_count.plus(other)`.
 
 
 ===== fun byte_count.`-`(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;
 
+Operator form of `byte_count.minus(other)`.
 
 
 ===== fun byte_count.`<=`(other: xref:#type-byte_count[byte_count]): bool
 
+Returns whether this byte count is less than or equal to `other`.
 
 
 ===== fun byte_count.`<`(other: xref:#type-byte_count[byte_count]): bool
 
+Returns whether this byte count is less than `other`.
 
 
 ===== fun byte_count.`==`(other: xref:#type-byte_count[byte_count]): bool
 
+Returns whether this byte count has the same value as `other`.
 
 
 ===== fun byte_count.`>=`(other: xref:#type-byte_count[byte_count]): bool
 
+Returns whether this byte count is greater than or equal to `other`.
 
 
 ===== fun byte_count.`>`(other: xref:#type-byte_count[byte_count]): bool
 
+Returns whether this byte count is greater than `other`.
 
 
 ===== fun byte_count.minus(other: xref:#type-byte_count[byte_count]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-byte_count[byte_count]&#93;

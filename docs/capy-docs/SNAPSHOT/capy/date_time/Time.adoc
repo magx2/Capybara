@@ -20,54 +20,67 @@ Offset-aware inputs preserve their offset in `offset_minutes`.
 
 === const HOURS_IN_DAY: int
 
+Number of hours in a day.
 
 
 === const MAX_OFFSET_MINUTES: int
 
+Largest supported absolute UTC offset, in minutes.
 
 
 === const MIDNIGHT: xref:#type-Time[Time]
 
+Midnight without a UTC offset.
 
 
 === const MINUTES_IN_DAY: int
 
+Number of minutes in a day.
 
 
 === const MINUTES_IN_HOUR: int
 
+Number of minutes in an hour.
 
 
 === const NOON: xref:#type-Time[Time]
 
+Noon without a UTC offset.
 
 
 === const NOON_HOUR: xref:#type-hour[hour]
 
+Noon hour value.
 
 
 === const SECONDS_IN_DAY: int
 
+Number of seconds in a day.
 
 
 === const SECONDS_IN_HOUR: int
 
+Number of seconds in an hour.
 
 
 === const SECONDS_IN_MINUTE: int
 
+Number of seconds in a minute.
 
 
 === const ZERO_HOUR: xref:#type-hour[hour]
 
+Start-of-day hour value.
 
 
 === const ZERO_MINUTE: xref:#type-minute[minute]
 
+Start-of-hour minute value.
 
 
 === const ZERO_SECOND: xref:#type-second[second]
 
+Start-of-minute second value.
 
 
 
@@ -168,22 +181,27 @@ Hour of day in 24-hour clock, in the range 0..23.
 
 ===== fun hour.`<=`(other: xref:#type-hour[hour]): bool
 
+Returns whether this hour is less than or equal to `other`.
 
 
 ===== fun hour.`<`(other: xref:#type-hour[hour]): bool
 
+Returns whether this hour is less than `other`.
 
 
 ===== fun hour.`==`(other: xref:#type-hour[hour]): bool
 
+Returns whether this hour has the same value as `other`.
 
 
 ===== fun hour.`>=`(other: xref:#type-hour[hour]): bool
 
+Returns whether this hour is greater than or equal to `other`.
 
 
 ===== fun hour.`>`(other: xref:#type-hour[hour]): bool
 
+Returns whether this hour is greater than `other`.
 
 
 
@@ -196,22 +214,27 @@ Minute of hour, in the range 0..59.
 
 ===== fun minute.`<=`(other: xref:#type-minute[minute]): bool
 
+Returns whether this minute is less than or equal to `other`.
 
 
 ===== fun minute.`<`(other: xref:#type-minute[minute]): bool
 
+Returns whether this minute is less than `other`.
 
 
 ===== fun minute.`==`(other: xref:#type-minute[minute]): bool
 
+Returns whether this minute has the same value as `other`.
 
 
 ===== fun minute.`>=`(other: xref:#type-minute[minute]): bool
 
+Returns whether this minute is greater than or equal to `other`.
 
 
 ===== fun minute.`>`(other: xref:#type-minute[minute]): bool
 
+Returns whether this minute is greater than `other`.
 
 
 
@@ -230,22 +253,27 @@ Second of minute, in the range 0..59.
 
 ===== fun second.`<=`(other: xref:#type-second[second]): bool
 
+Returns whether this second is less than or equal to `other`.
 
 
 ===== fun second.`<`(other: xref:#type-second[second]): bool
 
+Returns whether this second is less than `other`.
 
 
 ===== fun second.`==`(other: xref:#type-second[second]): bool
 
+Returns whether this second has the same value as `other`.
 
 
 ===== fun second.`>=`(other: xref:#type-second[second]): bool
 
+Returns whether this second is greater than or equal to `other`.
 
 
 ===== fun second.`>`(other: xref:#type-second[second]): bool
 
+Returns whether this second is greater than `other`.
 
 
 
