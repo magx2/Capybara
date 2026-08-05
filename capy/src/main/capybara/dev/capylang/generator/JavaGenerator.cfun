@@ -11730,9 +11730,7 @@ private fun stdlib_math_sqrt_call_emittable(arguments: List[CompiledExpression],
 
 /// Checks whether a call has the standard-library math digits call shape.
 private fun stdlib_math_digits_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    if call.name == "digits"
-    then !function_defined(call.name, module.functions) & stdlib_math_wildcard_import(module.imports)
-    else false
+    stdlib_function_call(call, "capy/lang/Math", "digits", module)
 
 /// Checks whether a function matches the function defined metadata.
 private fun function_defined(name: String, functions: List[CompiledFunction]): bool =
@@ -11742,17 +11740,6 @@ private fun function_defined(name: String, functions: List[CompiledFunction]): b
         if !java_skip_function(function) & function.name == name & !compiled_constant(function)
         then true
         else function_defined(name, functions[1:])
-
-/// Checks whether an import matches the standard-library math wildcard import rule.
-private fun stdlib_math_wildcard_import(imports: List[CompiledImportDeclaration]): bool =
-    match imports[0] with
-    case None -> false
-    case Some { declaration } ->
-        if declaration.wildcard
-            & (declaration.modulePath == "/capy/lang/Math" | declaration.modulePath == "capy/lang/Math")
-            & !string_list_contains(declaration.excludedNames, "digits")
-        then true
-        else stdlib_math_wildcard_import(imports[1:])
 
 /// Checks whether standard-library math digits call can be emitted by the target backend.
 private fun stdlib_math_digits_call_emittable(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

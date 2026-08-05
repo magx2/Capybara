@@ -210,6 +210,7 @@ class CompilationTest {
                 import /capy/lang/System
                 import /capy/lang/Result
                 from /capy/lang/Result import { Error }
+                import /capy/lang/Math
                 import /capy/io/Path
                 import /capy/io/IO
                 import /capy/collection/Seq
@@ -237,6 +238,9 @@ class CompilationTest {
 
                 fun qualified_property() =
                     System.system_property("java.version")
+
+                fun qualified_digits(value: int): int =
+                    Math.digits(value)
 
                 fun qualified_error(value: String): Error =
                     Result.error(value)
@@ -271,6 +275,7 @@ class CompilationTest {
                 .contains("return capy.lang.Async.start(capy.lang.Effect.delay(")
                 .contains("return capy.lang.System.currentMillis();")
                 .contains("return capy.lang.System.systemProperty(\"java.version\");")
+                .contains("java.lang.Integer.toString(value)")
                 .contains("return __capy_error(value);")
                 .contains("dev.capylang.PathUtil.fromString(value)")
                 .contains("return capy.io.IO.exists(")
