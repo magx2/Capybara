@@ -3170,7 +3170,7 @@ private fun java_script_lambda_parameter_at(parameters: List[String], target: in
     case None -> ""
     case Some { parameter } ->
         if target == 0
-        then parameter
+        then java_script_decoded_lambda_parameter_name(parameter)
         else java_script_lambda_parameter_at(parameters[1:], target - 1)
 
 /// Checks whether a call has the collection get call shape.
@@ -3734,9 +3734,19 @@ private fun java_script_lambda_parameter_tail(parameters: List[String], idx: int
 
 /// Computes the JavaScript name for lambda parameter.
 private fun java_script_lambda_parameter_name(parameter: String, idx: int): String =
-    if parameter == "_"
+    let name = java_script_decoded_lambda_parameter_name(parameter)
+    if name == "_"
     then "__capy_lambda_unused_" + idx
-    else java_script_identifier(parameter)
+    else java_script_identifier(name)
+
+/// Decodes a typed lambda parameter name retained inside the shared AST.
+private fun java_script_decoded_lambda_parameter_name(parameter: String): String =
+    if java_script_string_has_prefix(parameter, "__capy_typed_lambda|")
+    then
+        let rest = parameter["__capy_typed_lambda|".size().value, parameter.size().value]
+        let separator = java_script_first_index_of(rest, "|", 0)
+        if separator < 0 then parameter else rest[0, separator]
+    else parameter
 
 /// Creates JavaScript name/type bindings for lambda.
 private fun java_script_lambda_bindings(parameters: List[String]): List[JavaScriptBinding] =
@@ -3747,7 +3757,7 @@ private fun java_script_lambda_bindings_from(parameters: List[String], idx: int)
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [JavaScriptBinding { name: parameter, jsName: java_script_lambda_parameter_name(parameter, idx), typeName: java_script_unknown_type() }]
+        [JavaScriptBinding { name: java_script_decoded_lambda_parameter_name(parameter), jsName: java_script_lambda_parameter_name(parameter, idx), typeName: java_script_unknown_type() }]
             + java_script_lambda_bindings_from(parameters[1:], idx + 1)
 
 /// Computes the JavaScript type for lambda bindings with single.
@@ -3759,7 +3769,7 @@ private fun java_script_lambda_bindings_with_single_type_from(parameters: List[S
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [JavaScriptBinding { name: parameter, jsName: java_script_lambda_parameter_name(parameter, idx), typeName: typeName }]
+        [JavaScriptBinding { name: java_script_decoded_lambda_parameter_name(parameter), jsName: java_script_lambda_parameter_name(parameter, idx), typeName: typeName }]
             + java_script_lambda_bindings_with_single_type_from(parameters[1:], typeName, idx + 1)
 
 /// Emits JavaScript code for with expression.

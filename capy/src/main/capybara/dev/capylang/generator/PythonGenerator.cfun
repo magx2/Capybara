@@ -1939,7 +1939,7 @@ private fun python_lambda_parameter_at(parameters: List[String], target: int): S
     case None -> ""
     case Some { parameter } ->
         if target == 0
-        then parameter
+        then python_decoded_lambda_parameter_name(parameter)
         else python_lambda_parameter_at(parameters[1:], target - 1)
 
 /// Emits Python code for result reduce success callable.
@@ -2566,9 +2566,19 @@ private fun python_lambda_parameter_tail(parameters: List[String], idx: int): St
 
 /// Computes the Python name for lambda parameter.
 private fun python_lambda_parameter_name(parameter: String, idx: int): String =
-    if parameter == "_"
+    let name = python_decoded_lambda_parameter_name(parameter)
+    if name == "_"
     then "__capy_lambda_unused_" + idx
-    else python_identifier(parameter)
+    else python_identifier(name)
+
+/// Decodes a typed lambda parameter name retained inside the shared AST.
+private fun python_decoded_lambda_parameter_name(parameter: String): String =
+    if python_string_has_prefix(parameter, "__capy_typed_lambda|")
+    then
+        let rest = parameter["__capy_typed_lambda|".size().value, parameter.size().value]
+        let separator = python_first_index_of(rest, "|", 0)
+        if separator < 0 then parameter else rest[0, separator]
+    else parameter
 
 /// Creates Python name/type bindings for lambda.
 private fun python_lambda_bindings(parameters: List[String]): List[PythonBinding] =
@@ -2579,7 +2589,7 @@ private fun python_lambda_bindings_from(parameters: List[String], idx: int): Lis
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter, pythonName: python_lambda_parameter_name(parameter, idx), typeName: python_unknown_type() }]
+        [PythonBinding { name: python_decoded_lambda_parameter_name(parameter), pythonName: python_lambda_parameter_name(parameter, idx), typeName: python_unknown_type() }]
             + python_lambda_bindings_from(parameters[1:], idx + 1)
 
 /// Computes the Python type for lambda bindings with single.
@@ -2591,7 +2601,7 @@ private fun python_lambda_bindings_with_single_type_from(parameters: List[String
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [PythonBinding { name: parameter, pythonName: python_lambda_parameter_name(parameter, idx), typeName: typeName }]
+        [PythonBinding { name: python_decoded_lambda_parameter_name(parameter), pythonName: python_lambda_parameter_name(parameter, idx), typeName: typeName }]
             + python_lambda_bindings_with_single_type_from(parameters[1:], typeName, idx + 1)
 
 /// Emits Python code for expression list.
