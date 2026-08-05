@@ -1,4 +1,5 @@
 from /capy/lang/Option import { * }
+import /capy/lang/Primitives
 from /capy/lang/Result import { * }
 from /capy/lang/Ordering import { * }
 from /capy/collection/CollectionTypes import { * }
@@ -11,6 +12,21 @@ from /capy/meta_prog/Recursive import { Recursive }
 /// Native String type backed by the runtime String implementation.
 /// String literals use quotes: "hello".
 data String { <native> }
+
+/// Parses this String as an int.
+fun String.to_int(): Result[int] = Primitives.to_int(this)
+
+/// Parses this String as a long.
+fun String.to_long(): Result[long] = Primitives.to_long(this)
+
+/// Parses this String as a double.
+fun String.to_double(): Result[double] = Primitives.to_double(this)
+
+/// Parses this String as a float.
+fun String.to_float(): Result[float] = Primitives.to_float(this)
+
+/// Parses this String as a bool.
+fun String.to_bool(): Result[bool] = Primitives.to_bool(this)
 
 /// Returns the number of characters in this String.
 fun String.size(): size = <native>

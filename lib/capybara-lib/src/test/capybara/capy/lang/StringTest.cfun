@@ -10,6 +10,7 @@ from /capy/test/CapyTest import { * }
 fun tests(): Effect[TestFile] =
     test_file("/capy/lang/String.cfun", [
         test("should report length and emptiness", () => should_report_length_and_emptiness()),
+        test("should parse primitive values", () => should_parse_primitive_values()),
         test("should create chars", () => should_create_chars()),
         test("should get characters by index", () => should_get_characters_by_index()),
         test("should list characters as sequence", () => should_list_characters_as_sequence()),
@@ -38,6 +39,16 @@ fun should_report_length_and_emptiness(): Assert =
         assert_that("capy".size()).is_equal_to(4),
         assert_that("".is_empty()).is_equal_to(true),
         assert_that("capy".is_empty()).is_equal_to(false),
+    ])
+
+fun should_parse_primitive_values(): Assert =
+    assert_all([
+        assert_that("123".to_int()).succeeds(123),
+        assert_that("12345678901".to_long()).succeeds(12345678901L),
+        assert_that("12.5".to_double()).succeeds(12.5),
+        assert_that("1.25".to_float()).succeeds(1.25f),
+        assert_that("true".to_bool()).succeeds(true),
+        assert_that("invalid".to_int()).fails("Cannot parse string to int: invalid"),
     ])
 
 fun should_create_chars(): Assert =
