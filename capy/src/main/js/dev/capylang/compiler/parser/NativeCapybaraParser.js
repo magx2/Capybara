@@ -993,6 +993,9 @@ function expression_no_let(ctx) {
     if (pyTruthy(ctx_has(ctx, "ifExpression"))) {
         return if_expression(ctx_call(ctx, "ifExpression"));
     }
+    if (pyTruthy(ctx_has(ctx, "typedLambdaExpression"))) {
+        return typed_lambda_expression(ctx_call(ctx, "typedLambdaExpression"));
+    }
     if (pyTruthy(ctx_has(ctx, "lambdaExpression"))) {
         return lambda_expression(ctx_call(ctx, "lambdaExpression"));
     }
@@ -1077,6 +1080,9 @@ function expression_no_pipe(ctx) {
 function expression_no_let_no_pipe(ctx) {
     if (pyTruthy(ctx_has(ctx, "ifExpression"))) {
         return if_expression(ctx_call(ctx, "ifExpression"));
+    }
+    if (pyTruthy(ctx_has(ctx, "typedLambdaExpression"))) {
+        return typed_lambda_expression(ctx_call(ctx, "typedLambdaExpression"));
     }
     if (pyTruthy(ctx_has(ctx, "lambdaExpression"))) {
         return lambda_expression(ctx_call(ctx, "lambdaExpression"));
@@ -1190,8 +1196,22 @@ function lambda_expression(ctx) {
     return data("LambdaExpression", { parameters: Array.from(ctx_list(ctx, "lambdaArgument")).map((parameter) => text(parameter)), body: expression_no_pipe(ctx_call(ctx, "expressionNoPipe")), location: source_location(ctx) });
 }
 
+function typed_lambda_expression(ctx) {
+    var typedArguments = ctx_list(ctx, "typedLambdaArgument");
+    if (pyTruthy(((pyLen(typedArguments) === 0) && ctx_has(ctx, "identifier")))) {
+        return data("LambdaExpression", { parameters: ["__capy_typed_lambda|" + text(ctx_call(ctx, "identifier")) + "|" + text(ctx_call(ctx, "type"))], body: expression_no_pipe(ctx_call(ctx, "expressionNoPipe")), location: source_location(ctx) });
+    }
+    var parameters = Array.from(typedArguments).map((parameter) => {
+        var name = ctx_has(parameter, "identifier") ? text(ctx_call(parameter, "identifier")) : "_";
+        return ctx_has(parameter, "type")
+            ? "__capy_typed_lambda|" + name + "|" + text(ctx_call(parameter, "type"))
+            : name;
+    });
+    return data("LambdaExpression", { parameters: parameters, body: expression_no_pipe(ctx_call(ctx, "expressionNoPipe")), location: source_location(ctx) });
+}
+
 function reduce_expression(receiver, ctx, location) {
-    var argumentValues = ctx_list(ctx, "lambdaArgument");
+    var argumentValues = ctx_list(ctx, "reduceLambdaArgument");
     if (pyTruthy((pyLen(argumentValues) < 2))) {
         return unsupported_expr(text(ctx), location);
     }

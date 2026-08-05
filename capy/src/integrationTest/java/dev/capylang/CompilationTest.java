@@ -148,6 +148,140 @@ class CompilationTest {
     }
 
     @Test
+    void shouldUseDeclaredFunctionalLambdaParameterTypes() {
+        var source = """
+                fun typed_map(values: List[String]): Seq[String] =
+                    values | value: String => value + "!"
+
+                fun typed_pair(values: Dict[int]): Dict[String] =
+                    values | (key: String, value: int) => key + value
+                """;
+        var program = compileProgram(List.of(rawModule("TypedLambda", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TypedLambda.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+        assertThat(code).contains("value + \"!\"");
+        assertThat(code).contains("java.lang.String key");
+        assertThat(code).contains("int value");
+    }
+
+    @Test
+    void shouldGeneratePrimitiveBackedOperatorsAndStandardLibraryCalls() {
+        var source = """
+                from /capy/lang/Async import { Async, compute }
+                from /capy/lang/Primitives import { to_int }
+                from /capy/lang/Result import { Result }
+
+                type digit -> int
+
+                fun add(left: digit, right: digit): int = left + right
+                fun compare(left: digit, right: digit): bool = left > right
+                fun render(value: digit): String = value.to_string()
+                fun parse(value: String): Result[int] = to_int(value)
+                fun background(value: digit): Async[int] = compute(() => value + 1)
+                """;
+        var program = compileProgram(List.of(rawModule("BackendCoverage", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/BackendCoverage.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+        assertThat(code).contains("__capy_parse_int(value)");
+        assertThat(code).contains("capy.lang.Async.start(capy.lang.Effect.delay(");
+        assertThat(code).contains("java.lang.String.valueOf(");
+        assertThat(code).contains("__capy_data_field(left, \"value\")");
+    }
+
+    @Test
+    void shouldGeneratePrimitiveBackedDataFieldsAndConstructorConditions() {
+        var source = """
+                data Error { kind: String, message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+
+                type digit -> int with constructor {
+                    if value >= 0 & value <= 9
+                    then Success { value }
+                    else Error { kind: "invalid", message: "invalid digit" }
+                }
+
+                data Digits {
+                    first: digit,
+                    second: digit,
+                    third: digit,
+                    fourth: digit,
+                } with constructor {
+                    if first == second & second == third & third == fourth
+                    then Error { kind: "invalid", message: "all digits match" }
+                    else Success { * { first, second, third, fourth } }
+                }
+
+                fun total(value: Digits): int =
+                    value.first * 1000 + value.second * 100 + value.third * 10 + value.fourth
+
+                fun same(left: Digits, right: Digits): bool =
+                    left.first == right.first & left.second == right.second
+
+                fun render(value: Digits): String =
+                    value.first.to_string() + value.second.to_string()
+
+                fun from_list(values: List[digit]): Digits =
+                    Digits! { values[0], values[1], values[2], values[3] }
+
+                fun Digits.to_int(): int =
+                    this.first * 1000 + this.second * 100 + this.third * 10 + this.fourth
+
+                fun Digits.diff(): Digits =
+                    let ordered = this
+                    let diff: int = ordered.to_int() - ordered.to_int()
+                    let a = diff / 1000
+                    let b = (diff / 100) % 10
+                    let c = (diff / 10) % 10
+                    let d = diff % 10
+                    Digits! { a, b, c, d }
+                """;
+        var program = compileProgram(List.of(rawModule("PrimitiveData", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/PrimitiveData.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+        assertThat(code).contains("__capy_data_field(value, \"first\")");
+        assertThat(code).contains("__capy_list_get_optional(values, 0)");
+    }
+
+    @Test
+    void shouldKeepIndexExpressionsBeforePipeLambdas() {
+        var source = """
+                from /capy/lang/Option import { Option, Some }
+
+                fun second(values: List[int]): Option[int] =
+                    values[1] | value => Some { value }
+                """;
+        var program = compileProgram(List.of(rawModule("IndexedPipe", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/IndexedPipe.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+        assertThat(code).contains("__capy_list_get_optional(values, 1)");
+    }
+
+    @Test
     void shouldGenerateFlatPythonStringConcatenation() {
         var source = """
                 fun pieces(a: String, b: String, c: String, d: String): String =

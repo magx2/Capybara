@@ -1360,6 +1360,8 @@ def let_binding(ctx):
 def expression_no_let(ctx):
     if ctx_has(ctx, "ifExpression"):
         return if_expression(ctx_call(ctx, "ifExpression"))
+    if ctx_has(ctx, "typedLambdaExpression"):
+        return typed_lambda_expression(ctx_call(ctx, "typedLambdaExpression"))
     if ctx_has(ctx, "lambdaExpression"):
         return lambda_expression(ctx_call(ctx, "lambdaExpression"))
     if ctx_has(ctx, "functionCall"):
@@ -1443,6 +1445,8 @@ def expression_no_pipe(ctx):
 def expression_no_let_no_pipe(ctx):
     if ctx_has(ctx, "ifExpression"):
         return if_expression(ctx_call(ctx, "ifExpression"))
+    if ctx_has(ctx, "typedLambdaExpression"):
+        return typed_lambda_expression(ctx_call(ctx, "typedLambdaExpression"))
     if ctx_has(ctx, "lambdaExpression"):
         return lambda_expression(ctx_call(ctx, "lambdaExpression"))
     if ctx_has(ctx, "functionCall"):
@@ -1565,8 +1569,33 @@ def lambda_expression(ctx):
     )
 
 
+def typed_lambda_expression(ctx):
+    typed_arguments = ctx_list(ctx, "typedLambdaArgument")
+    if not typed_arguments and ctx_has(ctx, "identifier"):
+        return data(
+            "LambdaExpression",
+            parameters=["__capy_typed_lambda|" + text(ctx_call(ctx, "identifier")) + "|" + text(ctx_call(ctx, "type"))],
+            body=expression_no_pipe(ctx_call(ctx, "expressionNoPipe")),
+            location=source_location(ctx),
+        )
+    parameters = []
+    for parameter in typed_arguments:
+        name = text(ctx_call(parameter, "identifier")) if ctx_has(parameter, "identifier") else "_"
+        parameters.append(
+            "__capy_typed_lambda|" + name + "|" + text(ctx_call(parameter, "type"))
+            if ctx_has(parameter, "type")
+            else name
+        )
+    return data(
+        "LambdaExpression",
+        parameters=parameters,
+        body=expression_no_pipe(ctx_call(ctx, "expressionNoPipe")),
+        location=source_location(ctx),
+    )
+
+
 def reduce_expression(receiver, ctx, location):
-    arguments = ctx_list(ctx, "lambdaArgument")
+    arguments = ctx_list(ctx, "reduceLambdaArgument")
     if len(arguments) < 2:
         return unsupported_expr(text(ctx), location)
     key_name = text(arguments[1]) if len(arguments) > 2 else ""

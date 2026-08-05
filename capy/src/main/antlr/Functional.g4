@@ -187,6 +187,7 @@ expressionNoPipe: letExpressionNoPipe* expressionNoLetNoPipe;
 letExpressionNoPipe: 'let' identifier (':' type)? letBindingOperator expressionNoLet ';'?;
 letBindingOperator: ASSIGN | LT MINUS;
 expressionNoLet: ifExpression
+               | typedLambdaExpression
                | lambdaExpression
                | reduceExpression
                | functionReference
@@ -216,8 +217,13 @@ sliceIndexLiteral: MINUS? INT_LITERAL;
 lambdaExpression: lambdaArgument FAT_ARROW expressionNoPipe
                 | LPAREN (lambdaArgument (COMMA lambdaArgument)*)? RPAREN FAT_ARROW expressionNoPipe;
 lambdaArgument: identifier | UNDERSCORE;
-reduceExpression: expressionNoLetNoPipe COMMA LPAREN lambdaArgument COMMA lambdaArgument (COMMA lambdaArgument (COMMA lambdaArgument)?)? RPAREN FAT_ARROW expressionNoPipe;
+typedLambdaExpression: identifier COLON type FAT_ARROW expressionNoPipe
+                     | LPAREN typedLambdaArgument (COMMA typedLambdaArgument)* RPAREN FAT_ARROW expressionNoPipe;
+typedLambdaArgument: identifier COLON type | identifier | UNDERSCORE;
+reduceExpression: expressionNoLetNoPipe COMMA LPAREN reduceLambdaArgument COMMA reduceLambdaArgument (COMMA reduceLambdaArgument (COMMA reduceLambdaArgument)?)? RPAREN FAT_ARROW expressionNoPipe;
+reduceLambdaArgument: identifier | UNDERSCORE;
 expressionNoLetNoPipe: ifExpression
+                     | typedLambdaExpression
                      | lambdaExpression
                      | functionReference
                      | functionCall

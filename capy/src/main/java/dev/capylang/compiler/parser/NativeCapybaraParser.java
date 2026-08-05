@@ -2382,6 +2382,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx.ifExpression() != null) {
             return ifExpression(ctx.ifExpression());
         }
+        if (ctx.typedLambdaExpression() != null) {
+            return lambdaExpression(ctx.typedLambdaExpression());
+        }
         if (ctx.lambdaExpression() != null) {
             return lambdaExpression(ctx.lambdaExpression());
         }
@@ -2492,6 +2495,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     ) {
         if (ctx.ifExpression() != null) {
             return ifExpression(ctx.ifExpression());
+        }
+        if (ctx.typedLambdaExpression() != null) {
+            return lambdaExpression(ctx.typedLambdaExpression());
         }
         if (ctx.lambdaExpression() != null) {
             return lambdaExpression(ctx.lambdaExpression());
@@ -2686,20 +2692,38 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         );
     }
 
+    private static Expression lambdaExpression(dev.capylang.parser.antlr.FunctionalParser.TypedLambdaExpressionContext ctx) {
+        var parameters = new ArrayList<String>();
+        for (var parameter : ctx.typedLambdaArgument()) {
+            var name = parameter.identifier() == null ? "_" : parameter.identifier().getText();
+            parameters.add(parameter.type() == null
+                    ? name
+                    : "__capy_typed_lambda|" + name + "|" + parameter.type().getText());
+        }
+        if (parameters.isEmpty() && ctx.identifier() != null) {
+            parameters.add("__capy_typed_lambda|" + ctx.identifier().getText() + "|" + ctx.type().getText());
+        }
+        return new Expression.LambdaExpression(
+                List.copyOf(parameters),
+                expressionNoPipe(ctx.expressionNoPipe()),
+                location(ctx)
+        );
+    }
+
     private static Expression reduceExpression(
             Expression receiver,
             dev.capylang.parser.antlr.FunctionalParser.ReduceExpressionContext ctx,
             SourceLocation location
     ) {
-        if (ctx.lambdaArgument().size() < 2) {
+        if (ctx.reduceLambdaArgument().size() < 2) {
             return new Expression.UnsupportedExpression(ctx.getText(), location);
         }
-        var keyName = ctx.lambdaArgument().size() > 2 ? ctx.lambdaArgument(1).getText() : "";
-        var valueName = ctx.lambdaArgument().size() > 2 ? ctx.lambdaArgument(2).getText() : ctx.lambdaArgument(1).getText();
+        var keyName = ctx.reduceLambdaArgument().size() > 2 ? ctx.reduceLambdaArgument(1).getText() : "";
+        var valueName = ctx.reduceLambdaArgument().size() > 2 ? ctx.reduceLambdaArgument(2).getText() : ctx.reduceLambdaArgument(1).getText();
         return new Expression.ReduceExpression(
                 receiver,
                 expressionNoLetNoPipe(ctx.expressionNoLetNoPipe()),
-                ctx.lambdaArgument(0).getText(),
+                ctx.reduceLambdaArgument(0).getText(),
                 keyName,
                 valueName,
                 expressionNoPipe(ctx.expressionNoPipe()),
