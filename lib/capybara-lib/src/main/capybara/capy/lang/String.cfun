@@ -1,5 +1,4 @@
 from /capy/lang/Option import { * }
-import /capy/lang/Primitives
 from /capy/lang/Result import { * }
 from /capy/lang/Ordering import { * }
 from /capy/collection/CollectionTypes import { * }
@@ -14,19 +13,19 @@ from /capy/meta_prog/Recursive import { Recursive }
 data String { <native> }
 
 /// Parses this String as an int.
-fun String.to_int(): Result[int] = Primitives.to_int(this)
+fun String.to_int(): Result[int] = <native>
 
 /// Parses this String as a long.
-fun String.to_long(): Result[long] = Primitives.to_long(this)
+fun String.to_long(): Result[long] = <native>
 
 /// Parses this String as a double.
-fun String.to_double(): Result[double] = Primitives.to_double(this)
+fun String.to_double(): Result[double] = <native>
 
 /// Parses this String as a float.
-fun String.to_float(): Result[float] = Primitives.to_float(this)
+fun String.to_float(): Result[float] = <native>
 
 /// Parses this String as a bool.
-fun String.to_bool(): Result[bool] = Primitives.to_bool(this)
+fun String.to_bool(): Result[bool] = <native>
 
 /// Returns the number of characters in this String.
 fun String.size(): size = <native>

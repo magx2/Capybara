@@ -42,12 +42,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 21.0.6
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          # Later Java 21 patch releases reject stack maps emitted by the current self-hosted compiler.
-          java-version: "21.0.6"
+          java-version: "21"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
