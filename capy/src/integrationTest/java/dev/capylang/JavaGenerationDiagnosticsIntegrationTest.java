@@ -116,6 +116,42 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsUnsupportedMethodAtCallSite() throws Exception {
+        var source = writeSource("sample/EffectFlatMapFailure.cfun", """
+                import /capy/lang/Effect
+                from /capy/io/Console import { println }
+
+                fun broken(values: List[String]): Effect[String] =
+                    values | value => println(value)
+                    |> Effect.pure(''), (acc, print_effect) => acc.flat_map(_ => print_effect)
+                """);
+
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Java generation failed for `sample/EffectFlatMapFailure.cfun` at 6:47 "
+                        + "in function `broken`: method `flat_map` on `Effect` is not supported by the Java backend. "
+                        + "No Java source was written for this module.");
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void reportsUnsupportedMethodForAnotherKnownReceiverType() throws Exception {
+        var source = writeSource("sample/StringMethodFailure.cfun", """
+                fun broken(value: String): String =
+                    value.not_a_java_method()
+                """);
+
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Java generation failed for `sample/StringMethodFailure.cfun` at 2:4 "
+                        + "in function `broken`: method `not_a_java_method` on `String` is not supported "
+                        + "by the Java backend. No Java source was written for this module.");
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
     void reportsCollectionFlatMapReturningResult() throws Exception {
         var source = writeSource("sample/CollectionFlatMapFailure.cfun", """
                 from /capy/lang/Result import { Result }
