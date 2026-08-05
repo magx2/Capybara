@@ -22,12 +22,14 @@ fun set_system_property_round_trips_value(): Effect[Assert] =
     let first <- system_property(key)
     let overwritten <- set_system_property(key, "second")
     let second <- system_property(key)
+    let cleaned_up <- clear_system_property(key)
     assert_all([
         assert_that(missing).is_empty(),
         assert_that(previous).is_empty(),
         assert_that(first).contains("first"),
         assert_that(overwritten).contains("first"),
         assert_that(second).contains("second"),
+        assert_that(cleaned_up).contains("second"),
     ])
 
 fun set_system_property_empty_name_returns_none(): Effect[Assert] =

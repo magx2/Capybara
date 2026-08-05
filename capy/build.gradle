@@ -432,7 +432,12 @@ def intellijE2eTestSourceDirs = files(
 def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
 def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
-    componentFilter { componentIdentifier -> !(componentIdentifier instanceof ProjectComponentIdentifier) }
+    componentFilter { componentIdentifier ->
+        !(componentIdentifier instanceof ProjectComponentIdentifier) &&
+                !(componentIdentifier instanceof ModuleComponentIdentifier &&
+                        componentIdentifier.group == 'dev.capylang' &&
+                        componentIdentifier.module == 'capybara-lib')
+    }
 }.files
 def capyRuntimeClasspath = files(
         capyClassesDir,
