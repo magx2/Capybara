@@ -206,7 +206,8 @@ class CompilationTest {
 
         assertThatThrownBy(() -> JavaGenerator.javaGenerator(program))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/app/Broken.java` at 1:0: the backend cannot emit this function.");
+                .hasMessage("Java generation failed for `sample/app/Broken.cfun` at 1:20 in function `broken`: "
+                        + "unresolved function call `missing`. No Java source was written for this module.");
     }
 
     @Test

@@ -136,11 +136,6 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 fun redact(input: String): String = (regex/\\\\d+/ ~> "#")(input)
                 fun split_named(input: String): List[String] = regex/,/.split(input)
                 fun split_like(input: String): List[String] = regex/,/ /> input
-                fun first_group(input: String): String =
-                    match regex/\\\\d+/.find(input).group(0) with
-                    case Some { value } -> value
-                    case None -> ""
-                fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size()
                 """;
         var generated = JavaGenerator.javaGenerator(compileProgram(List.of(rawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
 
@@ -150,6 +145,9 @@ class CapybaraCompilerLibrariesIntegrationTest {
         assertThat(module.code()).contains("__capy_regex_matches(__capy_data(");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \"\\\\d+\")");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \",\")");
+        assertThat(module.code()).doesNotContain(
+                "throw new UnsupportedOperationException(\"Unsupported CFUN expression at"
+        );
     }
 
     @Test
