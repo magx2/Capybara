@@ -183,7 +183,10 @@ data JUnitTestSuite {
 /// file        (not implemented) Source code file of this test case
 /// line        (not implemented) Source code line number of the start of this test case
 data JUnitTestCase { name: String, classname: String, assertions: int, failure: /capy/lang/Option[JUnitFailure] }
+/// Failure details parsed from a JUnit XML report.
 data JUnitFailure { message: String, jtype: String, call_stack: String }
+
+/// Appends text to this failure message while preserving its type and call stack.
 fun JUnitFailure.`+`(other_message: String): JUnitFailure =
     JUnitFailure {
         message: this.message + '\n' + other_message,
@@ -341,8 +344,10 @@ private fun async_test_output_results(results: List[Result[Result[Path]]]): Resu
                 case Error e -> e
                 case Success { written_paths } -> Success { [written_path] + written_paths }
 
+/// File used to track test-run output artifacts for cleanup.
 const OUTPUT_MANIFEST_FILE = '.capy-test-output-manifest'
 
+/// Formats a human-readable summary of failed test files.
 fun failure_summary(test_files: List[TestFile]): String =
     let failures = (test_files | test_file => failure_summary_file(test_file)).as_list()
         |> '', (acc, failure) => acc + failure
@@ -365,6 +370,7 @@ private fun failure_summary_message(test_case: TestCase): String =
     case Passed -> ''
     case Failed { message, type } -> normalize_failure_message(message)
 
+/// Normalizes line endings and indentation in a captured failure message.
 fun normalize_failure_message(message: String): String =
     message
         .replace('\\r\\n', '\n')
@@ -416,6 +422,7 @@ private fun print_test_finished(log_type: LogType, test_name: String): Effect[St
     case LOG -> println("Test finished: {test_name}")
     case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_name)}']")
 
+/// Builds console log lines for the supplied test files and their test cases.
 fun test_log_lines(test_files: List[TestFile]): List[String] =
     let initial: List[String] = []
     test_files |> initial, (acc, test_file) => acc + test_log_lines_file(test_file)
@@ -440,6 +447,7 @@ private fun test_log_lines_case(test_case: TestCase): List[String] =
         finished
     ]
 
+/// Builds TeamCity service messages for the supplied test results.
 fun team_city_messages(test_files: List[TestFile]): List[String] =
     let initial: List[String] = []
     test_files |> initial, (acc, test_file) => acc + team_city_messages_file(test_file)
@@ -464,6 +472,7 @@ private fun team_city_messages_case(test_case: TestCase): List[String] =
         finished
     ]
 
+/// Escapes text for inclusion in a TeamCity service-message attribute.
 fun team_city_escape(value: String): String =
     @Recursive
     fun team_city_escape(value: String, acc: String): String =
@@ -653,9 +662,13 @@ private fun path_segments_to_string(segments: List[String]): String =
 
 private fun has_failures(test_outputs: List[TestOutput]): bool = test_outputs.any(output => output.failed)
 
+/// Prefix used for generated JUnit XML report files.
 const JUNIT_PREFIX = 'TEST-'
+/// Default filename for the generated CTRF report.
 const CTRF_REPORT_FILE = 'ctrf-report.json'
+/// Default filename for the generated Jest-compatible report.
 const JEST_REPORT_FILE = 'jest-report.json'
+/// CTRF specification version emitted by this reporter.
 const CTRF_SPEC_VERSION = '0.0.0'
 
 private fun junit_run_tests(test_files: List[TestFile]): List[TestOutput] = (test_files | :junit_run_test).as_list()
@@ -711,6 +724,7 @@ private fun ctrf_run_tests(test_files: List[TestFile]): List[TestOutput] = [
     }
 ]
 
+/// Serializes test results as a Common Test Report Format JSON document.
 fun ctrf_report(test_files: List[TestFile]): String =
     let start = ctrf_start_millis(test_files)
     let duration = ctrf_total_duration_millis(test_files)
@@ -830,6 +844,7 @@ private fun jest_run_tests(test_files: List[TestFile]): List[TestOutput] = [
     }
 ]
 
+/// Serializes test results as a Jest-compatible JSON report.
 fun jest_report(test_files: List[TestFile]): String =
     let failed_count = ctrf_failed_count(test_files)
     "{"

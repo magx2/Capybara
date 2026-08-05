@@ -11,6 +11,11 @@ from /capy/meta_prog/Recursive import { Recursive }
 
 /// Native String type backed by the runtime String implementation.
 /// String literals use quotes: "hello".
+///
+/// Example:
+/// ```cfun
+/// "Capybara".to_lower_case() == "capybara"
+/// ```
 data String { <native> }
 
 /// Parses this String as an int.

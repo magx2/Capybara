@@ -6,6 +6,13 @@ from /capy/collection/Seq import { * }
 fun seed(): seed = <native>
 
 /// Immutable random generator state.
+///
+/// Example:
+/// ```cfun
+/// let first = seed { 123L }.random_int()
+/// let second = first.seed.random_int()
+/// second.value
+/// ```
 type seed -> long
 
 /// Random value paired with the seed to use for the next random step.

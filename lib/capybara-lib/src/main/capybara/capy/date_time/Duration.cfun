@@ -58,6 +58,7 @@ data DateDuration {
 /// ```
 data WeekDuration { weeks: int }
 
+/// Duration with every component set to zero.
 const ZERO: Duration = DateDuration { years: 0, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
 
 /// Formats this duration as a canonical ISO 8601 string.

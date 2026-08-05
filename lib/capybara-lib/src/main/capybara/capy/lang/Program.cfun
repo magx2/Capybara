@@ -1,4 +1,9 @@
 /// Process result returned by an executable Capybara `main` function.
+///
+/// Example:
+/// ```cfun
+/// fun main(): Program = Success {}
+/// ```
 union Program = Success | Failed
 
 /// Successful program completion with exit code `0`.

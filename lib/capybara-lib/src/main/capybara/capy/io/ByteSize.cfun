@@ -1,8 +1,11 @@
 from /capy/lang/Primitives import { * }
 from /capy/lang/Result import { * }
 
+/// Number of bytes in one kibibyte.
 const BYTES_IN_KIB: double = 1024.0
+/// Number of bytes in one mebibyte.
 const BYTES_IN_MIB: double = 1048576.0
+/// Number of bytes in one gibibyte.
 const BYTES_IN_GIB: double = 1073741824.0
 
 /// Non-negative number of bytes.
@@ -12,9 +15,13 @@ type byte_count -> long with constructor {
     else Error { kind: "capy.lang.number.out_of_range", message: "byte_count must be greater than or equal to 0" }
 }
 
+/// Byte count representing zero bytes.
 const ZERO_BYTES: byte_count = byte_count! { 0L }
+/// Byte count representing one kibibyte.
 const ONE_KIB: byte_count = byte_count! { 1024L }
+/// Byte count representing one mebibyte.
 const ONE_MIB: byte_count = byte_count! { 1048576L }
+/// Byte count representing one gibibyte.
 const ONE_GIB: byte_count = byte_count! { 1073741824L }
 
 /// Adds two byte counts, returning `Error` on long overflow.
@@ -29,6 +36,7 @@ fun byte_count.plus(other: byte_count): Result[byte_count] =
     then Error { kind: "capy.lang.number.out_of_range", message: "byte_count addition overflow" }
     else Success { byte_count! { this.value + other.value } }
 
+/// Operator form of `byte_count.plus(other)`.
 fun byte_count.`+`(other: byte_count): Result[byte_count] = this.plus(other)
 
 /// Subtracts `other` from this byte count.
@@ -37,6 +45,7 @@ fun byte_count.`+`(other: byte_count): Result[byte_count] = this.plus(other)
 fun byte_count.minus(other: byte_count): Result[byte_count] =
     byte_count { this.value - other.value }
 
+/// Operator form of `byte_count.minus(other)`.
 fun byte_count.`-`(other: byte_count): Result[byte_count] = this.minus(other)
 
 /// Converts this byte count to kibibytes.
@@ -53,10 +62,15 @@ fun byte_count.to_mib(): double =
 fun byte_count.to_gib(): double =
     this.value / BYTES_IN_GIB
 
+/// Returns whether this byte count is greater than `other`.
 fun byte_count.`>`(other: byte_count): bool = this.value > other.value
+/// Returns whether this byte count is greater than or equal to `other`.
 fun byte_count.`>=`(other: byte_count): bool = this.value >= other.value
+/// Returns whether this byte count is less than `other`.
 fun byte_count.`<`(other: byte_count): bool = this.value < other.value
+/// Returns whether this byte count is less than or equal to `other`.
 fun byte_count.`<=`(other: byte_count): bool = this.value <= other.value
+/// Returns whether this byte count has the same value as `other`.
 fun byte_count.`==`(other: byte_count): bool = this.value == other.value
 
 /// Function form of `left + right`.
