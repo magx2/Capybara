@@ -43,23 +43,41 @@ fun Assert.failed(): bool = (this.assertions | supplier => supplier().result).an
 fun Assert.succeeded(): bool = !this.failed()
 
 private data TechnicalAssert { assertions: List[() => Assertion] }
+/// Chainable assertions for a string value.
 data StringAssert { value: String }
+/// Chainable assertions for an int value.
 data IntAssert { value: int }
+/// Chainable assertions for a long value.
 data LongAssert { value: long }
+/// Chainable assertions for a double value.
 data DoubleAssert { value: double }
+/// Chainable assertions for a float value.
 data FloatAssert { value: float }
+/// Chainable assertions for a boolean value.
 data BoolAssert { value: bool }
+/// Chainable assertions for an arbitrary data value.
 data DataAssert { value: data }
+/// Chainable assertions for an optional value.
 data OptionAssert[T] { value: /capy/lang/Option[T] }
+/// Chainable assertions for a result value.
 data ResultAssert[T] { value: /capy/lang/Result[T] }
+/// Chainable assertions for a date value.
 data DateAssert { value: Date }
+/// Chainable assertions for a time value.
 data TimeAssert { value: Time }
+/// Chainable assertions for a date-time value.
 data DateTimeAssert { value: DateTime }
+/// Chainable assertions for a duration value.
 data DurationAssert { value: Duration }
+/// Chainable assertions for an interval value.
 data IntervalAssert { value: Interval }
+/// Chainable assertions for a list value.
 data ListAssert[T] { value: List[T] }
+/// Chainable assertions for a set value.
 data SetAssert[T] { value: Set[T] }
+/// Chainable assertions for a dictionary value.
 data DictAssert[T] { value: Dict[T] }
+/// Chainable assertions for a sequence value.
 data SeqAssert[T] { value: Seq[T] }
 
 /// Combines several assertion chains into one `Assert`.
@@ -102,6 +120,7 @@ fun StringAssert.starts_with(other: String): StringAssert =
        assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the string does not start with `other`.
 fun StringAssert.does_not_start_with(other: String): StringAssert =
     let assertion = Assertion {
        result: this.value.starts_with(other) != true,
@@ -137,6 +156,7 @@ fun IntAssert.is_equal_to(other: int): IntAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the int is greater than `other`.
 fun IntAssert.is_greater_than(other: int): IntAssert =
     let assertion = Assertion {
         result: this.value > other,
@@ -145,6 +165,7 @@ fun IntAssert.is_greater_than(other: int): IntAssert =
     }
     IntAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the int is less than `other`.
 fun IntAssert.is_less_than(other: int): IntAssert =
     let assertion = Assertion {
         result: this.value < other,
@@ -153,6 +174,7 @@ fun IntAssert.is_less_than(other: int): IntAssert =
     }
     IntAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the int is greater than or equal to `other`.
 fun IntAssert.is_greater_or_equals_than(other: int): IntAssert =
     let assertion = Assertion {
         result: this.value >= other,
@@ -161,6 +183,7 @@ fun IntAssert.is_greater_or_equals_than(other: int): IntAssert =
     }
     IntAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the int is less than or equal to `other`.
 fun IntAssert.is_less_or_equals_than(other: int): IntAssert =
     let assertion = Assertion {
         result: this.value <= other,
@@ -169,12 +192,15 @@ fun IntAssert.is_less_or_equals_than(other: int): IntAssert =
     }
     IntAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the int is zero.
 fun IntAssert.is_zero(): IntAssert = this.is_equal_to(0)
+/// Adds an assertion that the int is one.
 fun IntAssert.is_one(): IntAssert = this.is_equal_to(1)
 /// Adds assertions that the int is between `start` and `end`, inclusive.
 fun IntAssert.is_between(start: int, end: int): IntAssert =
     this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
+/// Adds a long equality assertion to the chain.
 fun LongAssert.is_equal_to(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -186,6 +212,7 @@ fun LongAssert.is_equal_to(other: long): LongAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the long is greater than `other`.
 fun LongAssert.is_greater_than(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value > other,
@@ -194,6 +221,7 @@ fun LongAssert.is_greater_than(other: long): LongAssert =
     }
     LongAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the long is less than `other`.
 fun LongAssert.is_less_than(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value < other,
@@ -202,6 +230,7 @@ fun LongAssert.is_less_than(other: long): LongAssert =
     }
     LongAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the long is greater than or equal to `other`.
 fun LongAssert.is_greater_or_equals_than(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value >= other,
@@ -210,6 +239,7 @@ fun LongAssert.is_greater_or_equals_than(other: long): LongAssert =
     }
     LongAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the long is less than or equal to `other`.
 fun LongAssert.is_less_or_equals_than(other: long): LongAssert =
     let assertion = Assertion {
         result: this.value <= other,
@@ -218,11 +248,15 @@ fun LongAssert.is_less_or_equals_than(other: long): LongAssert =
     }
     LongAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the long is zero.
 fun LongAssert.is_zero(): LongAssert = this.is_equal_to(0L)
+/// Adds an assertion that the long is one.
 fun LongAssert.is_one(): LongAssert = this.is_equal_to(1L)
+/// Adds assertions that the long is between `start` and `end`, inclusive.
 fun LongAssert.is_between(start: long, end: long): LongAssert =
     this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
+/// Adds a double equality assertion to the chain.
 fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -234,6 +268,7 @@ fun DoubleAssert.is_equal_to(other: double): DoubleAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an approximate double equality assertion using `epsilon` as the tolerance.
 fun DoubleAssert.is_equal_to(other: double, epsilon: double): DoubleAssert =
     let assertion = Assertion {
         result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
@@ -245,6 +280,7 @@ fun DoubleAssert.is_equal_to(other: double, epsilon: double): DoubleAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the double is greater than `other`.
 fun DoubleAssert.is_greater_than(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value > other,
@@ -253,6 +289,7 @@ fun DoubleAssert.is_greater_than(other: double): DoubleAssert =
     }
     DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the double is less than `other`.
 fun DoubleAssert.is_less_than(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value < other,
@@ -261,6 +298,7 @@ fun DoubleAssert.is_less_than(other: double): DoubleAssert =
     }
     DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the double is greater than or equal to `other`.
 fun DoubleAssert.is_greater_or_equals_than(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value >= other,
@@ -269,6 +307,7 @@ fun DoubleAssert.is_greater_or_equals_than(other: double): DoubleAssert =
     }
     DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the double is less than or equal to `other`.
 fun DoubleAssert.is_less_or_equals_than(other: double): DoubleAssert =
     let assertion = Assertion {
         result: this.value <= other,
@@ -277,11 +316,15 @@ fun DoubleAssert.is_less_or_equals_than(other: double): DoubleAssert =
     }
     DoubleAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the double is zero.
 fun DoubleAssert.is_zero(): DoubleAssert = this.is_equal_to(0.0)
+/// Adds an assertion that the double is one.
 fun DoubleAssert.is_one(): DoubleAssert = this.is_equal_to(1.0)
+/// Adds assertions that the double is between `start` and `end`, inclusive.
 fun DoubleAssert.is_between(start: double, end: double): DoubleAssert =
     this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
+/// Adds a float equality assertion to the chain.
 fun FloatAssert.is_equal_to(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -293,6 +336,7 @@ fun FloatAssert.is_equal_to(other: float): FloatAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an approximate float equality assertion using `epsilon` as the tolerance.
 fun FloatAssert.is_equal_to(other: float, epsilon: float): FloatAssert =
     let assertion = Assertion {
         result: if this.value >= other - epsilon then this.value <= other + epsilon else false,
@@ -304,6 +348,7 @@ fun FloatAssert.is_equal_to(other: float, epsilon: float): FloatAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the float is greater than `other`.
 fun FloatAssert.is_greater_than(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value > other,
@@ -312,6 +357,7 @@ fun FloatAssert.is_greater_than(other: float): FloatAssert =
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the float is less than `other`.
 fun FloatAssert.is_less_than(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value < other,
@@ -320,6 +366,7 @@ fun FloatAssert.is_less_than(other: float): FloatAssert =
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the float is greater than or equal to `other`.
 fun FloatAssert.is_greater_or_equals_than(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value >= other,
@@ -328,6 +375,7 @@ fun FloatAssert.is_greater_or_equals_than(other: float): FloatAssert =
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the float is less than or equal to `other`.
 fun FloatAssert.is_less_or_equals_than(other: float): FloatAssert =
     let assertion = Assertion {
         result: this.value <= other,
@@ -336,6 +384,7 @@ fun FloatAssert.is_less_or_equals_than(other: float): FloatAssert =
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the float is zero.
 fun FloatAssert.is_zero(): FloatAssert =
     let assertion = Assertion {
         result: this.value == 0,
@@ -344,6 +393,7 @@ fun FloatAssert.is_zero(): FloatAssert =
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
 
+/// Adds an assertion that the float is one.
 fun FloatAssert.is_one(): FloatAssert =
     let assertion = Assertion {
         result: this.value == 1,
@@ -351,9 +401,11 @@ fun FloatAssert.is_one(): FloatAssert =
         type: 'FloatAssert.is_one'
     }
     FloatAssert { value: this.value, assertions: this.assertions + () => assertion }
+/// Adds assertions that the float is between `start` and `end`, inclusive.
 fun FloatAssert.is_between(start: float, end: float): FloatAssert =
     this.is_greater_or_equals_than(start).is_less_or_equals_than(end)
 
+/// Adds a boolean equality assertion to the chain.
 fun BoolAssert.is_equal_to(other: bool): BoolAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -389,6 +441,7 @@ fun BoolAssert.is_false(): BoolAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a structural equality assertion for a data value.
 fun DataAssert.is_equal_to(other: data): DataAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -400,6 +453,7 @@ fun DataAssert.is_equal_to(other: data): DataAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that at least one field of the data value equals `other`.
 fun DataAssert.contains(other: any): DataAssert =
     let assertion = Assertion {
         result: ('' + this.value) ? ('' + other),
@@ -411,6 +465,7 @@ fun DataAssert.contains(other: any): DataAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an equality assertion for an optional value.
 fun OptionAssert[T].is_equal_to(other: /capy/lang/Option[T]): OptionAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -450,6 +505,7 @@ fun OptionAssert[T].is_empty(): OptionAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an equality assertion for a result value.
 fun ResultAssert[T].is_equal_to(other: /capy/lang/Result[T]): ResultAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -623,6 +679,7 @@ fun ResultAssert[T].fails(assert: Error => Assert): ResultAssert[T] =
         assertions: this.assertions + assertions
     }
 
+/// Adds a date equality assertion to the chain.
 fun DateAssert.is_equal_to(other: Date): DateAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -634,9 +691,11 @@ fun DateAssert.is_equal_to(other: Date): DateAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a date equality assertion using numeric date components.
 fun DateAssert.is_equal_to(day: int, month: int, year: int): DateAssert =
     this.has_day(day).has_month(month).has_year(year)
 
+/// Adds an assertion that the date has day `other`.
 fun DateAssert.has_day(other: int): DateAssert =
     let assertion = Assertion {
         result: this.value.day == other,
@@ -648,6 +707,7 @@ fun DateAssert.has_day(other: int): DateAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date has month number `other`.
 fun DateAssert.has_month(other: int): DateAssert =
     let assertion = Assertion {
         result: this.value.month.value == other,
@@ -659,6 +719,7 @@ fun DateAssert.has_month(other: int): DateAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date has year `other`.
 fun DateAssert.has_year(other: int): DateAssert =
     let assertion = Assertion {
         result: this.value.year == other,
@@ -670,6 +731,7 @@ fun DateAssert.has_year(other: int): DateAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a time equality assertion to the chain.
 fun TimeAssert.is_equal_to(other: Time): TimeAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -681,9 +743,11 @@ fun TimeAssert.is_equal_to(other: Time): TimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a local-time equality assertion using numeric clock components.
 fun TimeAssert.is_equal_to(hour: int, minute: int, second: int): TimeAssert =
     this.has_hour(hour).has_minute(minute).has_second(second)
 
+/// Adds an assertion that the time has hour `other`.
 fun TimeAssert.has_hour(other: int): TimeAssert =
     let assertion = Assertion {
         result: this.value.hour.value == other,
@@ -695,6 +759,7 @@ fun TimeAssert.has_hour(other: int): TimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the time has minute `other`.
 fun TimeAssert.has_minute(other: int): TimeAssert =
     let assertion = Assertion {
         result: this.value.minute.value == other,
@@ -706,6 +771,7 @@ fun TimeAssert.has_minute(other: int): TimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the time has second `other`.
 fun TimeAssert.has_second(other: int): TimeAssert =
     let assertion = Assertion {
         result: this.value.second.value == other,
@@ -717,6 +783,7 @@ fun TimeAssert.has_second(other: int): TimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion for the optional UTC offset in minutes.
 fun TimeAssert.has_offset_minutes(other: /capy/lang/Option[offset_minutes]): TimeAssert =
     let assertion = Assertion {
         result: this.value.offset_minutes == other,
@@ -728,6 +795,7 @@ fun TimeAssert.has_offset_minutes(other: /capy/lang/Option[offset_minutes]): Tim
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion for a present UTC offset with the given number of minutes.
 fun TimeAssert.has_offset_minutes(other: int): TimeAssert =
     match offset_minutes { other } with
     case Success { parsed } -> this.has_offset_minutes(/capy/lang/Option.Some { parsed })
@@ -742,6 +810,7 @@ fun TimeAssert.has_offset_minutes(other: int): TimeAssert =
             assertions: this.assertions + () => assertion
         }
 
+/// Adds a date-time equality assertion to the chain.
 fun DateTimeAssert.is_equal_to(other: DateTime): DateTimeAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -753,6 +822,7 @@ fun DateTimeAssert.is_equal_to(other: DateTime): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has date `other`.
 fun DateTimeAssert.has_date(other: Date): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.date == other,
@@ -764,9 +834,11 @@ fun DateTimeAssert.has_date(other: Date): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a date-component assertion using numeric values.
 fun DateTimeAssert.has_date(day: int, month: int, year: int): DateTimeAssert =
     this.has_day(day).has_month(month).has_year(year)
 
+/// Adds an assertion that the date-time has time `other`.
 fun DateTimeAssert.has_time(other: Time): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.time == other,
@@ -778,9 +850,11 @@ fun DateTimeAssert.has_time(other: Time): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a time-component assertion using numeric values.
 fun DateTimeAssert.has_time(hour: int, minute: int, second: int): DateTimeAssert =
     this.has_hour(hour).has_minute(minute).has_second(second)
 
+/// Adds an assertion that the date-time has year `other`.
 fun DateTimeAssert.has_year(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.date.year == other,
@@ -792,6 +866,7 @@ fun DateTimeAssert.has_year(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has month number `other`.
 fun DateTimeAssert.has_month(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.date.month.value == other,
@@ -803,6 +878,7 @@ fun DateTimeAssert.has_month(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has day `other`.
 fun DateTimeAssert.has_day(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.date.day == other,
@@ -814,6 +890,7 @@ fun DateTimeAssert.has_day(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has hour `other`.
 fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.time.hour.value == other,
@@ -825,6 +902,7 @@ fun DateTimeAssert.has_hour(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has minute `other`.
 fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.time.minute.value == other,
@@ -836,6 +914,7 @@ fun DateTimeAssert.has_minute(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time has second `other`.
 fun DateTimeAssert.has_second(other: int): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.time.second.value == other,
@@ -847,6 +926,7 @@ fun DateTimeAssert.has_second(other: int): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time is later than `other`.
 fun DateTimeAssert.is_greater_than(other: DateTime): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.greater_than(other),
@@ -858,6 +938,7 @@ fun DateTimeAssert.is_greater_than(other: DateTime): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the date-time is earlier than `other`.
 fun DateTimeAssert.is_less_than(other: DateTime): DateTimeAssert =
     let assertion = Assertion {
         result: this.value.less_than(other),
@@ -869,6 +950,7 @@ fun DateTimeAssert.is_less_than(other: DateTime): DateTimeAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a duration equality assertion to the chain.
 fun DurationAssert.is_equal_to(other: Duration): DurationAssert =
     let assertion = Assertion {
         result: this.value == other,
@@ -880,6 +962,7 @@ fun DurationAssert.is_equal_to(other: Duration): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` years.
 fun DurationAssert.has_years(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.years() == other,
@@ -891,6 +974,7 @@ fun DurationAssert.has_years(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` months.
 fun DurationAssert.has_months(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.months() == other,
@@ -902,6 +986,7 @@ fun DurationAssert.has_months(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` days.
 fun DurationAssert.has_days(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.days() == other,
@@ -913,6 +998,7 @@ fun DurationAssert.has_days(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` hours.
 fun DurationAssert.has_hours(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.hours() == other,
@@ -924,6 +1010,7 @@ fun DurationAssert.has_hours(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` minutes.
 fun DurationAssert.has_minutes(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.minutes() == other,
@@ -935,6 +1022,7 @@ fun DurationAssert.has_minutes(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` seconds.
 fun DurationAssert.has_seconds(other: int): DurationAssert =
     let assertion = Assertion {
         result: this.value.seconds() == other,
@@ -946,6 +1034,7 @@ fun DurationAssert.has_seconds(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the duration has `other` weeks.
 fun DurationAssert.has_weeks(other: int): DurationAssert =
     let assertion = Assertion {
         result: match this.value with
@@ -959,6 +1048,7 @@ fun DurationAssert.has_weeks(other: int): DurationAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an interval equality assertion to the chain.
 fun IntervalAssert.is_equal_to(other: Interval): IntervalAssert =
     let assertion = Assertion {
         result: this.value.to_iso_8601() == other.to_iso_8601(),
@@ -970,6 +1060,7 @@ fun IntervalAssert.is_equal_to(other: Interval): IntervalAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the interval starts at `other`.
 fun IntervalAssert.has_start(other: DateTime): IntervalAssert =
     let assertion = Assertion {
         result: this.value.start() == other,
@@ -981,6 +1072,7 @@ fun IntervalAssert.has_start(other: DateTime): IntervalAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the interval ends at `other`.
 fun IntervalAssert.has_end(other: DateTime): IntervalAssert =
     let assertion = Assertion {
         result: this.value.end() == other,
@@ -992,6 +1084,7 @@ fun IntervalAssert.has_end(other: DateTime): IntervalAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the interval has duration `other`.
 fun IntervalAssert.has_duration(other: Duration): IntervalAssert =
     let assertion = Assertion {
         result: this.value.duration() == other,
@@ -1003,6 +1096,7 @@ fun IntervalAssert.has_duration(other: Duration): IntervalAssert =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a list equality assertion to the chain.
 fun ListAssert[T].is_equal_to(other: List[T]): ListAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -1026,6 +1120,7 @@ fun ListAssert[T].has_size(other: int): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the list is empty.
 fun ListAssert[T].is_empty(): ListAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == 0,
@@ -1049,6 +1144,7 @@ fun ListAssert[T].contains(other: T): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the list does not contain `other`.
 fun ListAssert[T].does_not_contain(other: T): ListAssert[T] =
     let assertion = Assertion {
         result: this.value.any(v => v == other) == false,
@@ -1060,6 +1156,7 @@ fun ListAssert[T].does_not_contain(other: T): ListAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a set equality assertion to the chain.
 fun SetAssert[T].is_equal_to(other: Set[T]): SetAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -1071,6 +1168,7 @@ fun SetAssert[T].is_equal_to(other: Set[T]): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the set has size `other`.
 fun SetAssert[T].has_size(other: int): SetAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == other,
@@ -1082,6 +1180,7 @@ fun SetAssert[T].has_size(other: int): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the set is empty.
 fun SetAssert[T].is_empty(): SetAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == 0,
@@ -1093,6 +1192,7 @@ fun SetAssert[T].is_empty(): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the set contains `other`.
 fun SetAssert[T].contains(other: T): SetAssert[T] =
     let assertion = Assertion {
         result: this.value.any(v => v == other),
@@ -1104,6 +1204,7 @@ fun SetAssert[T].contains(other: T): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the set does not contain `other`.
 fun SetAssert[T].does_not_contain(other: T): SetAssert[T] =
     let assertion = Assertion {
         result: this.value.any(v => v == other) == false,
@@ -1115,6 +1216,7 @@ fun SetAssert[T].does_not_contain(other: T): SetAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a dictionary equality assertion to the chain.
 fun DictAssert[T].is_equal_to(other: Dict[T]): DictAssert[T] =
     let assertion = Assertion {
         result: this.value == other,
@@ -1126,6 +1228,7 @@ fun DictAssert[T].is_equal_to(other: Dict[T]): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the dictionary has size `other`.
 fun DictAssert[T].has_size(other: int): DictAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == other,
@@ -1137,6 +1240,7 @@ fun DictAssert[T].has_size(other: int): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the dictionary is empty.
 fun DictAssert[T].is_empty(): DictAssert[T] =
     let assertion = Assertion {
         result: this.value.size() == 0,
@@ -1160,6 +1264,7 @@ fun DictAssert[T].contains_key(other: String): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the dictionary does not contain key `other`.
 fun DictAssert[T].does_not_contain_key(other: String): DictAssert[T] =
     let assertion = Assertion {
         result: this.value.any((k, v) => k == other) == false,
@@ -1171,6 +1276,7 @@ fun DictAssert[T].does_not_contain_key(other: String): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the dictionary contains value `other`.
 fun DictAssert[T].contains_value(other: T): DictAssert[T] =
     let assertion = Assertion {
         result: this.value.any((k, v) => v == other),
@@ -1182,6 +1288,7 @@ fun DictAssert[T].contains_value(other: T): DictAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds a sequence equality assertion to the chain.
 fun SeqAssert[T].is_equal_to(other: Seq[T]): SeqAssert[T] =
     let assertion = Assertion {
         result: this.value.as_list() == other.as_list(),
@@ -1193,6 +1300,7 @@ fun SeqAssert[T].is_equal_to(other: Seq[T]): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the sequence has size `other`.
 fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
     let assertion = Assertion {
         result: this.value.as_list().size() == other,
@@ -1204,6 +1312,7 @@ fun SeqAssert[T].has_size(other: int): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the sequence is empty.
 fun SeqAssert[T].is_empty(): SeqAssert[T] =
     let assertion = Assertion {
         result: this.value.as_list().size() == 0,
@@ -1215,6 +1324,7 @@ fun SeqAssert[T].is_empty(): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the sequence contains `other`.
 fun SeqAssert[T].contains(other: T): SeqAssert[T] =
     let assertion = Assertion {
         result: this.value.as_list().any(v => v == other),
@@ -1226,6 +1336,7 @@ fun SeqAssert[T].contains(other: T): SeqAssert[T] =
         assertions: this.assertions + () => assertion
     }
 
+/// Adds an assertion that the sequence does not contain `other`.
 fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
     let assertion = Assertion {
         result: this.value.as_list().any(v => v == other) == false,
@@ -1244,23 +1355,35 @@ fun SeqAssert[T].does_not_contain(other: T): SeqAssert[T] =
 /// assert_that("capybara").starts_with("capy").contains("bara")
 /// ```
 fun assert_that(value: String) = StringAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a collection size.
 fun assert_that(value: size) = IntAssert { value: value.value, assertions: [] }
 /// Starts an int assertion chain.
 fun assert_that(value: int) = IntAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a long value.
 fun assert_that(value: long) = LongAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a double value.
 fun assert_that(value: double) = DoubleAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a float value.
 fun assert_that(value: float) = FloatAssert { value: value, assertions: [] }
 /// Starts a bool assertion chain.
 fun assert_that(value: bool) = BoolAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a date value.
 fun assert_that(value: Date) = DateAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a time value.
 fun assert_that(value: Time) = TimeAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a date-time value.
 fun assert_that(value: DateTime) = DateTimeAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a duration value.
 fun assert_that(value: Duration) = DurationAssert { value: value, assertions: [] }
+/// Starts an assertion chain for an interval value.
 fun assert_that(value: Interval) = IntervalAssert { value: value, assertions: [] }
 /// Starts a list assertion chain.
 fun assert_that(value: List[T]): ListAssert[T] = ListAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a set value.
 fun assert_that(value: Set[T]): SetAssert[T] = SetAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a dictionary value.
 fun assert_that(value: Dict[T]): DictAssert[T] = DictAssert { value: value, assertions: [] }
+/// Starts an assertion chain for a sequence value.
 fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
 /// Starts an option assertion chain.
 fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }

@@ -1,4 +1,10 @@
 /// The result of comparing two values.
+///
+/// Example:
+/// ```cfun
+/// from_int(-10) == LESS
+/// reverse(LESS) == GREATER
+/// ```
 enum Ordering { LESS, EQUAL, GREATER }
 
 /// Converts a negative, zero, or positive integer comparison result to

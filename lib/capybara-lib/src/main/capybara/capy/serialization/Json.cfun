@@ -72,13 +72,17 @@ data JsonString { value: String }
 /// Integers and longs use `JsonNumberLong`; fractional values use
 /// `JsonNumberDouble`.
 union JsonNumber = JsonNumberDouble | JsonNumberLong
+/// JSON number represented as a double-precision value.
 data JsonNumberDouble { value: double }
+/// JSON number represented as a long integer value.
 data JsonNumberLong { value: long }
 /// JSON object value wrapper.
 data JsonValueObject { value: JsonObject }
+/// Returns the JSON value stored under `key`, or `None` when the key is absent.
 fun JsonValueObject.get(key: String): Option[Json] = this.value.get(key)
 /// JSON array value wrapper.
 data JsonValueArray { value: JsonArray }
+/// Returns the JSON value at `idx`, or `None` when the index is out of bounds.
 fun JsonValueArray.get(idx: index): Option[Json] = this.value.get(idx)
 /// JSON boolean value.
 data JsonBool { value: bool }

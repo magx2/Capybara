@@ -6,6 +6,12 @@ from /capy/lang/Option import { * }
 /// Expected, recoverable failures should be represented in return types as
 /// `Result[T]` or `Effect[Result[T]]` instead of Java-style checked
 /// exceptions.
+///
+/// Example:
+/// ```cfun
+/// let result: Result[int] = Success { value: 21 }
+/// result.map(value => value * 2) == Success { value: 42 }
+/// ```
 union Result[T] = Success[T] | Error
 
 /// Successful Result value.

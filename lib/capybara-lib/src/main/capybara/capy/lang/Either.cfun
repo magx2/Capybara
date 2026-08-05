@@ -4,6 +4,12 @@ from /capy/lang/Result import { * }
 ///
 /// `Left` is commonly used for the alternate or error branch, and `Right` for
 /// the primary success branch.
+///
+/// Example:
+/// ```cfun
+/// let value: Either[String, int] = Right { value: 21 }
+/// value.map_right(number => number * 2) == Right { value: 42 }
+/// ```
 union Either[L, R] = Left[L, R] | Right[L, R]
 
 /// The left branch of `Either`.

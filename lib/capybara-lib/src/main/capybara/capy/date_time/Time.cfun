@@ -3,12 +3,19 @@ from /capy/lang/Option import { * }
 from /capy/lang/String import { * }
 from /capy/meta_prog/Recursive import { Recursive }
 
+/// Number of hours in a day.
 const HOURS_IN_DAY: int = 24
+/// Number of minutes in an hour.
 const MINUTES_IN_HOUR: int = 60
+/// Number of seconds in a minute.
 const SECONDS_IN_MINUTE: int = 60
+/// Number of seconds in an hour.
 const SECONDS_IN_HOUR: int = MINUTES_IN_HOUR * SECONDS_IN_MINUTE
+/// Number of minutes in a day.
 const MINUTES_IN_DAY: int = HOURS_IN_DAY * MINUTES_IN_HOUR
+/// Number of seconds in a day.
 const SECONDS_IN_DAY: int = HOURS_IN_DAY * SECONDS_IN_HOUR
+/// Largest supported absolute UTC offset, in minutes.
 const MAX_OFFSET_MINUTES: int = 23 * MINUTES_IN_HOUR + 59
 
 /// Hour of day in 24-hour clock, in the range 0..23.
@@ -39,27 +46,46 @@ type offset_minutes -> int with constructor {
     else Error { message: "offset minutes must be between -1439 and 1439" }
 }
 
+/// Start-of-day hour value.
 const ZERO_HOUR: hour = hour! { 0 }
+/// Noon hour value.
 const NOON_HOUR: hour = hour! { 12 }
+/// Start-of-hour minute value.
 const ZERO_MINUTE: minute = minute! { 0 }
+/// Start-of-minute second value.
 const ZERO_SECOND: second = second! { 0 }
 
+/// Returns whether this hour is greater than `other`.
 fun hour.`>`(other: hour): bool = this.value > other.value
+/// Returns whether this hour is greater than or equal to `other`.
 fun hour.`>=`(other: hour): bool = this.value >= other.value
+/// Returns whether this hour is less than `other`.
 fun hour.`<`(other: hour): bool = this.value < other.value
+/// Returns whether this hour is less than or equal to `other`.
 fun hour.`<=`(other: hour): bool = this.value <= other.value
+/// Returns whether this hour has the same value as `other`.
 fun hour.`==`(other: hour): bool = this.value == other.value
 
+/// Returns whether this minute is greater than `other`.
 fun minute.`>`(other: minute): bool = this.value > other.value
+/// Returns whether this minute is greater than or equal to `other`.
 fun minute.`>=`(other: minute): bool = this.value >= other.value
+/// Returns whether this minute is less than `other`.
 fun minute.`<`(other: minute): bool = this.value < other.value
+/// Returns whether this minute is less than or equal to `other`.
 fun minute.`<=`(other: minute): bool = this.value <= other.value
+/// Returns whether this minute has the same value as `other`.
 fun minute.`==`(other: minute): bool = this.value == other.value
 
+/// Returns whether this second is greater than `other`.
 fun second.`>`(other: second): bool = this.value > other.value
+/// Returns whether this second is greater than or equal to `other`.
 fun second.`>=`(other: second): bool = this.value >= other.value
+/// Returns whether this second is less than `other`.
 fun second.`<`(other: second): bool = this.value < other.value
+/// Returns whether this second is less than or equal to `other`.
 fun second.`<=`(other: second): bool = this.value <= other.value
+/// Returns whether this second has the same value as `other`.
 fun second.`==`(other: second): bool = this.value == other.value
 
 /// Clock time represented in 24-hour format.
@@ -81,7 +107,9 @@ data Time {
     offset_minutes: Option[offset_minutes]
 }
 
+/// Midnight without a UTC offset.
 const MIDNIGHT: Time = Time { hour: ZERO_HOUR, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: None {} }
+/// Noon without a UTC offset.
 const NOON: Time = Time { hour: NOON_HOUR, minute: ZERO_MINUTE, second: ZERO_SECOND, offset_minutes: None {} }
 
 /// Converts this time to seconds since midnight.

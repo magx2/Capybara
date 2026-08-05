@@ -4,6 +4,12 @@ from /capy/lang/Option import { Option }
 /// Returns an effect that reads the current system time in milliseconds since the Unix epoch.
 ///
 /// The value is captured when the effect is run.
+///
+/// Example:
+/// ```cfun
+/// let timestamp <- current_millis()
+/// timestamp
+/// ```
 fun current_millis(): Effect[long] = <native>
 
 /// Returns an effect that reads the current monotonic JVM time in nanoseconds.

@@ -10,25 +10,44 @@ type month -> int with constructor {
     else Error { message: "month must be between 1 and 12" }
 }
 
+/// January, represented by month number 1.
 const JANUARY: month = month! { 1 }
+/// February, represented by month number 2.
 const FEBRUARY: month = month! { 2 }
+/// March, represented by month number 3.
 const MARCH: month = month! { 3 }
+/// April, represented by month number 4.
 const APRIL: month = month! { 4 }
+/// May, represented by month number 5.
 const MAY: month = month! { 5 }
+/// June, represented by month number 6.
 const JUNE: month = month! { 6 }
+/// July, represented by month number 7.
 const JULY: month = month! { 7 }
+/// August, represented by month number 8.
 const AUGUST: month = month! { 8 }
+/// September, represented by month number 9.
 const SEPTEMBER: month = month! { 9 }
+/// October, represented by month number 10.
 const OCTOBER: month = month! { 10 }
+/// November, represented by month number 11.
 const NOVEMBER: month = month! { 11 }
+/// December, represented by month number 12.
 const DECEMBER: month = month! { 12 }
 
+/// Returns whether this month is later in the year than `other`.
 fun month.`>`(other: month): bool = this.value > other.value
+/// Returns whether this month is the same as or later in the year than `other`.
 fun month.`>=`(other: month): bool = this.value >= other.value
+/// Returns whether this month is earlier in the year than `other`.
 fun month.`<`(other: month): bool = this.value < other.value
+/// Returns whether this month is the same as or earlier in the year than `other`.
 fun month.`<=`(other: month): bool = this.value <= other.value
+/// Returns whether this month has the same month number as `other`.
 fun month.`==`(other: month): bool = this.value == other.value
+/// Returns the following month, wrapping December to January.
 fun month.next(): month = if this == DECEMBER then JANUARY else month! { this.value + 1 }
+/// Returns the preceding month, wrapping January to December.
 fun month.previous(): month = if this == JANUARY then DECEMBER else month! { this.value - 1 }
 
 /// Checks whether a year is a leap year in the Gregorian calendar.
@@ -71,6 +90,7 @@ data Date {
     else Success {* { day, month, year }}
 }
 
+/// Unix epoch date, 1970-01-01.
 const UNIX_DATE: Date = Date! { day: 1, month: JANUARY, year: 1970 }
 
 /// Returns `true` when this date is in a leap year.
