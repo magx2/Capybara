@@ -8,6 +8,11 @@
 Native String type backed by the runtime String implementation.
 String literals use quotes: "hello".
 
+Example:
+```cfun
+"Capybara".to_lower_case() == "capybara"
+```
+
 ==== Functions
 
 ===== fun String.`+`(value: any): xref:#type-String[String]

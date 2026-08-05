@@ -4,18 +4,22 @@
 
 === fun ctrf_report(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
+Serializes test results as a Common Test Report Format JSON document.
 
 
 === fun failure_summary(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
+Formats a human-readable summary of failed test files.
 
 
 === fun jest_report(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
+Serializes test results as a Jest-compatible JSON report.
 
 
 === fun normalize_failure_message(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
 
+Normalizes line endings and indentation in a captured failure message.
 
 
 === fun run_tests(rtype: xref:#type-ReportType[ReportType], test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestOutput[TestOutput]&#93;
@@ -80,10 +84,12 @@ Runs tests with logging, writes reports, and prints a failure summary.
 
 === fun team_city_escape(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/String.adoc#type-String[String]
 
+Escapes text for inclusion in a TeamCity service-message attribute.
 
 
 === fun team_city_messages(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
+Builds TeamCity service messages for the supplied test results.
 
 
 === fun test(name: xref:../../capy/lang/String.adoc#type-String[String], assert_supplier: ()=>Assert): xref:#type-TestCase[TestCase]
@@ -119,6 +125,7 @@ added to the suite.
 
 === fun test_log_lines(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
 
+Builds console log lines for the supplied test files and their test cases.
 
 
 === fun write_test_outputs(output_dir: xref:../../capy/io/Path.adoc#type-Path[Path], test_outputs: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestOutput[TestOutput]&#93;): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/io/Path.adoc#type-Path[Path]&#93;&#93;&#93;
@@ -139,22 +146,27 @@ Writes text only when the target file content is different.
 
 === const CTRF_REPORT_FILE: 
 
+Default filename for the generated CTRF report.
 
 
 === const CTRF_SPEC_VERSION: 
 
+CTRF specification version emitted by this reporter.
 
 
 === const JEST_REPORT_FILE: 
 
+Default filename for the generated Jest-compatible report.
 
 
 === const JUNIT_PREFIX: 
 
+Prefix used for generated JUnit XML report files.
 
 
 === const OUTPUT_MANIFEST_FILE: 
 
+File used to track test-run output artifacts for cleanup.
 
 
 
@@ -183,6 +195,7 @@ Failed test execution with assertion message and assertion type.
 [[type-JUnitFailure]]
 === data JUnitFailure
 
+Failure details parsed from a JUnit XML report.
 
 ==== Fields
 
@@ -194,6 +207,7 @@ Failed test execution with assertion message and assertion type.
 
 ===== fun JUnitFailure.`+`(other_message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-JUnitFailure[JUnitFailure]
 
+Appends text to this failure message while preserving its type and call stack.
 
 
 [[type-JUnitReport]]

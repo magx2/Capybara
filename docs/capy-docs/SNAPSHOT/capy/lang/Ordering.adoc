@@ -27,6 +27,12 @@ Uses `other` only when `ordering` is `EQUAL`.
 
 The result of comparing two values.
 
+Example:
+```cfun
+from_int(-10) == LESS
+reverse(LESS) == GREATER
+```
+
 ==== Values
 
 * `EQUAL`

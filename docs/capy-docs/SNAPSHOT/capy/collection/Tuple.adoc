@@ -8,6 +8,12 @@
 Native fixed-size ordered collection type backed by the runtime Tuple implementation.
 Tuple literals use parentheses with at least two values: (1, "two").
 
+Example:
+```cfun
+let pair = ("answer", 42)
+pair[index! { 1 }] == 42
+```
+
 ==== Functions
 
 ===== fun Tuple.get(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): any

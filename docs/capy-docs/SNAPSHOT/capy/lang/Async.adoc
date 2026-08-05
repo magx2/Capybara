@@ -30,6 +30,13 @@ Handle for an Effect that has been started by the host runtime.
 
 Async values are inert handles. Observing completion is an Effect.
 
+Example:
+```cfun
+let task = compute(() => 21).map(value => value * 2)
+let result <- task.join()
+result
+```
+
 ==== Functions
 
 ===== fun Async[T].`|*`(flatmap: T=>Result[Y]): xref:#type-Async[Async]&#91;Y&#93;

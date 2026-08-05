@@ -26,6 +26,13 @@ Random value paired with the seed to use for the next random step.
 
 Immutable random generator state.
 
+Example:
+```cfun
+let first = seed { 123L }.random_int()
+let second = first.seed.random_int()
+second.value
+```
+
 ==== Functions
 
 ===== fun seed.random_bool(): xref:#type-RandomResult[RandomResult]&#91;bool&#93;
