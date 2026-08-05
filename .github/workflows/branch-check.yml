@@ -1,9 +1,11 @@
-name: Build & Check
+name: Branch Build & Check
 
 on:
   push:
     branches:
-      - "master"
+      - "**"
+      - "!master"
+      - "!merge-back/**"
     paths:
       - ".github/workflows/**"
       - "build-tool/**"
@@ -15,19 +17,6 @@ on:
       - "gradle.properties"
       - "gradlew"
       - "gradlew.bat"
-  pull_request:
-    paths:
-      - ".github/workflows/**"
-      - "build-tool/**"
-      - "buildSrc/**"
-      - "capy/**"
-      - "gradle/**"
-      - "lib/**"
-      - "settings.gradle"
-      - "gradle.properties"
-      - "gradlew"
-      - "gradlew.bat"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -54,14 +43,14 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run Gradle check
-        run: ./gradlew clean check --no-daemon
+      - name: Run basic Gradle tests
+        run: ./gradlew clean test --no-daemon
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-check-test-reports
+          name: branch-build-check-test-reports
           path: |
             **/build/reports/tests/**
             **/build/test-results/**/*.xml
