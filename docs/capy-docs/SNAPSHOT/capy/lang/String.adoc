@@ -174,6 +174,31 @@ Returns the number of characters in this String.
 Returns true when this String starts with the given substring.
 
 
+===== fun String.to_bool(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;
+
+Parses this String as a bool.
+
+
+===== fun String.to_double(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;double&#93;
+
+Parses this String as a double.
+
+
+===== fun String.to_float(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;float&#93;
+
+Parses this String as a float.
+
+
+===== fun String.to_int(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
+
+Parses this String as an int.
+
+
+===== fun String.to_long(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;long&#93;
+
+Parses this String as a long.
+
+
 ===== fun String.to_lower_case(): xref:#type-String[String]
 
 Returns this String with ASCII uppercase letters converted to lowercase.
