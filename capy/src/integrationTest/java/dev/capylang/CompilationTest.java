@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
 class CompilationTest {
@@ -126,13 +127,13 @@ class CompilationTest {
                 fun fail_kind(kind: String, message: String): Result[String] = Error { kind: kind, message: message }
                 """;
         var consumerSource = """
-                from /capy/lang/Result import { * }
+                from /sample/lib/Result import { * }
 
                 fun reducer_error_kind(): String =
                     fail_kind("capy.test.result.boom", "boom").reduce(_ => "success", error => error.kind)
                 """;
         var program = compileProgram(List.of(
-                rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("Result", "/sample/lib", resultSource, SourceKind.FUNCTIONAL),
                 rawModule("UseResult", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
         ));
 
@@ -168,6 +169,44 @@ class CompilationTest {
         assertThat(code).contains("value + \"!\"");
         assertThat(code).contains("java.lang.String key");
         assertThat(code).contains("int value");
+    }
+
+    @Test
+    void shouldGenerateJavaProgramMainEntrypoint() {
+        var source = """
+                from /capy/lang/Effect import { Effect, pure }
+                from /capy/lang/Program import { Program, Success }
+
+                fun main(args: List[String]): Effect[Program] =
+                    pure(Success {})
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("public static capy.lang.Effect<capy.lang.Program> main(java.util.List<java.lang.String> args)")
+                .containsSubsequence(
+                        "public static final void main(java.lang.String... args)",
+                        "var __capybaraArgsList = java.util.List.of(args);",
+                        "capy.lang.Program __capybaraProgram = main(__capybaraArgsList).unsafeRun();",
+                        "if (__capybaraProgram instanceof capy.lang.Program.Failed __capybaraFailed)",
+                        "java.lang.System.exit(__capybaraFailed.exit_code());"
+                );
+    }
+
+    @Test
+    void shouldFailJavaGenerationInsteadOfEmittingUnsupportedFunctionStubs() {
+        var source = "fun broken(): int = missing()";
+        var program = compileProgram(List.of(rawModule("Broken", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        assertThatThrownBy(() -> JavaGenerator.javaGenerator(program))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Java generation failed for `sample/app/Broken.java` at 1:0: the backend cannot emit this function.");
     }
 
     @Test

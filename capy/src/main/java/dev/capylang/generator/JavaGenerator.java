@@ -12,9 +12,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
 public final class JavaGenerator {
+    private static final Pattern UNSUPPORTED_FUNCTION = Pattern.compile(
+            "throw new UnsupportedOperationException\\(\\\"Unsupported CFUN expression at (\\d+):(\\d+)\\\"\\);"
+    );
+
     private JavaGenerator() {
     }
 
@@ -23,7 +28,19 @@ public final class JavaGenerator {
         var modules = list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
                 .toList();
+        modules.forEach(JavaGenerator::rejectUnsupportedFunctions);
         return new GeneratedProgram(modules);
+    }
+
+    private static void rejectUnsupportedFunctions(GeneratedModule module) {
+        var matcher = UNSUPPORTED_FUNCTION.matcher(module.code());
+        if (matcher.find()) {
+            throw new IllegalStateException(
+                    "Java generation failed for `" + module.relativePath() + "` at "
+                            + matcher.group(1) + ":" + matcher.group(2)
+                            + ": the backend cannot emit this function."
+            );
+        }
     }
 
     private static GeneratedModule generatedModule(Object value) {

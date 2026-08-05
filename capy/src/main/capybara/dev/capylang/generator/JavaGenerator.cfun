@@ -1577,6 +1577,41 @@ private fun java_function(function: CompiledFunction, constantBindings: List[Jav
     "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
     + java_function_body(function, returnTypeReference, env, module, allModules, nativeProviderScope)
     + "    }" + newline()
+    + java_program_main_entrypoint(function)
+
+/// Emits the JVM launcher for a public Effect[Program] main function.
+private fun java_program_main_entrypoint(function: CompiledFunction): String =
+    if java_effect_program_main(function)
+    then
+        "    public static final void main(java.lang.String... args) {" + newline()
+        + "        var __capybaraArgsList = java.util.List.of(args);" + newline()
+        + "        capy.lang.Program __capybaraProgram = main(__capybaraArgsList).unsafeRun();" + newline()
+        + "        if (__capybaraProgram instanceof capy.lang.Program.Failed __capybaraFailed) {" + newline()
+        + "            java.lang.System.exit(__capybaraFailed.exit_code());" + newline()
+        + "        }" + newline()
+        + "    }" + newline()
+    else ""
+
+/// Checks whether a function is the public effectful program entrypoint.
+private fun java_effect_program_main(function: CompiledFunction): bool =
+    function.name == "main"
+        & function.visibility == "public"
+        & function.returnType.name == "Effect"
+        & java_program_type(first_type_argument(function.returnType))
+        & java_program_main_parameters(function.parameters)
+
+/// Checks the List[String] parameter shape required by a program entrypoint.
+private fun java_program_main_parameters(parameters: List[CompiledFunctionParameter]): bool =
+    match parameters[0] with
+    case None -> false
+    case Some { parameter } ->
+        parameters[1:].is_empty()
+            & parameter.typeReference.name == "List"
+            & first_type_argument(parameter.typeReference).name == "String"
+
+/// Checks whether a type reference names the standard Program type.
+private fun java_program_type(type: CompiledTypeReference): bool =
+    type.name == "Program" | type.name == "/capy/lang/Program" | type.name == "capy/lang/Program"
 
 /// Computes the Java name for function.
 private fun java_function_name(function: CompiledFunction): String =
@@ -12290,7 +12325,7 @@ private fun simple_java_type_name(name: String): String =
     else if name == "Assert" then "java.lang.Object"
     else if name == "TestFile" then "java.lang.Object"
     else if name == "TestCase" then "java.lang.Object"
-    else if name == "/capy/lang/Program" then "capy.lang.Program"
+    else if name == "Program" | name == "/capy/lang/Program" | name == "capy/lang/Program" then "capy.lang.Program"
     else if stdlib_date_time_type_name(name) then stdlib_date_time_java_type(name)
     else ""
 
