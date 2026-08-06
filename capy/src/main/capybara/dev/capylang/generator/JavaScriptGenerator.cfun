@@ -24,6 +24,8 @@ from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
 
 /// JavaScript generator name binding from a Capybara symbol to its JavaScript identifier and type name.
 data JavaScriptBinding { name: String, jsName: String, typeName: String }
+/// JavaScript data constructor paired with the module that declares it.
+private data JavaScriptDataConstructorBinding { module: CompiledModule, function: CompiledFunction }
 /// JavaScript generator lookup entry for annotation metadata in a source module.
 private data JavaScriptAnnotationBinding { name: String, moduleName: String, modulePath: String, fields: List[String] }
 /// Decoded JavaScript annotation schema argument with field name, value kind, and encoded source value.
@@ -62,7 +64,7 @@ private data JavaScriptObjectInterfaceSources { methodInfoStatements: String, pa
 /// Decoded object field schema metadata used while emitting object reflection metadata.
 private data JavaScriptObjectFieldSchema { name: String, typeName: String }
 
-const JAVA_SCRIPT_RUNTIME_SYMBOLS = "Effect, Async, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_system_property, __capy_set_system_property, __capy_clear_system_property, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_async_start, __capy_async_join, __capy_async_all, __capy_async_any, __capy_async_map, __capy_async_flat_map, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_throw, __capy_try, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_export, __capy_unsafe_run, __capy_deep_equal, __capy_native_provider"
+const JAVA_SCRIPT_RUNTIME_SYMBOLS = "Effect, Async, pure, delay, print, println, print_error, println_error, assert_all, assert_that, test, test_file, reflection, digits, DEFAULT_FAILED_EXIT_CODE, __capy_current_millis, __capy_nano_time, __capy_system_property, __capy_set_system_property, __capy_clear_system_property, __capy_clock_now, __capy_path_from_string, __capy_io_read_text, __capy_io_read_lines, __capy_io_read_bytes, __capy_io_write_text, __capy_io_write_lines, __capy_io_write_bytes, __capy_io_append_text, __capy_io_append_lines, __capy_io_append_bytes, __capy_io_exists, __capy_io_is_file, __capy_io_is_directory, __capy_io_size, __capy_io_create_file, __capy_io_create_directory, __capy_io_create_directories, __capy_io_list_entries, __capy_io_delete, __capy_io_copy, __capy_io_copy_replace, __capy_io_move, __capy_io_move_replace, __capy_add, __capy_sub, __capy_mul, __capy_div, __capy_mod, __capy_pow, __capy_truthy, __capy_contains, __capy_size, __capy_to_int, __capy_to_long, __capy_parse_int, __capy_parse_long, __capy_parse_double, __capy_parse_float, __capy_parse_bool, __capy_enum_parse, __capy_enum_name, __capy_char, __capy_to_string, __capy_string_trim, __capy_string_replace, __capy_string_starts_with, __capy_string_end_with, __capy_string_get, __capy_string_slice, __capy_regex_matches, __capy_regex_find, __capy_regex_find_all, __capy_regex_replace, __capy_regex_split, __capy_date_unix_date, __capy_time_midnight, __capy_date_time_unix_epoch, __capy_duration_zero, __capy_date_add_days, __capy_date_add_years_months, __capy_date_to_days_since_unix_epoch, __capy_date_to_iso_8601, __capy_time_add_seconds, __capy_time_to_seconds, __capy_time_to_iso_8601, __capy_date_time_plus, __capy_date_time_minus, __capy_date_time_timestamp, __capy_date_time_to_iso_8601, __capy_duration_to_iso_8601, __capy_duration_negate, __capy_duration_years, __capy_duration_months, __capy_duration_days, __capy_duration_hours, __capy_duration_minutes, __capy_duration_seconds, __capy_tuple, __capy_set, __capy_set_append, __capy_set_concat, __capy_set_remove, __capy_set_remove_all, __capy_set_subset, __capy_set_proper_subset, __capy_set_intersection, __capy_set_symmetric_difference, __capy_set_cartesian_product, __capy_set_power_set, __capy_index, __capy_slice, __capy_get_field, __capy_reduce, __capy_with, __capy_data_fields, __capy_as_list, to_seq, __capy_async_start, __capy_async_join, __capy_async_all, __capy_async_any, __capy_async_map, __capy_async_flat_map, __capy_seq_map, __capy_seq_filter, __capy_seq_flat_map, __capy_option_map, __capy_option_filter, __capy_option_flat_map, __capy_result_map, __capy_result_flat_map, __capy_result_reduce, __capy_constructor_result, __capy_primitive_constructor_result, __capy_constructor_pipeline, __capy_any, __capy_all, __capy_type_matches, __capy_match_binding, __capy_no_match, __capy_throw, __capy_try, __capy_unsupported, __capy_not_implemented, __capy_data, __capy_export, __capy_unsafe_run, __capy_deep_equal, __capy_native_provider"
 
 /// Passes an optional string through unchanged where JavaScript generator pipelines need a named adapter.
 private fun java_script_option_string_identity(value: /capy/lang/Option[String]): /capy/lang/Option[String] = value
@@ -277,6 +279,7 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_result_flat_map",
         "__capy_result_reduce",
         "__capy_constructor_result",
+        "__capy_primitive_constructor_result",
         "__capy_constructor_pipeline",
         "__capy_any",
         "__capy_all",
@@ -317,12 +320,14 @@ private fun java_script_unique_imports(imports: List[CompiledImportDeclaration],
 
 /// Emits JavaScript import source for import.
 private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule): String =
-    "const "
-        + java_script_import_alias(declaration, module)
-        + " = require("
-        + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_import_module_path(declaration.modulePath, module)))
-        + ");"
-        + java_script_newline()
+    if java_script_stdlib_import(declaration.modulePath)
+    then ""
+    else "const "
+            + java_script_import_alias(declaration, module)
+            + " = require("
+            + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_import_module_path(declaration.modulePath, module)))
+            + ");"
+            + java_script_newline()
 
 /// Checks whether a function matches the object helper function metadata.
 private fun java_script_object_helper_function(function: CompiledFunction): bool =
@@ -674,11 +679,14 @@ private fun java_script_object_method_param_info_literal(parameter: CompiledFunc
 
 /// Formats object type info as a JavaScript literal.
 private fun java_script_object_type_info_literal(typeName: String): String =
-    "{"
-        + "\"name\": " + java_script_string_literal(java_script_type_unqualified_name(typeName))
-        + ", \"pkg\": {\"name\": \"\", \"path\": \"\"}"
-        + ", \"annotations\": []"
-        + "}"
+    java_script_code_object([
+        java_script_code_object_entry("name", java_script_string_literal(java_script_type_unqualified_name(typeName))),
+        java_script_code_object_entry("pkg", java_script_code_object([
+            java_script_code_object_entry("name", java_script_string_literal("")),
+            java_script_code_object_entry("path", java_script_string_literal("")),
+        ])),
+        java_script_code_object_entry("annotations", "[]"),
+    ])
 
 /// Emits JavaScript statements for object constructor field.
 private fun java_script_object_constructor_field_statements(className: String, functions: List[CompiledFunction]): String =
@@ -1879,7 +1887,7 @@ private fun java_script_parameter_bindings(parameters: List[CompiledFunctionPara
     match parameters[0] with
     case None -> []
     case Some { parameter } ->
-        [JavaScriptBinding { name: parameter.name, jsName: java_script_identifier(parameter.name), typeName: parameter.typeReference.name }]
+        [JavaScriptBinding { name: parameter.name, jsName: java_script_identifier(parameter.name), typeName: java_script_type_reference_name(parameter.typeReference) }]
             + java_script_parameter_bindings(parameters[1:])
 
 /// Emits JavaScript code for expression.
@@ -2078,7 +2086,37 @@ private fun java_script_binary_expression_code(binary: CompiledBinaryExpression,
 
 /// Emits JavaScript code for collection pipe.
 private fun java_script_collection_pipe_code(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_pipe_code(java_script_collection_pipe_helper(binary.operator), binary, env, module, allModules)
+    match binary.right with
+    case CompiledLambdaExpression lambda ->
+        java_script_collection_pipe_helper(binary.operator)
+            + "("
+            + java_script_expression_code(binary.left, env, module, allModules)
+            + ", "
+            + java_script_lambda_expression_code_with_bindings(lambda, java_script_collection_lambda_bindings(binary.left, lambda.parameters, env, module, allModules), env, module, allModules)
+            + ")"
+    case CompiledFunctionReferenceExpression reference ->
+        java_script_collection_pipe_helper(binary.operator)
+            + "("
+            + java_script_expression_code(binary.left, env, module, allModules)
+            + ", "
+            + java_script_expression_code(reference, env, module, allModules)
+            + ")"
+    case _ -> "__capy_unsupported('collection pipe')"
+
+/// Creates a typed single-parameter lambda binding from a collection's generic element type.
+private fun java_script_collection_lambda_bindings(receiver: CompiledExpression, parameters: List[String], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaScriptBinding] =
+    if parameters[1:].is_empty()
+    then java_script_lambda_bindings_with_single_type(parameters, java_script_collection_item_type_key(receiver, env, module, allModules))
+    else java_script_lambda_bindings(parameters)
+
+/// Infers the element type yielded by a collection expression.
+private fun java_script_collection_item_type_key(receiver: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeKey = java_script_expression_type_key(receiver, env, module, allModules)
+    if java_script_type_key_base(typeKey) == "String"
+    then "char"
+    else if java_script_type_key_has_argument(typeKey)
+    then java_script_type_key_argument(typeKey)
+    else java_script_unknown_type()
 
 /// Checks whether a type reference matches the collection pipe chained method expression with left type rule.
 private fun java_script_collection_pipe_chained_method_expression_with_left_type(binary: CompiledBinaryExpression, leftType: String): bool =
@@ -2486,14 +2524,16 @@ private fun java_script_unary_expression_code(unary: CompiledUnaryExpression, en
 
 /// Emits JavaScript code for function call.
 private fun java_script_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let stdlibCall = java_script_normalized_stdlib_function_call(call, module)
+    let qualifiedStdlib = stdlibCall.name != call.name
     if java_script_object_type_call(call)
     then java_script_object_type_call_code(call.name, module, allModules)
-    else if java_script_stdlib_parse_function_call(call, module)
-    then java_script_stdlib_parse_function_call_code(call, env, module, allModules)
-    else if java_script_stdlib_system_property_call(call, module)
-    then java_script_stdlib_system_property_call_code(call, env, module, allModules)
-    else if java_script_stdlib_effect_function_call(call, module)
-    then java_script_stdlib_effect_function_call_code(call.name)
+    else if java_script_resolved_stdlib_parse_function_call(stdlibCall, module, qualifiedStdlib)
+    then java_script_stdlib_parse_function_call_code(stdlibCall, env, module, allModules)
+    else if java_script_resolved_stdlib_system_property_call(stdlibCall, module, qualifiedStdlib)
+    then java_script_stdlib_system_property_call_code(stdlibCall, env, module, allModules)
+    else if java_script_resolved_stdlib_effect_function_call(stdlibCall, module, qualifiedStdlib)
+    then java_script_stdlib_effect_function_call_code(stdlibCall.name)
     else if java_script_oo_constructor_call(call.name, module, allModules)
     then java_script_oo_constructor_call_code(call, env, module, allModules)
     else if java_script_stdlib_path_function_call(call, module)
@@ -2507,8 +2547,8 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
     else if java_script_reflection_function_call(call, module)
     then java_script_reflection_call_code(call, env, module, allModules)
     else
-        let functionName = java_script_function_call_name(call.name, env, module, allModules)
-        match java_script_function_call_definition(call.name, env, module, allModules) with
+        let functionName = java_script_function_call_name(stdlibCall.name, env, module, allModules)
+        match java_script_function_call_definition(stdlibCall.name, env, module, allModules) with
         case Some { function } ->
             functionName
                 + "("
@@ -2519,6 +2559,37 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
                 + "("
                 + java_script_expression_list_code(call.arguments, env, module, allModules)
                 + ")"
+
+/// Normalizes a function qualified through an imported standard-library module.
+private fun java_script_normalized_stdlib_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): CompiledFunctionCallExpression =
+    CompiledFunctionCallExpression {
+        name: java_script_normalized_stdlib_function_name(call.name, module),
+        arguments: call.arguments,
+        location: call.location
+    }
+
+/// Resolves the member name of a qualified standard-library call.
+private fun java_script_normalized_stdlib_function_name(name: String, module: CompiledModule): String =
+    if java_script_qualified_stdlib_function(name, module.imports, module)
+    then java_script_qualified_call_member(name)
+    else name
+
+/// Checks whether a qualified function is provided by an imported standard-library module.
+private fun java_script_qualified_stdlib_function(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule): bool =
+    if !java_script_qualified_call_name(name)
+    then false
+    else java_script_qualified_stdlib_function_in_imports(java_script_qualified_call_qualifier(name), imports, module)
+
+/// Searches qualified standard-library imports for a function qualifier.
+private fun java_script_qualified_stdlib_function_in_imports(qualifier: String, imports: List[CompiledImportDeclaration], module: CompiledModule): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if declaration.qualified
+            & java_script_stdlib_import(declaration.modulePath)
+            & java_script_qualified_import_matches(qualifier, declaration, module)
+        then true
+        else java_script_qualified_stdlib_function_in_imports(qualifier, imports[1:], module)
 
 /// Checks whether a type reference matches the object type call rule.
 private fun java_script_object_type_call(call: CompiledFunctionCallExpression): bool =
@@ -2586,7 +2657,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         let twoArguments = java_script_two_method_arguments(call.arguments)
         if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
         then "__capy_enum_name(" + receiver + ")"
-        else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
+        else if call.name == "to_string" & emptyArguments & java_script_to_string_receiver_type(receiverType, module, allModules)
         then "__capy_to_string(" + receiver + ")"
         else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
         then java_script_string_get_method_code(call, env, module, allModules)
@@ -3106,7 +3177,9 @@ private fun java_script_collection_reduce_method_code_with_receiver_type(call: C
 
 /// Emits JavaScript code for collection reduce method lambda.
 private fun java_script_collection_reduce_method_lambda_code(receiver: CompiledExpression, initial: CompiledExpression, body: CompiledExpression, accumulatorName: String, keyName: String, valueName: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let reduceEnv = java_script_reduce_bindings_from_names(accumulatorName, keyName, valueName, env)
+    let accumulatorType = java_script_expression_type_key(initial, env, module, allModules)
+    let valueType = java_script_collection_item_type_key(receiver, env, module, allModules)
+    let reduceEnv = java_script_reduce_bindings_from_names(accumulatorName, keyName, valueName, accumulatorType, valueType, env)
     let keyed = if keyName.is_empty() then "false" else "true"
     "__capy_reduce("
         + java_script_expression_code(receiver, env, module, allModules)
@@ -3140,16 +3213,16 @@ private fun java_script_reduce_parameters_from_names(accumulatorName: String, ke
     else java_script_lambda_parameter_name(accumulatorName, 0) + ", " + java_script_lambda_parameter_name(keyName, 1) + ", " + java_script_lambda_parameter_name(valueName, 2)
 
 /// Collects name/type bindings for reduce bindings from names.
-private fun java_script_reduce_bindings_from_names(accumulatorName: String, keyName: String, valueName: String, env: List[JavaScriptBinding]): List[JavaScriptBinding] =
+private fun java_script_reduce_bindings_from_names(accumulatorName: String, keyName: String, valueName: String, accumulatorType: String, valueType: String, env: List[JavaScriptBinding]): List[JavaScriptBinding] =
     if keyName.is_empty()
     then [
-            JavaScriptBinding { name: accumulatorName, jsName: java_script_lambda_parameter_name(accumulatorName, 0), typeName: java_script_unknown_type() },
-            JavaScriptBinding { name: valueName, jsName: java_script_lambda_parameter_name(valueName, 1), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: accumulatorName, jsName: java_script_lambda_parameter_name(accumulatorName, 0), typeName: accumulatorType },
+            JavaScriptBinding { name: valueName, jsName: java_script_lambda_parameter_name(valueName, 1), typeName: valueType },
         ] + env
     else [
-            JavaScriptBinding { name: accumulatorName, jsName: java_script_lambda_parameter_name(accumulatorName, 0), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: accumulatorName, jsName: java_script_lambda_parameter_name(accumulatorName, 0), typeName: accumulatorType },
             JavaScriptBinding { name: keyName, jsName: java_script_lambda_parameter_name(keyName, 1), typeName: java_script_unknown_type() },
-            JavaScriptBinding { name: valueName, jsName: java_script_lambda_parameter_name(valueName, 2), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: valueName, jsName: java_script_lambda_parameter_name(valueName, 2), typeName: valueType },
         ] + env
 
 /// Formats one reduce key parameter for JavaScript emission.
@@ -3337,7 +3410,18 @@ private fun java_script_char_to_string_method_call(call: CompiledMethodCallExpre
 /// Checks whether a type reference matches the character to string receiver type rule.
 private fun java_script_char_to_string_receiver_type(typeName: String): bool =
     let baseType = java_script_type_unqualified_name(typeName)
-    baseType == "char" | baseType == java_script_unknown_type()
+    baseType == "char"
+
+/// Checks whether a value can use the runtime primitive string conversion.
+private fun java_script_to_string_receiver_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let baseType = java_script_type_unqualified_name(typeName)
+    if baseType == "char" | baseType == "bool" | baseType == "byte" | baseType == "int" | baseType == "long" | baseType == "float" | baseType == "double"
+    then true
+    else if baseType == java_script_unknown_type()
+    then false
+    else match java_script_primitive_backed_backing_type(baseType, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether method metadata matches the string method call rule.
 private fun java_script_string_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -3782,7 +3866,7 @@ private fun java_script_with_expression_code(withExpression: CompiledWithExpress
     else "__capy_constructor_pipeline("
         + rawWithCode
         + ", ["
-        + java_script_data_constructor_pipeline_steps(constructorTypes, receiverType, module)
+        + java_script_data_constructor_pipeline_steps(constructorTypes, receiverType, module, allModules)
         + "], "
         + java_script_bool_code(java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules))
         + ")"
@@ -3971,17 +4055,37 @@ private fun java_script_data_field_part_name(name: String, typeName: String, map
 private fun java_script_data_literal_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if literal.typeName == "char"
     then java_script_char_constructor_code(literal.fields, env, module, allModules)
-    else if java_script_raw_data_literal(literal.typeName)
-    then java_script_raw_data_literal_code(literal, env, module, allModules)
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
+        if java_script_primitive_backed_type(declaredTypeName, module, allModules)
+        then java_script_primitive_backed_data_literal_code(declaredTypeName, literal, env, module, allModules)
+        else if java_script_raw_data_literal(literal.typeName)
+        then java_script_raw_data_literal_code(literal, env, module, allModules)
+        else
         let parentConstructors = java_script_data_parent_constructor_type_names(declaredTypeName, module, allModules)
         let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
         if parentConstructors.is_empty()
-        then match java_script_data_constructor_function(declaredTypeName, module) with
-            case Some { function } -> java_script_data_constructor_call_code(function, literal, env, module, allModules)
+        then match java_script_data_constructor_binding(declaredTypeName, module, allModules) with
+            case Some { binding } -> java_script_data_constructor_call_code(declaredTypeName, binding, literal, env, module, allModules)
             case None -> java_script_raw_data_literal_code(literal, env, module, allModules)
         else java_script_data_constructor_pipeline_code(constructorTypes, literal, env, module, allModules)
+
+/// Emits JavaScript code for a primitive-backed data literal.
+private fun java_script_primitive_backed_data_literal_code(typeName: String, literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_raw_data_literal(literal.typeName)
+    then java_script_primitive_backed_literal_value_code(literal, env, module, allModules)
+    else match java_script_data_constructor_binding(typeName, module, allModules) with
+    case Some { binding } ->
+        "__capy_primitive_constructor_result("
+            + java_script_data_constructor_call_name(binding, module)
+            + "("
+            + java_script_data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules)
+            + "))"
+    case None -> java_script_primitive_backed_literal_value_code(literal, env, module, allModules)
+
+/// Emits the backing value of a primitive-backed literal.
+private fun java_script_primitive_backed_literal_value_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_expression_code(java_script_data_constructor_argument_value(literal.fields, "value", literal.typeName, module, allModules), env, module, allModules)
 
 /// Checks whether the current value satisfies the raw data literal rule for JavaScript processing.
 private fun java_script_raw_data_literal(typeName: String): bool =
@@ -3997,19 +4101,47 @@ private fun java_script_data_constructor_function(typeName: String, module: Comp
     then /capy/lang/Option.None {}
     else java_script_find_local_function("__capy_constructor|" + java_script_data_literal_declared_type_name(typeName), module.functions)
 
+/// Looks up a data constructor together with the module that declares it.
+private fun java_script_data_constructor_binding(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptDataConstructorBinding] =
+    if java_script_raw_data_literal(typeName)
+    then /capy/lang/Option.None {}
+    else match java_script_data_constructor_function(typeName, module) with
+        case Some { function } -> /capy/lang/Option.Some { JavaScriptDataConstructorBinding { module: module, function: function } }
+        case None -> java_script_data_constructor_binding_in_imports(typeName, module.imports, module, allModules)
+
+/// Looks up an explicitly imported data constructor.
+private fun java_script_data_constructor_binding_in_imports(typeName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaScriptDataConstructorBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_import_includes_name(typeName, declaration)
+        then match java_script_find_imported_module(declaration, module, allModules) with
+            case Some { importedModule } ->
+                match java_script_data_constructor_function(typeName, importedModule) with
+                case Some { function } -> /capy/lang/Option.Some { JavaScriptDataConstructorBinding { module: importedModule, function: function } }
+                case None -> java_script_data_constructor_binding_in_imports(typeName, imports[1:], module, allModules)
+            case None -> java_script_data_constructor_binding_in_imports(typeName, imports[1:], module, allModules)
+        else java_script_data_constructor_binding_in_imports(typeName, imports[1:], module, allModules)
+
+/// Formats a local or cross-module constructor function reference.
+private fun java_script_data_constructor_call_name(binding: JavaScriptDataConstructorBinding, module: CompiledModule): String =
+    if java_script_module_path(binding.module) == java_script_module_path(module)
+    then java_script_function_name(binding.function)
+    else java_script_module_function_binding(binding.module, binding.function, module)
+
 /// Emits JavaScript code for data constructor call.
-private fun java_script_data_constructor_call_code(function: CompiledFunction, literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_data_constructor_call_code(typeName: String, binding: JavaScriptDataConstructorBinding, literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_constructor_result("
-        + java_script_string_literal(java_script_data_literal_declared_type_name(literal.typeName))
+        + java_script_string_literal(typeName)
         + ", "
-        + java_script_function_name(function)
+        + java_script_data_constructor_call_name(binding, module)
         + "("
-        + java_script_data_constructor_call_arguments(function.parameters, literal.fields, 0, env, module, allModules)
+        + java_script_data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules)
         + "))"
 
 /// Collects data own constructor type names for JavaScript processing.
-private fun java_script_data_own_constructor_type_names(typeName: String, module: CompiledModule): List[String] =
-    match java_script_data_constructor_function(typeName, module) with
+private fun java_script_data_own_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match java_script_data_constructor_binding(typeName, module, allModules) with
     case Some _ -> [typeName]
     case None -> []
 
@@ -4017,21 +4149,21 @@ private fun java_script_data_own_constructor_type_names(typeName: String, module
 private fun java_script_data_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     if java_script_raw_data_literal(typeName)
     then []
-    else java_script_data_parent_constructor_type_names(typeName, module, allModules) + java_script_data_own_constructor_type_names(typeName, module)
+    else java_script_data_parent_constructor_type_names(typeName, module, allModules) + java_script_data_own_constructor_type_names(typeName, module, allModules)
 
 /// Collects data parent constructor type names for JavaScript processing.
 private fun java_script_data_parent_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    java_script_data_parent_constructor_type_names_from(java_script_data_type_parent_types(typeName, module, allModules), module)
+    java_script_data_parent_constructor_type_names_from(java_script_data_type_parent_types(typeName, module, allModules), module, allModules)
 
 /// Collects data parent constructor type names from for JavaScript processing.
-private fun java_script_data_parent_constructor_type_names_from(typeNames: List[String], module: CompiledModule): List[String] =
+private fun java_script_data_parent_constructor_type_names_from(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match typeNames[0] with
     case None -> []
     case Some { typeName } ->
         let constructorTypeName = java_script_schema_type_name(typeName)
-        match java_script_data_constructor_function(constructorTypeName, module) with
-        case Some _ -> [constructorTypeName] + java_script_data_parent_constructor_type_names_from(typeNames[1:], module)
-        case None -> java_script_data_parent_constructor_type_names_from(typeNames[1:], module)
+        match java_script_data_constructor_binding(constructorTypeName, module, allModules) with
+        case Some _ -> [constructorTypeName] + java_script_data_parent_constructor_type_names_from(typeNames[1:], module, allModules)
+        case None -> java_script_data_parent_constructor_type_names_from(typeNames[1:], module, allModules)
 
 /// Emits JavaScript code for data constructor pipeline.
 private fun java_script_data_constructor_pipeline_code(constructorTypes: List[String], literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4039,47 +4171,47 @@ private fun java_script_data_constructor_pipeline_code(constructorTypes: List[St
     "__capy_constructor_pipeline("
         + java_script_raw_data_literal_code(literal, env, module, allModules)
         + ", ["
-        + java_script_data_constructor_pipeline_steps(constructorTypes, declaredTypeName, module)
+        + java_script_data_constructor_pipeline_steps(constructorTypes, declaredTypeName, module, allModules)
         + "], "
         + java_script_bool_code(java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules))
         + ")"
 
 /// Formats JavaScript source text for data constructor pipeline steps.
-private fun java_script_data_constructor_pipeline_steps(constructorTypes: List[String], literalTypeName: String, module: CompiledModule): String =
+private fun java_script_data_constructor_pipeline_steps(constructorTypes: List[String], literalTypeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match constructorTypes[0] with
     case None -> ""
     case Some { constructorType } ->
-        match java_script_data_constructor_function(constructorType, module) with
-        case Some { function } ->
-            java_script_data_constructor_pipeline_step(function, constructorType, constructorType != literalTypeName)
-                + java_script_data_constructor_pipeline_step_tail(constructorTypes[1:], literalTypeName, module)
-        case None -> java_script_data_constructor_pipeline_steps(constructorTypes[1:], literalTypeName, module)
+        match java_script_data_constructor_binding(constructorType, module, allModules) with
+        case Some { binding } ->
+            java_script_data_constructor_pipeline_step(binding, constructorType, constructorType != literalTypeName, module)
+                + java_script_data_constructor_pipeline_step_tail(constructorTypes[1:], literalTypeName, module, allModules)
+        case None -> java_script_data_constructor_pipeline_steps(constructorTypes[1:], literalTypeName, module, allModules)
 
 /// Formats the recursive tail segment for data constructor pipeline step.
-private fun java_script_data_constructor_pipeline_step_tail(constructorTypes: List[String], literalTypeName: String, module: CompiledModule): String =
+private fun java_script_data_constructor_pipeline_step_tail(constructorTypes: List[String], literalTypeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match constructorTypes[0] with
     case None -> ""
     case Some _ ->
-        let tail = java_script_data_constructor_pipeline_steps(constructorTypes, literalTypeName, module)
+        let tail = java_script_data_constructor_pipeline_steps(constructorTypes, literalTypeName, module, allModules)
         if tail.is_empty()
         then ""
         else ", " + tail
 
 /// Formats JavaScript source text for data constructor pipeline step.
-private fun java_script_data_constructor_pipeline_step(function: CompiledFunction, constructorType: String, parentConstructor: bool): String =
+private fun java_script_data_constructor_pipeline_step(binding: JavaScriptDataConstructorBinding, constructorType: String, parentConstructor: bool, module: CompiledModule): String =
     "["
         + java_script_string_literal(constructorType)
         + ", "
         + java_script_bool_code(parentConstructor)
         + ", (__capy_constructor_data) => "
-        + java_script_data_constructor_data_call_code(function, "__capy_constructor_data")
+        + java_script_data_constructor_data_call_code(binding, "__capy_constructor_data", module)
         + "]"
 
 /// Emits JavaScript code for data constructor data call.
-private fun java_script_data_constructor_data_call_code(function: CompiledFunction, dataName: String): String =
-    java_script_function_name(function)
+private fun java_script_data_constructor_data_call_code(binding: JavaScriptDataConstructorBinding, dataName: String, module: CompiledModule): String =
+    java_script_data_constructor_call_name(binding, module)
         + "("
-        + java_script_data_constructor_data_call_arguments(function.parameters, dataName)
+        + java_script_data_constructor_data_call_arguments(binding.function.parameters, dataName)
         + ")"
 
 /// Formats data constructor data call arguments for JavaScript emission.
@@ -4109,11 +4241,11 @@ private fun java_script_data_constructor_pipeline_returns_result(constructorType
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun java_script_data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match java_script_data_constructor_function(typeName, module) with
-    case Some { function } ->
-        if java_script_result_pipe_receiver_type(function.returnType.name)
+    match java_script_data_constructor_binding(typeName, module, allModules) with
+    case Some { binding } ->
+        if java_script_result_pipe_receiver_type(binding.function.returnType.name)
         then true
-        else java_script_result_pipe_receiver_type(java_script_data_constructor_inferred_expression_type(function.body, java_script_function_bindings(function), module, allModules))
+        else java_script_result_pipe_receiver_type(java_script_data_constructor_inferred_expression_type(binding.function.body, java_script_function_bindings(binding.function), binding.module, allModules))
     case None -> false
 
 /// Infers the expression type for data constructor inferred.
@@ -4330,7 +4462,7 @@ private fun java_script_slice_end_code(expression: CompiledExpression, env: List
 
 /// Emits JavaScript code for reduce expression.
 private fun java_script_reduce_expression_code(reduce: CompiledReduceExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let reduceEnv = java_script_reduce_bindings(reduce, env)
+    let reduceEnv = java_script_reduce_bindings(reduce, env, module, allModules)
     let keyed = if reduce.keyName.is_empty() then "false" else "true"
     "__capy_reduce("
         + java_script_expression_code(reduce.receiver, env, module, allModules)
@@ -4351,22 +4483,25 @@ private fun java_script_reduce_parameters(reduce: CompiledReduceExpression): Str
     else java_script_identifier(reduce.accumulatorName) + ", " + java_script_identifier(reduce.keyName) + ", " + java_script_identifier(reduce.valueName)
 
 /// Creates JavaScript name/type bindings for reduce.
-private fun java_script_reduce_bindings(reduce: CompiledReduceExpression, env: List[JavaScriptBinding]): List[JavaScriptBinding] =
+private fun java_script_reduce_bindings(reduce: CompiledReduceExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaScriptBinding] =
+    let accumulatorType = java_script_expression_type_key(reduce.initial, env, module, allModules)
+    let valueType = java_script_collection_item_type_key(reduce.receiver, env, module, allModules)
     if reduce.keyName.is_empty()
     then [
-            JavaScriptBinding { name: reduce.accumulatorName, jsName: java_script_identifier(reduce.accumulatorName), typeName: java_script_unknown_type() },
-            JavaScriptBinding { name: reduce.valueName, jsName: java_script_identifier(reduce.valueName), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: reduce.accumulatorName, jsName: java_script_identifier(reduce.accumulatorName), typeName: accumulatorType },
+            JavaScriptBinding { name: reduce.valueName, jsName: java_script_identifier(reduce.valueName), typeName: valueType },
         ] + env
     else [
-            JavaScriptBinding { name: reduce.accumulatorName, jsName: java_script_identifier(reduce.accumulatorName), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: reduce.accumulatorName, jsName: java_script_identifier(reduce.accumulatorName), typeName: accumulatorType },
             JavaScriptBinding { name: reduce.keyName, jsName: java_script_identifier(reduce.keyName), typeName: java_script_unknown_type() },
-            JavaScriptBinding { name: reduce.valueName, jsName: java_script_identifier(reduce.valueName), typeName: java_script_unknown_type() },
+            JavaScriptBinding { name: reduce.valueName, jsName: java_script_identifier(reduce.valueName), typeName: valueType },
         ] + env
 
 /// Emits JavaScript code for match expression.
 private fun java_script_match_expression_code(matchExpression: CompiledMatchExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let matchTypeKey = java_script_expression_type_key(matchExpression.value, env, module, allModules)
     if java_script_match_supported(matchExpression)
-    then "((__capy_match_value) => " + java_script_match_cases_code(java_script_ordered_match_cases(matchExpression.cases), env, module, allModules) + ")("
+    then "((__capy_match_value) => " + java_script_match_cases_code(java_script_ordered_match_cases(matchExpression.cases), matchTypeKey, env, module, allModules) + ")("
         + java_script_expression_code(matchExpression.value, env, module, allModules) + ")"
     else "__capy_unsupported('match')"
 
@@ -4384,31 +4519,31 @@ private fun java_script_match_cases_with_guard(cases: List[CompiledMatchCase], g
         else java_script_match_cases_with_guard(cases[1:], guarded)
 
 /// Emits JavaScript code for match cases.
-private fun java_script_match_cases_code(cases: List[CompiledMatchCase], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_match_cases_code(cases: List[CompiledMatchCase], matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match cases[0] with
     case None -> "__capy_no_match(__capy_match_value)"
     case Some { matchCase } ->
-        "(" + java_script_match_case_condition_code(matchCase, env, module, allModules)
+        "(" + java_script_match_case_condition_code(matchCase, matchTypeKey, env, module, allModules)
             + " ? "
-            + java_script_match_case_body_code(matchCase, env, module, allModules)
+            + java_script_match_case_body_code(matchCase, matchTypeKey, env, module, allModules)
             + " : "
-            + java_script_match_cases_code(cases[1:], env, module, allModules)
+            + java_script_match_cases_code(cases[1:], matchTypeKey, env, module, allModules)
             + ")"
 
 /// Emits JavaScript code for match case condition.
-private fun java_script_match_case_condition_code(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_match_case_condition_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let base = if matchCase.wildcard
         then "true"
         else if matchCase.hasLiteral
         then "__capy_match_value === " + java_script_expression_code(matchCase.literal, env, module, allModules)
         else "__capy_type_matches(__capy_match_value, " + java_script_string_literal(matchCase.typeName) + ")"
     if matchCase.hasGuard
-    then "(" + base + " && " + java_script_match_case_guard_code(matchCase, env, module, allModules) + ")"
+    then "(" + base + " && " + java_script_match_case_guard_code(matchCase, matchTypeKey, env, module, allModules) + ")"
     else base
 
 /// Emits JavaScript code for match case guard.
-private fun java_script_match_case_guard_code(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let caseEnv = java_script_match_case_env(matchCase, env)
+private fun java_script_match_case_guard_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let caseEnv = java_script_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     let guard = java_script_truthy_expression_code(matchCase.guard, caseEnv, module, allModules)
     if matchCase.bindings.is_empty()
     then guard
@@ -4417,8 +4552,8 @@ private fun java_script_match_case_guard_code(matchCase: CompiledMatchCase, env:
         + ")(" + java_script_match_case_arguments(matchCase) + ")"
 
 /// Emits JavaScript code for match case body.
-private fun java_script_match_case_body_code(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let caseEnv = java_script_match_case_env(matchCase, env)
+private fun java_script_match_case_body_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let caseEnv = java_script_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     if matchCase.bindings.is_empty()
     then java_script_expression_code(matchCase.body, caseEnv, module, allModules)
     else "((" + java_script_match_case_parameters(matchCase.bindings) + ") => "
@@ -4458,16 +4593,25 @@ private fun java_script_match_case_argument_tail(bindings: List[String], idx: in
     case Some _ -> ", " + java_script_match_case_binding_arguments(bindings, idx, bindsWholeValue)
 
 /// Collects match case environmentironment for JavaScript processing.
-private fun java_script_match_case_env(matchCase: CompiledMatchCase, env: List[JavaScriptBinding]): List[JavaScriptBinding] =
-    java_script_match_case_bindings(matchCase.bindings) + env
+private fun java_script_match_case_env(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaScriptBinding] =
+    java_script_match_case_bindings(matchCase.bindings, matchCase.typeName, matchTypeKey, 0, module, allModules) + env
 
 /// Creates JavaScript name/type bindings for match case.
-private fun java_script_match_case_bindings(bindings: List[String]): List[JavaScriptBinding] =
+private fun java_script_match_case_bindings(bindings: List[String], caseType: String, matchTypeKey: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): List[JavaScriptBinding] =
     match bindings[0] with
     case None -> []
     case Some { binding } ->
-        [JavaScriptBinding { name: binding, jsName: java_script_identifier(binding), typeName: java_script_unknown_type() }]
-            + java_script_match_case_bindings(bindings[1:])
+        [JavaScriptBinding { name: binding, jsName: java_script_identifier(binding), typeName: java_script_match_case_binding_type(caseType, matchTypeKey, binding, idx, module, allModules) }]
+            + java_script_match_case_bindings(bindings[1:], caseType, matchTypeKey, idx + 1, module, allModules)
+
+/// Infers a match binding type from a generic Result or Option payload, then from declared data fields.
+private fun java_script_match_case_binding_type(caseType: String, matchTypeKey: String, binding: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if idx == 0
+        & java_script_type_key_has_argument(matchTypeKey)
+        & ((caseType == "Success" & java_script_type_key_base(matchTypeKey) == "Result")
+            | (caseType == "Some" & java_script_type_key_base(matchTypeKey) == "Option"))
+    then java_script_type_key_argument(matchTypeKey)
+    else java_script_data_field_type(binding, java_script_data_type_fields(caseType, module, allModules))
 
 /// Emits JavaScript code for block expression.
 private fun java_script_block_expression_code(block: CompiledBlockExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4653,7 +4797,7 @@ private fun java_script_let_binding_type(binding: CompiledLetBinding, env: List[
     then if binding.operator == "<-"
         then java_script_effect_binding_payload_type(binding.value, env, module, allModules)
         else java_script_expression_type(binding.value, env, module, allModules)
-    else binding.typeReference.name
+    else java_script_type_reference_name(binding.typeReference)
 
 /// Computes the JavaScript type for effect binding payload.
 private fun java_script_effect_binding_payload_type(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4709,11 +4853,12 @@ private fun java_script_expression_type(expression: CompiledExpression, env: Lis
     case CompiledVariableExpression variable -> java_script_variable_type(variable.name, env, module, allModules)
     case CompiledBinaryExpression binary -> java_script_binary_expression_type(binary, env, module, allModules)
     case CompiledFunctionCallExpression call ->
-        if java_script_stdlib_math_sqrt_call(call, module)
+        let stdlibCall = java_script_normalized_stdlib_function_call(call, module)
+        if java_script_stdlib_math_sqrt_call(stdlibCall, module)
         then "float"
-        else if java_script_stdlib_system_property_call(call, module)
+        else if java_script_resolved_stdlib_system_property_call(stdlibCall, module, stdlibCall.name != call.name)
         then "Effect"
-        else java_script_function_call_expression_type(call.name, module, allModules)
+        else java_script_function_call_expression_type(stdlibCall.name, module, allModules)
     case CompiledMethodCallExpression call -> java_script_method_call_expression_type(call, env, module, allModules)
     case CompiledListLiteral _ -> "List"
     case CompiledSetLiteral _ -> "Set"
@@ -4878,7 +5023,7 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
         let twoArguments = java_script_two_method_arguments(call.arguments)
         if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
         then "String"
-        else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
+        else if call.name == "to_string" & emptyArguments & java_script_to_string_receiver_type(receiverType, module, allModules)
         then "String"
         else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
         then java_script_string_get_method_return_type(call)
@@ -5236,7 +5381,7 @@ private fun java_script_string_to_string_function_type(): String = "String=>Stri
 /// Computes the JavaScript type for variable.
 private fun java_script_variable_type(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match java_script_lookup_binding(name, env) with
-    case Some { binding } -> binding.typeName
+    case Some { binding } -> java_script_type_key_base(binding.typeName)
     case None ->
         if java_script_qualified_enum_value_name(name, module, allModules)
         then java_script_enum_qualified_type_name(name)
@@ -5246,6 +5391,44 @@ private fun java_script_variable_type(name: String, env: List[JavaScriptBinding]
             match java_script_imported_stdlib_constant_type(name, module.imports) with
             case Some { typeName } -> typeName
             case None -> java_script_unknown_type()
+
+/// Computes an expression type key, retaining generic arguments for bound variables.
+private fun java_script_expression_type_key(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledVariableExpression variable -> java_script_bound_variable_type_key(variable.name, expression, env, module, allModules)
+    case CompiledUnsupportedExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledIntLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledLongLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledFloatLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledDoubleLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledBoolLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledStringLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledIfExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledBinaryExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledUnaryExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledFunctionCallExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledFunctionReferenceExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledMethodCallExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledWithExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledLambdaExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledListLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledSetLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledDictLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledTupleLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledIndexExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledDataLiteral _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledFieldAccessExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledReduceExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledMatchExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledThrowExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledTryCatchExpression _ -> java_script_expression_type(expression, env, module, allModules)
+    case CompiledBlockExpression _ -> java_script_expression_type(expression, env, module, allModules)
+
+/// Resolves a variable's retained type key without nesting matches in expression dispatch.
+private fun java_script_bound_variable_type_key(name: String, expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_lookup_binding(name, env) with
+    case Some { binding } -> binding.typeName
+    case None -> java_script_expression_type(expression, env, module, allModules)
 
 /// Computes the JavaScript name for function call.
 private fun java_script_function_call_name(name: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5305,6 +5488,11 @@ private fun java_script_stdlib_parse_function_call(call: CompiledFunctionCallExp
     then java_script_stdlib_parse_function_call_by_name(call.name, module)
     else false
 
+private fun java_script_resolved_stdlib_parse_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    if qualified
+    then java_script_one_method_argument(call.arguments) & java_script_parse_function_name(call.name)
+    else java_script_stdlib_parse_function_call(call, module)
+
 private fun java_script_stdlib_parse_function_call_by_name(name: String, module: CompiledModule): bool =
     if java_script_parse_function_name(name)
     then if !java_script_local_function_exists(name, module.functions)
@@ -5342,6 +5530,11 @@ private fun java_script_stdlib_effect_function_call(call: CompiledFunctionCallEx
     then java_script_stdlib_effect_function_call_by_name(call.name, module)
     else false
 
+private fun java_script_resolved_stdlib_effect_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    if qualified
+    then call.arguments.is_empty() & (call.name == "current_millis" | call.name == "nano_time" | call.name == "now")
+    else java_script_stdlib_effect_function_call(call, module)
+
 /// Checks whether a function matches the standard-library system property call metadata.
 private fun java_script_stdlib_system_property_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     if call.name == "system_property"
@@ -5357,6 +5550,13 @@ private fun java_script_stdlib_system_property_call(call: CompiledFunctionCallEx
         & !java_script_local_function_exists(call.name, module.functions)
         & java_script_system_member_imported("clear_system_property", module.imports)
     else false
+
+private fun java_script_resolved_stdlib_system_property_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    if qualified
+    then if call.name == "system_property" | call.name == "clear_system_property"
+        then java_script_one_method_argument(call.arguments)
+        else call.name == "set_system_property" & java_script_two_method_arguments(call.arguments)
+    else java_script_stdlib_system_property_call(call, module)
 
 /// Emits JavaScript code for standard-library system property call.
 private fun java_script_stdlib_system_property_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6121,17 +6321,19 @@ private fun java_script_find_imported_method_function_return_type_in_functions_w
 
 /// Collects imported method function matches visible to the current module.
 private fun java_script_imported_method_function_matches(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
-    if !java_script_import_includes_method_function(methodName, declaration, function)
+    if !java_script_import_includes_method_function(receiverType, methodName, declaration, function)
     then false
     else if !java_script_method_function_matches(receiverType, methodName, function)
     then false
     else function.visibility != "private" & function.visibility != "const:private"
 
 /// Checks whether a function matches the import includes method function metadata.
-private fun java_script_import_includes_method_function(methodName: String, declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
+private fun java_script_import_includes_method_function(receiverType: String, methodName: String, declaration: CompiledImportDeclaration, function: CompiledFunction): bool =
     if java_script_import_includes_name(function.name, declaration)
     then true
-    else java_script_import_includes_name(methodName, declaration)
+    else if java_script_import_includes_name(methodName, declaration)
+    then true
+    else java_script_import_includes_name(java_script_method_owner_base_name(receiverType), declaration)
 
 /// Finds a local binary extension operator with left type in scope, imports, or compiled modules.
 private fun java_script_find_local_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, leftType: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
@@ -6454,7 +6656,13 @@ private fun java_script_exported_function(function: CompiledFunction): bool =
     then java_script_exported_constant(function)
     else if java_script_skip_function(function)
     then false
+    else if java_script_data_constructor_helper_function(function)
+    then true
     else function.visibility != "private"
+
+/// Checks whether a compiler-generated data constructor must be available cross-module.
+private fun java_script_data_constructor_helper_function(function: CompiledFunction): bool =
+    java_script_string_has_prefix(function.name, "__capy_constructor|")
 
 /// Checks whether the current value satisfies the exported constant rule for JavaScript processing.
 private fun java_script_exported_constant(function: CompiledFunction): bool =
@@ -6571,9 +6779,9 @@ private fun java_script_effect_runtime_code(): String =
     + "function __capy_clock_now() { return Effect.delay(() => { const current = new Date(); return __capy_date_time(__capy_date(current.getUTCDate(), current.getUTCMonth() + 1, current.getUTCFullYear()), __capy_time(current.getUTCHours(), current.getUTCMinutes(), current.getUTCSeconds(), __capy_data('Some', { value: 0 }))); }); }" + java_script_newline()
     + "function __capy_console_value(value) { if (Array.isArray(value)) return String.fromCharCode(...value); return __capy_str(value); }" + java_script_newline()
     + "function print(value) { return Effect.delay(() => { process.stdout.write(__capy_console_value(value)); return value; }); }" + java_script_newline()
-    + "function println(value) { return Effect.delay(() => { process.stdout.write(__capy_console_value(value) + '\\n'); return value; }); }" + java_script_newline()
+    + "function println(value) { return Effect.delay(() => { process.stdout.write(__capy_console_value(value) + String.fromCharCode(10)); return value; }); }" + java_script_newline()
     + "function print_error(value) { return Effect.delay(() => { process.stderr.write(__capy_console_value(value)); return value; }); }" + java_script_newline()
-    + "function println_error(value) { return Effect.delay(() => { process.stderr.write(__capy_console_value(value) + '\\n'); return value; }); }" + java_script_newline()
+    + "function println_error(value) { return Effect.delay(() => { process.stderr.write(__capy_console_value(value) + String.fromCharCode(10)); return value; }); }" + java_script_newline()
     + java_script_newline()
 
 /// Emits the JavaScript runtime support source for I/O.
@@ -6584,7 +6792,7 @@ private fun java_script_io_runtime_code(): String =
     + java_script_newline()
     + "const __capy_native_module_cache = new Map();" + java_script_newline()
     + "function __capy_strip_native_decorators(source) {" + java_script_newline()
-    + "    return String(source).split(/\\r?\\n/).filter(line => !line.trim().startsWith('@NativeImplementation')).join('\\n');" + java_script_newline()
+    + "    return String(source).split(String.fromCharCode(10)).filter(line => !line.trim().startsWith('@NativeImplementation')).join(String.fromCharCode(10));" + java_script_newline()
     + "}" + java_script_newline()
     + "function __capy_native_stub_module(request) {" + java_script_newline()
     + "    const leaf = path.basename(String(request), '.js');" + java_script_newline()
@@ -6644,10 +6852,10 @@ private fun java_script_io_runtime_code(): String =
     + "function __capy_fs_path(value) { return path.normalize(__capy_path_to_string(value)); }" + java_script_newline()
     + "function __capy_io_result(operation, thunk) { try { return __capy_success(thunk()); } catch (error) { const message = error && error.message ? error.message : String(error); return __capy_error(operation + ' failed: ' + message); } }" + java_script_newline()
     + "function __capy_io_effect(operation, thunk) { return Effect.delay(() => __capy_io_result(operation, thunk)); }" + java_script_newline()
-    + "function __capy_io_lines_text(lines) { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); return values.length === 0 ? '' : values.join('\\n') + '\\n'; }" + java_script_newline()
+    + "function __capy_io_lines_text(lines) { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); const newline = String.fromCharCode(10); return values.length === 0 ? '' : values.join(newline) + newline; }" + java_script_newline()
     + "function __capy_io_byte_values(values) { return __capy_as_list(values).map(item => Number(__capy_unsafe_run(item)) & 255); }" + java_script_newline()
     + "function __capy_io_read_text(filePath) { return __capy_io_effect('read_text', () => fs.readFileSync(__capy_fs_path(filePath), 'utf8')); }" + java_script_newline()
-    + "function __capy_io_read_lines(filePath) { return __capy_io_effect('read_lines', () => { const text = fs.readFileSync(__capy_fs_path(filePath), 'utf8').replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n'); if (text.length === 0) return []; const lines = text.split('\\n'); if (lines[lines.length - 1] === '') lines.pop(); return lines; }); }" + java_script_newline()
+    + "function __capy_io_read_lines(filePath) { return __capy_io_effect('read_lines', () => { const newline = String.fromCharCode(10); const carriage = String.fromCharCode(13); const text = fs.readFileSync(__capy_fs_path(filePath), 'utf8').split(carriage + newline).join(newline).split(carriage).join(newline); if (text.length === 0) return []; const lines = text.split(newline); if (lines[lines.length - 1] === '') lines.pop(); return lines; }); }" + java_script_newline()
     + "function __capy_io_read_bytes(filePath) { return __capy_io_effect('read_bytes', () => Array.from(fs.readFileSync(__capy_fs_path(filePath)))); }" + java_script_newline()
     + "function __capy_io_write_text(filePath, text) { return __capy_io_effect('write_text', () => { const value = String(__capy_unsafe_run(text)); fs.writeFileSync(__capy_fs_path(filePath), value, 'utf8'); return value; }); }" + java_script_newline()
     + "function __capy_io_write_lines(filePath, lines) { return __capy_io_effect('write_lines', () => { const values = __capy_as_list(lines).map(item => String(__capy_unsafe_run(item))); fs.writeFileSync(__capy_fs_path(filePath), __capy_io_lines_text(values), 'utf8'); return values; }); }" + java_script_newline()
@@ -6757,7 +6965,7 @@ private fun java_script_error_runtime_code(): String =
     + "function __capy_error_full(kind, message, details, location, stackTrace, rawStack, cause, suppressed) { return __capy_data('Error', { kind: String(kind), message: String(message), details, location, stack_trace: stackTrace, raw_stack: rawStack, cause, suppressed }); }" + java_script_newline()
     + "function __capy_some(value) { return __capy_data('Some', Object.fromEntries([['value', value]])); }" + java_script_newline()
     + "function __capy_stack_frames(rawStack) {" + java_script_newline()
-    + "    return String(rawStack || '').split('\\n').slice(1).filter(line => line.trim().length > 0).map(raw => {" + java_script_newline()
+    + "    return String(rawStack || '').split(String.fromCharCode(10)).slice(1).filter(line => line.trim().length > 0).map(raw => {" + java_script_newline()
     + "        const trimmed = raw.trim();" + java_script_newline()
     + "        const match = trimmed.match(/^at\\s+(?:(.*?)\\s+\\()?(.+?):(\\d+):(\\d+)\\)?$/);" + java_script_newline()
     + "        const fn = match && match[1] ? match[1] : '';" + java_script_newline()
@@ -6886,6 +7094,12 @@ private fun java_script_constructor_runtime_code(): String =
     + "    if (__capy_data_is(value, 'Error')) return value;" + java_script_newline()
     + "    if (__capy_data_is(value, 'Success')) return __capy_data('Success', { value: __capy_constructor_value(typeName, __capy_match_binding(value, 'value', 0)) });" + java_script_newline()
     + "    return __capy_constructor_value(typeName, value);" + java_script_newline()
+    + "}" + java_script_newline()
+    + "function __capy_primitive_constructor_result(value) {" + java_script_newline()
+    + "    value = __capy_unsafe_run(value);" + java_script_newline()
+    + "    if (__capy_data_is(value, 'Error')) return value;" + java_script_newline()
+    + "    if (__capy_data_is(value, 'Success')) return __capy_data('Success', { value: __capy_match_binding(value, 'value', 0) });" + java_script_newline()
+    + "    return value;" + java_script_newline()
     + "}" + java_script_newline()
     + "function __capy_merge_data(target, source) {" + java_script_newline()
     + "    const result = (target != null && typeof target === 'object') ? Object.assign(Object.create(null), target) : __capy_data('', Object.create(null));" + java_script_newline()
@@ -7277,7 +7491,18 @@ private fun java_script_binary_expression_gatherable(binary: CompiledBinaryExpre
 
 /// Checks whether collection pipe can be included in generated test gathering.
 private fun java_script_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_script_pipe_gatherable(binary, env, module, allModules)
+    if java_script_expression_gatherable(binary.left, env, module, allModules)
+    then match binary.right with
+        case CompiledLambdaExpression lambda ->
+            java_script_expression_gatherable(
+                lambda.body,
+                java_script_collection_lambda_bindings(binary.left, lambda.parameters, env, module, allModules) + env,
+                module,
+                allModules
+            )
+        case CompiledFunctionReferenceExpression reference -> java_script_expression_gatherable(reference, env, module, allModules)
+        case _ -> false
+    else false
 
 /// Checks whether option pipe can be included in generated test gathering.
 private fun java_script_option_pipe_gatherable(binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7387,17 +7612,20 @@ private fun java_script_index_expression_gatherable(index: CompiledIndexExpressi
 /// Checks whether function call can be included in generated test gathering.
 private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_expressions_gatherable(call.arguments, env, module, allModules)
-    then if java_script_binding_exists(call.name, env)
+    then
+        let stdlibCall = java_script_normalized_stdlib_function_call(call, module)
+        let qualifiedStdlib = stdlibCall.name != call.name
+        if java_script_binding_exists(stdlibCall.name, env)
         then true
-        else if java_script_runtime_function(call.name)
+        else if java_script_runtime_function(stdlibCall.name)
         then true
         else if java_script_object_type_call(call)
         then true
         else if java_script_oo_constructor_call(call.name, module, allModules)
         then true
-        else if java_script_stdlib_system_property_call(call, module)
+        else if java_script_resolved_stdlib_system_property_call(stdlibCall, module, qualifiedStdlib)
         then true
-        else if java_script_stdlib_effect_function_call(call, module)
+        else if java_script_resolved_stdlib_effect_function_call(stdlibCall, module, qualifiedStdlib)
         then true
         else if java_script_stdlib_path_function_call(call, module)
         then true
@@ -7414,11 +7642,11 @@ private fun java_script_function_call_gatherable(call: CompiledFunctionCallExpre
                 match java_script_find_qualified_module_export_call(call.name, module, allModules) with
                 case Some _ -> true
                 case None -> false
-        else if java_script_callable_binding_type(java_script_variable_type(call.name, env, module, allModules))
+        else if java_script_callable_binding_type(java_script_variable_type(stdlibCall.name, env, module, allModules))
         then true
-        else if java_script_local_function_exists(call.name, module.functions)
+        else if java_script_local_function_exists(stdlibCall.name, module.functions)
         then true
-        else java_script_imported_function_exists(call.name, module.imports, module, allModules)
+        else java_script_imported_function_exists(stdlibCall.name, module.imports, module, allModules)
     else false
 
 /// Checks whether binding exists in the relevant declarations or imports.
@@ -7458,7 +7686,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         else if java_script_runtime_data_method_call(call)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
             & java_script_single_callable_argument_gatherable(call.arguments, env, module, allModules)
-        else if call.name == "to_string" & emptyArguments & java_script_char_to_string_receiver_type(receiverType)
+        else if call.name == "to_string" & emptyArguments & java_script_to_string_receiver_type(receiverType, module, allModules)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
         else if call.name == "get" & (oneArgument | twoArguments) & receiverType == "String"
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
@@ -7675,14 +7903,14 @@ private fun java_script_reduce_expression_gatherable(reduce: CompiledReduceExpre
     then false
     else if java_script_expression_gatherable(reduce.receiver, env, module, allModules)
     then if java_script_expression_gatherable(reduce.initial, env, module, allModules)
-        then java_script_expression_gatherable(reduce.body, java_script_reduce_bindings(reduce, env), module, allModules)
+        then java_script_expression_gatherable(reduce.body, java_script_reduce_bindings(reduce, env, module, allModules), module, allModules)
         else false
     else false
 
 /// Checks whether match expression can be included in generated test gathering.
 private fun java_script_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_expression_gatherable(matchExpression.value, env, module, allModules)
-    then java_script_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    then java_script_match_cases_gatherable(matchExpression.cases, java_script_expression_type_key(matchExpression.value, env, module, allModules), env, module, allModules)
     else false
 
 /// Checks whether match is supported by the current backend.
@@ -7690,31 +7918,31 @@ private fun java_script_match_supported(matchExpression: CompiledMatchExpression
     java_script_match_cases_supported(matchExpression.cases)
 
 /// Checks whether match cases can be included in generated test gathering.
-private fun java_script_match_cases_gatherable(cases: List[CompiledMatchCase], env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun java_script_match_cases_gatherable(cases: List[CompiledMatchCase], matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        if java_script_match_case_gatherable(matchCase, env, module, allModules)
+        if java_script_match_case_gatherable(matchCase, matchTypeKey, env, module, allModules)
         then if cases[1:].is_empty()
             then true
-            else java_script_match_cases_gatherable(cases[1:], env, module, allModules)
+            else java_script_match_cases_gatherable(cases[1:], matchTypeKey, env, module, allModules)
         else false
 
 /// Checks whether match case can be included in generated test gathering.
-private fun java_script_match_case_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun java_script_match_case_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if java_script_match_case_supported(matchCase)
-    then java_script_match_case_literal_guard_body_gatherable(matchCase, env, module, allModules)
+    then java_script_match_case_literal_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
     else false
 
-private fun java_script_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun java_script_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if matchCase.hasLiteral
     then if java_script_expression_gatherable(matchCase.literal, env, module, allModules)
-        then java_script_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+        then java_script_match_case_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
         else false
-    else java_script_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+    else java_script_match_case_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
 
-private fun java_script_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let caseEnv = java_script_match_case_env(matchCase, env)
+private fun java_script_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let caseEnv = java_script_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     if matchCase.hasGuard
     then if java_script_expression_gatherable(matchCase.guard, caseEnv, module, allModules)
         then java_script_expression_gatherable(matchCase.body, caseEnv, module, allModules)
@@ -8543,6 +8771,12 @@ private fun java_script_data_import_matches(name: String, declaration: CompiledI
     else java_script_import_includes_name(name, declaration)
 
 /// Computes the JavaScript type for primitive backed backing.
+private fun java_script_primitive_backed_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match java_script_primitive_backed_backing_type(name, module, allModules) with
+    case Some _ -> true
+    case None -> false
+
+/// Computes the JavaScript type for primitive backed backing.
 private fun java_script_primitive_backed_backing_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     if java_script_qualified_call_name(name)
     then java_script_primitive_backed_backing_type_in_qualified_name(name, module, allModules)
@@ -8751,6 +8985,22 @@ private fun java_script_schema_type_name(value: String): String =
     if bracket < 0
     then trimmed
     else trimmed[0, bracket]
+
+/// Formats the non-generic base portion of a retained type key.
+private fun java_script_type_key_base(typeKey: String): String =
+    java_script_schema_type_name(typeKey)
+
+/// Checks whether a retained type key has a generic argument.
+private fun java_script_type_key_has_argument(typeKey: String): bool =
+    java_script_first_index_of(typeKey, "[", 0) >= 0
+
+/// Extracts the first retained type argument, including nested generic arguments.
+private fun java_script_type_key_argument(typeKey: String): String =
+    let start = java_script_first_index_of(typeKey, "[", 0)
+    let end = java_script_last_index_of(typeKey, "]", 0, -1)
+    if start < 0 | end <= start
+    then java_script_unknown_type()
+    else typeKey[start + 1, end]
 
 /// Creates one JavaScript name/type binding for lookup.
 private fun java_script_lookup_binding(name: String, env: List[JavaScriptBinding]): /capy/lang/Option[JavaScriptBinding] =

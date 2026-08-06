@@ -387,7 +387,7 @@ class CompilationTest {
     }
 
     @Test
-    void shouldLowerPythonResultFlatMapAndImportedPrimitiveConstructor() {
+    void shouldLowerDynamicBackendResultAndImportedPrimitiveOperations() {
         var resultSource = """
                 data Error { kind: String, message: String }
                 data Success[T] { value: T }
@@ -445,6 +445,9 @@ class CompilationTest {
                     match values[0] with
                     case Some { value } -> value
                     case None -> 0
+
+                fun join(values: List[String]): String =
+                    values.reduce("", (acc, value) => if acc.is_empty() then value else acc + value)
                 """;
         var program = compileProgram(List.of(
                 rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
@@ -491,6 +494,44 @@ class CompilationTest {
                 .doesNotContain("int_value.map(");
         assertThat(digitCode).contains("return __capy_to_string(this)");
         assertThat(runtimeCode).contains("end=chr(10) if newline else ''");
+
+        var javaScriptGenerated = JavaScriptGenerator.javaScriptGenerator(program);
+        var javaScriptCode = javaScriptGenerated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/UseDigit.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var javaScriptDigitCode = javaScriptGenerated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/Digit.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var javaScriptRuntimeCode = javaScriptGenerated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(javaScriptCode)
+                .contains("__capy_primitive_constructor_result(require(\"../sample/Digit\")[")
+                .contains("return pure(value)")
+                .contains("return println(value)")
+                .contains("return __capy_parse_int(value)")
+                .contains("Item_to_string__")
+                .contains("(__capy_size(acc) === 0)")
+                .doesNotContain("const __capy_import_capy_")
+                .doesNotContain("Effect_pure")
+                .doesNotContain("Console_println")
+                .doesNotContain("Primitives_to_int")
+                .doesNotContain("item.to_string(")
+                .doesNotContain("acc.is_empty(");
+        assertThat(javaScriptDigitCode)
+                .contains("return __capy_to_string(this_)")
+                .contains("\"__capy_constructor_digit");
+        assertThat(javaScriptRuntimeCode)
+                .contains("function __capy_primitive_constructor_result(value)")
+                .contains("String.fromCharCode(10)")
+                .doesNotContain("split(/\\\n");
     }
 
     @Test

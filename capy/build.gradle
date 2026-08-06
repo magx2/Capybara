@@ -394,6 +394,7 @@ def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('gener
 def capybaraGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java')
 def capybaraJavaGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/java-generator-implementation')
 def capybaraPythonGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/python-generator-implementation')
+def capybaraJavaScriptGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-generator-implementation')
 def capybaraJavaGeneratorSource = capybaraGeneratedJavaDir.map {
     it.file('dev/capylang/generator/JavaGenerator.java')
 }
@@ -405,6 +406,12 @@ def capybaraPythonGeneratorSource = capybaraGeneratedJavaDir.map {
 }
 def capybaraPythonGeneratorImplementationSource = capybaraPythonGeneratorImplementationDir.map {
     it.file('dev/capylang/generator/internal/GeneratedPythonGenerator.java')
+}
+def capybaraJavaScriptGeneratorSource = capybaraGeneratedJavaDir.map {
+    it.file('dev/capylang/generator/JavaScriptGenerator.java')
+}
+def capybaraJavaScriptGeneratorImplementationSource = capybaraJavaScriptGeneratorImplementationDir.map {
+    it.file('dev/capylang/generator/internal/GeneratedJavaScriptGenerator.java')
 }
 def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
 def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
@@ -607,10 +614,31 @@ def preparePythonGeneratorImplementation = tasks.register('preparePythonGenerato
     }
 }
 
+def prepareJavaScriptGeneratorImplementation = tasks.register('prepareJavaScriptGeneratorImplementation') {
+    group = capybaraTaskGroup
+    description = 'Prepares the self-hosted JavaScript generator behind its bootstrap-compatible adapter.'
+    dependsOn tasks.named('compileCapybara')
+
+    inputs.file(capybaraJavaScriptGeneratorSource)
+    outputs.file(capybaraJavaScriptGeneratorImplementationSource)
+
+    doLast {
+        def input = capybaraJavaScriptGeneratorSource.get().asFile
+        def output = capybaraJavaScriptGeneratorImplementationSource.get().asFile
+        output.parentFile.mkdirs()
+        def implementation = input.getText('UTF-8')
+                .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
+                .replace('public final class JavaScriptGenerator {', 'public final class GeneratedJavaScriptGenerator {')
+                .replace('private JavaScriptGenerator() {}', 'private GeneratedJavaScriptGenerator() {}')
+        output.setText(implementation, 'UTF-8')
+    }
+}
+
 tasks.named('compileJava', JavaCompile) {
-    dependsOn prepareJavaGeneratorImplementation, preparePythonGeneratorImplementation
+    dependsOn prepareJavaGeneratorImplementation, preparePythonGeneratorImplementation, prepareJavaScriptGeneratorImplementation
     source(capybaraJavaGeneratorImplementationSource)
     source(capybaraPythonGeneratorImplementationSource)
+    source(capybaraJavaScriptGeneratorImplementationSource)
     exclude { element ->
         element.file.toPath().startsWith(capybaraGeneratedJavaDir.get().asFile.toPath())
     }
