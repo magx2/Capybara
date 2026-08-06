@@ -386,6 +386,79 @@ class CompilationTest {
     }
 
     @Test
+    void shouldLowerPythonResultFlatMapAndImportedPrimitiveConstructor() {
+        var resultSource = """
+                data Error { kind: String, message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+                """;
+        var digitSource = """
+                from /capy/lang/Result import { Success }
+
+                type digit -> int with constructor {
+                    Success { value }
+                }
+                """;
+        var consumerSource = """
+                from /capy/lang/Result import { Result, Success }
+                from /sample/Digit import { digit }
+                import /capy/lang/Effect
+                import /capy/io/Console
+                import /capy/lang/Primitives
+
+                fun parse_digits(values: List[int]): Result[List[digit]] =
+                    values
+                    | value => Success { value }
+                    |> Success { [] }, (acc, int_result) => {
+                        acc.flat_map(acc_list => {
+                            int_result.flat_map(int_value => {
+                                digit { int_value }.map(digit => acc_list + digit)
+                            })
+                        })
+                    }
+
+                fun map_results(values: List[Result[int]]): List[Result[int]] =
+                    (values | result => result.map(value => value)).as_list()
+
+                fun flat_map_results(values: List[Result[int]]): List[Result[int]] =
+                    (values | result => result.flat_map(value => Success { value })).as_list()
+
+                fun qualified_pure(value: String): Effect[String] = Effect.pure(value)
+
+                fun qualified_print(value: String): Effect[String] = Console.println(value)
+
+                fun qualified_parse(value: String): Result[int] = Primitives.to_int(value)
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("Digit", "/sample", digitSource, SourceKind.FUNCTIONAL),
+                rawModule("UseDigit", "/sample", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var code = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/UseDigit.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("__capy_result_flat_map(acc")
+                .contains("__capy_result_flat_map(int_result")
+                .contains("__capy_result_map(__capy_primitive_constructor_result(__import__(\"sample.Digit\", fromlist=['*'])")
+                .contains("__capy_dynamic_map(result")
+                .contains("__capy_dynamic_flat_map(result")
+                .contains("return pure(value)")
+                .contains("return println(value)")
+                .contains("return __capy_parse_int(value)")
+                .doesNotContain("Effect_pure")
+                .doesNotContain("Console_println")
+                .doesNotContain("Primitives_to_int")
+                .doesNotContain("__capy_seq_flat_map(acc")
+                .doesNotContain("__capy_seq_flat_map(int_result")
+                .doesNotContain("int_value.map(");
+    }
+
+    @Test
     void shouldKeepIndexExpressionsBeforePipeLambdas() {
         var source = """
                 from /capy/lang/Option import { Option, Some }

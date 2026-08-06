@@ -364,7 +364,7 @@ public final class JavaGenerator {
                 : generatedPath;
     }
 
-    private static GeneratedModule generatedModule(Object value) {
+    static GeneratedModule generatedModule(Object value) {
         var module = dataMap(value);
         return new GeneratedModule(
                 string(module.get("relativePath")),
@@ -372,7 +372,7 @@ public final class JavaGenerator {
         );
     }
 
-    private static Object toGeneratedValue(Object value) {
+    static Object toGeneratedValue(Object value) {
         if (value == null
                 || value instanceof String
                 || value instanceof Number
@@ -416,7 +416,7 @@ public final class JavaGenerator {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> dataMap(Object value) {
+    static Map<String, Object> dataMap(Object value) {
         if (value instanceof Map<?, ?> map) {
             return (Map<String, Object>) map;
         }
@@ -424,7 +424,7 @@ public final class JavaGenerator {
     }
 
     @SuppressWarnings("unchecked")
-    private static List<Object> list(Object value) {
+    static List<Object> list(Object value) {
         if (value instanceof List<?> list) {
             return (List<Object>) list;
         }
