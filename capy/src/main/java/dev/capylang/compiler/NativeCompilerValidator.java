@@ -70,11 +70,17 @@ import java.util.Map;
 import java.util.Set;
 
 public final class NativeCompilerValidator {
+    private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Map<String, Set<String>> JAVA_SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
             Map.entry("Effect", Set.of("map", "flat_map", "start")),
             Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "or_else", "or")),
             Map.entry("Option", Set.of("map", "filter", "flat_map")),
-            Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`"))
+            Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`")),
+            Map.entry("List", Set.of(
+                    "size", "is_empty", "plus", "minus", "any", "all", "contains", "reduce", "reduce_left",
+                    "fold", "map", "filter", "reject", "flat_map", "sort", "get",
+                    "`+`", "`-`", "`?`", "`|>`", "`|`", "`|-`", "`|*`"
+            ))
     );
     private static final Set<String> BUILTIN_TYPES = Set.of(
             "byte", "char", "int", "long", "double", "bool", "float", "void", "any", "data",
@@ -202,12 +208,185 @@ public final class NativeCompilerValidator {
         validateFunctionAnnotations(context, module, function, errors, nativeProviderKeys);
         validateExpression(context, module, function.body(), errors);
         if (javaBackendSelected()) {
+            validateJavaBackendVariables(
+                    context,
+                    module,
+                    function.body(),
+                    functionVariableNames(function),
+                    errors
+            );
             validateJavaBackendExpression(
                     module,
                     function.body(),
                     parameterTypes(function),
                     errors
             );
+        }
+    }
+
+    private Set<String> functionVariableNames(FunctionDeclaration function) {
+        var names = new LinkedHashSet<String>();
+        function.parameters().stream().map(FunctionParameter::name).forEach(names::add);
+        if (function.name().contains(".")) {
+            names.add("this");
+        }
+        return names;
+    }
+
+    private void validateJavaBackendVariables(
+            Context context,
+            ParsedModule module,
+            Expression expression,
+            Set<String> variables,
+            List<CompilerError> errors
+    ) {
+        switch (expression) {
+            case VariableExpression variable -> {
+                if (!knownJavaBackendVariable(context, module, variable.name(), variables)) {
+                    errors.add(error(
+                            module,
+                            variable.location(),
+                            "Unresolved variable `" + variable.name() + "`."
+                    ));
+                }
+            }
+            case BinaryExpression binary -> {
+                validateJavaBackendVariables(context, module, binary.left(), variables, errors);
+                if (!PIPE_OPERATORS.contains(binary.operator()) || scopedPipeRight(binary.right())) {
+                    validateJavaBackendVariables(context, module, binary.right(), variables, errors);
+                }
+            }
+            case BlockExpression block -> {
+                var blockVariables = new LinkedHashSet<>(variables);
+                for (var binding : block.bindings()) {
+                    validateJavaBackendVariables(context, module, binding.value(), blockVariables, errors);
+                    blockVariables.add(binding.name());
+                }
+                validateJavaBackendVariables(context, module, block.result(), blockVariables, errors);
+            }
+            case DataLiteral literal -> literal.fields().forEach(field ->
+                    validateJavaBackendVariables(context, module, field.value(), variables, errors));
+            case DictLiteral literal -> literal.entries().forEach(entry -> {
+                validateJavaBackendVariables(context, module, entry.key(), variables, errors);
+                validateJavaBackendVariables(context, module, entry.value(), variables, errors);
+            });
+            case FieldAccessExpression access ->
+                    validateJavaBackendVariables(context, module, access.receiver(), variables, errors);
+            case FunctionCallExpression call -> call.arguments().forEach(argument ->
+                    validateJavaBackendVariables(context, module, argument, variables, errors));
+            case IfExpression ifExpression -> {
+                validateJavaBackendVariables(context, module, ifExpression.condition(), variables, errors);
+                validateJavaBackendVariables(context, module, ifExpression.thenBranch(), variables, errors);
+                validateJavaBackendVariables(context, module, ifExpression.elseBranch(), variables, errors);
+            }
+            case IndexExpression index -> {
+                validateJavaBackendVariables(context, module, index.receiver(), variables, errors);
+                validateJavaBackendVariables(context, module, index.index(), variables, errors);
+                if (index.hasEndIndex()) {
+                    validateJavaBackendVariables(context, module, index.endIndex(), variables, errors);
+                }
+            }
+            case LambdaExpression lambda -> {
+                var lambdaVariables = new LinkedHashSet<>(variables);
+                lambda.parameters().stream()
+                        .map(this::decodedLambdaParameterName)
+                        .filter(name -> !name.equals("_"))
+                        .forEach(lambdaVariables::add);
+                validateJavaBackendVariables(context, module, lambda.body(), lambdaVariables, errors);
+            }
+            case ListLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendVariables(context, module, value, variables, errors));
+            case MatchExpression match -> {
+                validateJavaBackendVariables(context, module, match.value(), variables, errors);
+                for (var matchCase : match.cases()) {
+                    if (matchCase.hasLiteral()) {
+                        validateJavaBackendVariables(context, module, matchCase.literal(), variables, errors);
+                    }
+                    var caseVariables = new LinkedHashSet<>(variables);
+                    matchCase.bindings().stream()
+                            .filter(name -> !name.equals("_"))
+                            .forEach(caseVariables::add);
+                    if (matchCase.hasGuard()) {
+                        validateJavaBackendVariables(context, module, matchCase.guard(), caseVariables, errors);
+                    }
+                    validateJavaBackendVariables(context, module, matchCase.body(), caseVariables, errors);
+                }
+            }
+            case MethodCallExpression call -> {
+                validateJavaBackendVariables(context, module, call.receiver(), variables, errors);
+                call.arguments().forEach(argument ->
+                        validateJavaBackendVariables(context, module, argument, variables, errors));
+            }
+            case ReduceExpression reduce -> {
+                validateJavaBackendVariables(context, module, reduce.receiver(), variables, errors);
+                validateJavaBackendVariables(context, module, reduce.initial(), variables, errors);
+                var reduceVariables = new LinkedHashSet<>(variables);
+                addVariableName(reduceVariables, reduce.accumulatorName());
+                addVariableName(reduceVariables, reduce.keyName());
+                addVariableName(reduceVariables, reduce.valueName());
+                validateJavaBackendVariables(context, module, reduce.body(), reduceVariables, errors);
+            }
+            case SetLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendVariables(context, module, value, variables, errors));
+            case ThrowExpression throwExpression ->
+                    validateJavaBackendVariables(context, module, throwExpression.value(), variables, errors);
+            case TryCatchExpression tryCatch -> {
+                validateJavaBackendVariables(context, module, tryCatch.body(), variables, errors);
+                tryCatch.branches().forEach(branch -> {
+                    var catchVariables = new LinkedHashSet<>(variables);
+                    addVariableName(catchVariables, branch.catchName());
+                    validateJavaBackendVariables(context, module, branch.catchBody(), catchVariables, errors);
+                });
+            }
+            case TupleLiteral literal -> literal.values().forEach(value ->
+                    validateJavaBackendVariables(context, module, value, variables, errors));
+            case UnaryExpression unary ->
+                    validateJavaBackendVariables(context, module, unary.expression(), variables, errors);
+            case WithExpression with -> {
+                validateJavaBackendVariables(context, module, with.receiver(), variables, errors);
+                with.fields().forEach(field ->
+                        validateJavaBackendVariables(context, module, field.value(), variables, errors));
+            }
+            default -> {
+            }
+        }
+    }
+
+    private boolean scopedPipeRight(Expression expression) {
+        if (expression instanceof LambdaExpression) {
+            return true;
+        }
+        if (expression instanceof MethodCallExpression call) {
+            return scopedPipeRight(call.receiver());
+        }
+        return false;
+    }
+
+    private boolean knownJavaBackendVariable(
+            Context context,
+            ParsedModule module,
+            String name,
+            Set<String> variables
+    ) {
+        return variables.contains(name)
+                || knownFunction(context, module, name)
+                || name.contains(".")
+                || name.contains("/");
+    }
+
+    private String decodedLambdaParameterName(String parameter) {
+        var prefix = "__capy_typed_lambda|";
+        if (!parameter.startsWith(prefix)) {
+            return parameter;
+        }
+        var rest = parameter.substring(prefix.length());
+        var separator = rest.indexOf('|');
+        return separator < 0 ? parameter : rest.substring(0, separator);
+    }
+
+    private void addVariableName(Set<String> variables, String name) {
+        if (!name.isBlank() && !name.equals("_")) {
+            variables.add(name);
         }
     }
 

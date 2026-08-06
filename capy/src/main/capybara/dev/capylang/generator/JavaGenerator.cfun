@@ -42,6 +42,8 @@ data JavaObjectMethodBinding { moduleClassName: String, objectClass: CompiledObj
 data JavaResolvedObjectMethod { receiverType: CompiledTypeReference, method: CompiledObjectOrientedMethod }
 /// Java generator lookup entry for a data type and the compiled module that declares it.
 data JavaDataTypeBinding { module: CompiledModule, name: String }
+/// Java generator lookup entry for a data constructor and the compiled module that declares it.
+data JavaDataConstructorBinding { module: CompiledModule, function: CompiledFunction }
 /// Java generator lookup entry for a qualified function and the compiled module that declares it.
 data JavaQualifiedFunctionBinding { module: CompiledModule, function: CompiledFunction }
 /// Precomputed Java function-name request metadata reused across function scans.
@@ -1415,6 +1417,8 @@ private fun static_import_function(function: CompiledFunction, declaration: Comp
     else if function.visibility == "const:private"
     then false
     else import_includes_name(function.name, declaration)
+        | (extension_method_function(function)
+            & import_includes_name(method_owner_base_name(method_owner_name(function.name)), declaration))
 
 /// Checks whether an import matches the standard-library import rule.
 private fun stdlib_import(modulePath: String): bool =
@@ -1574,10 +1578,16 @@ private fun java_function(function: CompiledFunction, constantBindings: List[Jav
     let returnTypeReference = effective_function_return_type_with_module_constants(function, module, allModules, constantBindings)
     let returnType = java_type(returnTypeReference)
     let env = java_function_bindings(function) + constantBindings
-    "    " + java_visibility_prefix(function.visibility) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
+    "    " + java_function_visibility_prefix(function, module) + "static " + returnType + " " + java_function_name(function) + "(" + java_function_parameters(function) + ") {" + newline()
     + java_function_body(function, returnTypeReference, env, module, allModules, nativeProviderScope)
     + "    }" + newline()
     + java_program_main_entrypoint(function)
+
+/// Computes Java visibility for ordinary functions and generated data constructors.
+private fun java_function_visibility_prefix(function: CompiledFunction, module: CompiledModule): String =
+    if java_generator_string_has_prefix(function.name, "__capy_constructor|")
+    then java_visibility_prefix(data_type_visibility(function.name["__capy_constructor|".size().value, function.name.size().value], module.functions))
+    else java_visibility_prefix(function.visibility)
 
 /// Emits the JVM launcher for a public Effect[Program] main function.
 private fun java_program_main_entrypoint(function: CompiledFunction): String =
@@ -2210,12 +2220,12 @@ private fun expression_code(
         if compiled_placeholder_source(unsupported.source)
         then placeholder_code(unsupported, module)
         else "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
-    case CompiledIntLiteral literal -> numeric_widening_code(int_literal_code(literal, expectedType), expression_type(expression, env, module, allModules), expectedType)
-    case CompiledLongLiteral literal -> numeric_widening_code(literal.source, long_type(), expectedType)
-    case CompiledFloatLiteral literal -> numeric_widening_code(literal.source, float_type(), expectedType)
-    case CompiledDoubleLiteral literal -> literal.source
-    case CompiledBoolLiteral literal -> if literal.value then "true" else "false"
-    case CompiledStringLiteral literal -> "\"" + escape_java_string(literal.value) + "\""
+    case CompiledIntLiteral literal -> value_conversion_code(int_literal_code(literal, expectedType), expression_type(expression, env, module, allModules), expectedType, module, allModules)
+    case CompiledLongLiteral literal -> value_conversion_code(literal.source, long_type(), expectedType, module, allModules)
+    case CompiledFloatLiteral literal -> value_conversion_code(literal.source, float_type(), expectedType, module, allModules)
+    case CompiledDoubleLiteral literal -> value_conversion_code(literal.source, double_type(), expectedType, module, allModules)
+    case CompiledBoolLiteral literal -> value_conversion_code(if literal.value then "true" else "false", bool_type(), expectedType, module, allModules)
+    case CompiledStringLiteral literal -> value_conversion_code("\"" + escape_java_string(literal.value) + "\"", expression_type(expression, env, module, allModules), expectedType, module, allModules)
     case CompiledVariableExpression variable -> variable_expression_code(variable, env, expectedType, module, allModules)
     case CompiledIfExpression ifExpression -> "("
         + truthy_expression_code(ifExpression.condition, env, module, allModules)
@@ -2898,7 +2908,9 @@ private fun result_pipe_code(binary: CompiledBinaryExpression, leftType: Compile
 /// Emits generated code for result map pipe.
 private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = result_pipe_value_type(binary.left, leftType, env, module, allModules)
-    let resultType = if expectedType.name.is_empty() then result_pipe_result_type(binary, leftType, env, module, allModules) else expectedType
+    let inferredResultType = result_pipe_result_type(binary, leftType, env, module, allModules)
+    let resultType = if result_type_name(expectedType.name) then expectedType else inferredResultType
+    let bodyExpectedType = first_type_argument(resultType)
     let resultName = result_pipe_value_name(binary)
     let leftCode = expression_code(binary.left, env, leftType, module, allModules)
     match binary.right with
@@ -2907,7 +2919,7 @@ private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: Com
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
         + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
-        + "                return " + expression_code(lambda.body, declared_lambda_value_env(lambda, valueType, env), resultType, module, allModules) + ";" + newline()
+        + "                return __capy_data(\"Success\", __capy_value_fields(" + expression_code(lambda.body, declared_lambda_value_env(lambda, valueType, env), bodyExpectedType, module, allModules) + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -2915,7 +2927,7 @@ private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: Com
         "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
-        + "                return " + result_function_reference_body_code(reference, valueType, resultName, resultType, env, module, allModules) + ";" + newline()
+        + "                return __capy_data(\"Success\", __capy_value_fields(" + result_function_reference_body_code(reference, valueType, resultName, bodyExpectedType, env, module, allModules) + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -2924,7 +2936,8 @@ private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: Com
 /// Emits generated code for result flat pipe.
 private fun result_flat_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = result_pipe_value_type(binary.left, leftType, env, module, allModules)
-    let resultType = if expectedType.name.is_empty() then result_pipe_result_type(binary, leftType, env, module, allModules) else expectedType
+    let inferredResultType = result_pipe_result_type(binary, leftType, env, module, allModules)
+    let resultType = if result_type_name(expectedType.name) then expectedType else inferredResultType
     let bodyExpectedType = result_flat_pipe_body_expected_type(resultType)
     let resultName = result_pipe_value_name(binary)
     let mappedName = resultName + "_mapped"
@@ -2936,10 +2949,7 @@ private fun result_flat_pipe_code(binary: CompiledBinaryExpression, leftType: Co
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
         + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
         + "                java.lang.Object " + mappedName + " = " + expression_code(lambda.body, declared_lambda_value_env(lambda, valueType, env), bodyExpectedType, module, allModules) + ";" + newline()
-        + "                if (__capy_result_is_success(" + mappedName + ")) {" + newline()
-        + "                    return ((" + boxed_java_type(resultType) + ") __capy_result_success_value(" + mappedName + "));" + newline()
-        + "                }" + newline()
-        + "                return ((" + boxed_java_type(resultType) + ") " + mappedName + ");" + newline()
+        + "                return ((" + boxed_java_type(resultType) + ") __capy_result_value(" + mappedName + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -2948,10 +2958,7 @@ private fun result_flat_pipe_code(binary: CompiledBinaryExpression, leftType: Co
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
         + "                java.lang.Object " + mappedName + " = " + result_function_reference_body_code(reference, valueType, resultName, bodyExpectedType, env, module, allModules) + ";" + newline()
-        + "                if (__capy_result_is_success(" + mappedName + ")) {" + newline()
-        + "                    return ((" + boxed_java_type(resultType) + ") __capy_result_success_value(" + mappedName + "));" + newline()
-        + "                }" + newline()
-        + "                return ((" + boxed_java_type(resultType) + ") " + mappedName + ");" + newline()
+        + "                return ((" + boxed_java_type(resultType) + ") __capy_result_value(" + mappedName + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -2973,7 +2980,7 @@ private fun result_function_reference_body_code(reference: CompiledFunctionRefer
 /// Computes the compiled type for result flat pipe body expected.
 private fun result_flat_pipe_body_expected_type(resultType: CompiledTypeReference): CompiledTypeReference =
     if result_type_name(resultType.name)
-    then result_type(resultType)
+    then resultType
     else object_type()
 
 /// Emits one generated statement for result pipe binding.
@@ -3022,17 +3029,17 @@ private fun result_pipe_result_type(binary: CompiledBinaryExpression, leftType: 
     case CompiledLambdaExpression lambda ->
         let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
         let bodyType = result_expression_type(lambda.body, expression_type(lambda.body, lambdaEnv, module, allModules), lambdaEnv, module, allModules)
-        if binary.operator == "|*" then result_flat_pipe_result_type(bodyType) else bodyType
+        if binary.operator == "|*" then result_flat_pipe_result_type(bodyType) else result_type(bodyType)
     case CompiledFunctionReferenceExpression reference ->
         let bodyType = function_reference_type(reference, module, allModules)
-        if binary.operator == "|*" then result_flat_pipe_result_type(bodyType) else bodyType
+        if binary.operator == "|*" then result_flat_pipe_result_type(bodyType) else result_type(bodyType)
     case _ -> object_type()
 
 /// Computes the compiled type for result flat pipe result.
 private fun result_flat_pipe_result_type(bodyType: CompiledTypeReference): CompiledTypeReference =
-    if result_type_name(bodyType.name) & result_type_name(first_type_argument(bodyType).name)
-    then first_type_argument(bodyType)
-    else bodyType
+    if result_type_name(bodyType.name)
+    then bodyType
+    else result_type(object_type())
 
 /// Infers the expression type for result.
 private fun result_expression_type(expression: CompiledExpression, expressionType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -3516,12 +3523,14 @@ private fun numeric_widening_code(code: String, sourceType: CompiledTypeReferenc
 
 /// Emits generated code for value conversion.
 private fun value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    match primitive_backed_backing_type(expectedType.name, module, allModules) with
-    case Some { backingType } ->
-        if type_assignable(backingType, sourceType)
-        then primitive_backed_constructor_conversion_code(code, sourceType, backingType, expectedType)
-        else source_primitive_backed_value_conversion_code(code, sourceType, expectedType, module, allModules)
-    case None -> source_primitive_backed_value_conversion_code(code, sourceType, expectedType, module, allModules)
+    if type_assignable(expectedType, sourceType) & type_assignable(sourceType, expectedType)
+    then code
+    else match primitive_backed_backing_type(expectedType.name, module, allModules) with
+        case Some { backingType } ->
+            if type_assignable(backingType, sourceType)
+            then primitive_backed_constructor_conversion_code(code, sourceType, backingType, expectedType)
+            else source_primitive_backed_value_conversion_code(code, sourceType, expectedType, module, allModules)
+        case None -> source_primitive_backed_value_conversion_code(code, sourceType, expectedType, module, allModules)
 
 /// Emits conversion of a backing primitive into its declared primitive-backed type.
 private fun primitive_backed_constructor_conversion_code(code: String, sourceType: CompiledTypeReference, backingType: CompiledTypeReference, expectedType: CompiledTypeReference): String =
@@ -6838,10 +6847,10 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         let declaredType = data_literal_declared_type(literal.typeName)
         let parentConstructors = data_parent_constructor_type_names(declaredType.name, module, allModules)
         if parentConstructors.is_empty()
-        then match data_constructor_function(literal.typeName, module) with
-            case Some { function } -> data_constructor_call_code(function, literal, env, module, allModules)
+        then match data_constructor_binding(literal.typeName, module, allModules) with
+            case Some { binding } -> data_constructor_call_code(binding, literal, env, module, allModules)
             case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
-        else data_constructor_pipeline_code(parentConstructors + data_own_constructor_type_names(declaredType.name, module), literal, env, expectedType, module, allModules)
+        else data_constructor_pipeline_code(parentConstructors + data_own_constructor_type_names(declaredType.name, module, allModules), literal, env, expectedType, module, allModules)
 
 /// Emits generated code for raw data literal.
 private fun raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6876,34 +6885,44 @@ private fun data_literal_context_type(declaredType: CompiledTypeReference, expec
     then expectedType
     else declaredType
 
-/// Looks up optional metadata for data constructor function.
-private fun data_constructor_function(typeName: String, module: CompiledModule): /capy/lang/Option[CompiledFunction] =
+/// Looks up a data constructor together with the module that declares it.
+private fun data_constructor_binding(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaDataConstructorBinding] =
     if raw_data_literal(typeName)
     then /capy/lang/Option.None {}
-    else find_function(data_constructor_function_name(data_literal_declared_type(typeName).name), module.functions)
+    else
+        let name = data_literal_declared_type(typeName).name
+        match data_type_owner_module(name, module, allModules) with
+        case Some { owner } -> data_constructor_binding_in_owner(name, owner)
+        case None -> /capy/lang/Option.None {}
+
+/// Looks up a data constructor in its resolved declaring module.
+private fun data_constructor_binding_in_owner(typeName: String, owner: CompiledModule): /capy/lang/Option[JavaDataConstructorBinding] =
+    match find_function(data_constructor_function_name(typeName), owner.functions) with
+    case Some { function } -> /capy/lang/Option.Some { JavaDataConstructorBinding { module: owner, function: function } }
+    case None -> /capy/lang/Option.None {}
 
 /// Computes the name for data constructor function.
 private fun data_constructor_function_name(typeName: String): String =
     "__capy_constructor|" + typeName
 
 /// Collects data own constructor type names for compiler processing.
-private fun data_own_constructor_type_names(typeName: String, module: CompiledModule): List[String] =
-    match data_constructor_function(typeName, module) with
+private fun data_own_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
+    match data_constructor_binding(typeName, module, allModules) with
     case Some _ -> [typeName]
     case None -> []
 
 /// Collects data parent constructor type names for compiler processing.
 private fun data_parent_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    data_parent_constructor_type_names_from(data_type_parent_types(typeName, module, allModules), module)
+    data_parent_constructor_type_names_from(data_type_parent_types(typeName, module, allModules), module, allModules)
 
 /// Collects data parent constructor type names from for compiler processing.
-private fun data_parent_constructor_type_names_from(typeNames: List[String], module: CompiledModule): List[String] =
+private fun data_parent_constructor_type_names_from(typeNames: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match typeNames[0] with
     case None -> []
     case Some { typeName } ->
-        match data_constructor_function(typeName, module) with
-        case Some _ -> [typeName] + data_parent_constructor_type_names_from(typeNames[1:], module)
-        case None -> data_parent_constructor_type_names_from(typeNames[1:], module)
+        match data_constructor_binding(typeName, module, allModules) with
+        case Some _ -> [typeName] + data_parent_constructor_type_names_from(typeNames[1:], module, allModules)
+        case None -> data_parent_constructor_type_names_from(typeNames[1:], module, allModules)
 
 /// Emits generated code for data constructor pipeline.
 private fun data_constructor_pipeline_code(constructorTypes: List[String], literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6921,16 +6940,16 @@ private fun data_constructor_pipeline_steps(constructorTypes: List[String], lite
     match constructorTypes[0] with
     case None -> ""
     case Some { constructorType } ->
-        match data_constructor_function(constructorType, module) with
-        case Some { function } ->
-            data_constructor_pipeline_step(function, constructorType, constructorType != literalTypeName, dataName, idx, module, allModules)
+        match data_constructor_binding(constructorType, module, allModules) with
+        case Some { binding } ->
+            data_constructor_pipeline_step(binding, constructorType, constructorType != literalTypeName, dataName, idx, module, allModules)
                 + data_constructor_pipeline_steps(constructorTypes[1:], literalTypeName, dataName, idx + 1, module, allModules)
         case None -> data_constructor_pipeline_steps(constructorTypes[1:], literalTypeName, dataName, idx, module, allModules)
 
 /// Formats source text for data constructor pipeline step.
-private fun data_constructor_pipeline_step(function: CompiledFunction, constructorType: String, parentConstructor: bool, dataName: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun data_constructor_pipeline_step(binding: JavaDataConstructorBinding, constructorType: String, parentConstructor: bool, dataName: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
     let resultName = dataName + "_result_" + idx
-    "            java.lang.Object " + resultName + " = " + data_constructor_data_call_code(function, dataName, module, allModules) + ";" + newline()
+    "            java.lang.Object " + resultName + " = " + data_constructor_data_call_code(binding, dataName, module, allModules) + ";" + newline()
     + "            if (__capy_result_is_error(" + resultName + ")) {" + newline()
     + "                return " + resultName + ";" + newline()
     + "            }" + newline()
@@ -6970,8 +6989,8 @@ private fun data_constructor_pipeline_returns_result(constructorTypes: List[Stri
 
 /// Checks whether a type reference matches the data constructor type returns result rule.
 private fun data_constructor_type_returns_result(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match data_constructor_function(typeName, module) with
-    case Some { function } -> data_constructor_function_returns_result(function, module, allModules)
+    match data_constructor_binding(typeName, module, allModules) with
+    case Some { binding } -> data_constructor_function_returns_result(binding.function, binding.module, allModules)
     case None -> false
 
 /// Checks whether a function matches the data constructor function returns result metadata.
@@ -6981,8 +7000,14 @@ private fun data_constructor_function_returns_result(function: CompiledFunction,
     else result_type_name(data_constructor_inferred_return_type(function, module, allModules).name)
 
 /// Emits generated code for data constructor data call.
-private fun data_constructor_data_call_code(function: CompiledFunction, dataName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_function_name(function) + "(" + data_constructor_data_call_arguments(function.parameters, dataName, module, allModules) + ")"
+private fun data_constructor_data_call_code(binding: JavaDataConstructorBinding, dataName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    data_constructor_java_function_name(binding, module) + "(" + data_constructor_data_call_arguments(binding.function.parameters, dataName, module, allModules) + ")"
+
+/// Formats a local or cross-module Java constructor function reference.
+private fun data_constructor_java_function_name(binding: JavaDataConstructorBinding, module: CompiledModule): String =
+    if module_fqcn(binding.module) == module_fqcn(module)
+    then java_function_name(binding.function)
+    else module_fqcn(binding.module) + "." + java_function_name(binding.function)
 
 /// Formats data constructor data call arguments for generated emission.
 private fun data_constructor_data_call_arguments(parameters: List[CompiledFunctionParameter], dataName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7003,10 +7028,10 @@ private fun data_constructor_data_call_argument(parameter: CompiledFunctionParam
     "((" + boxed_java_type(parameter.typeReference) + ") __capy_data_field(" + dataName + ", \"" + escape_java_string(parameter.name) + "\"))"
 
 /// Emits generated code for data constructor call.
-private fun data_constructor_call_code(function: CompiledFunction, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun data_constructor_call_code(binding: JavaDataConstructorBinding, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let typeName = data_literal_declared_type(literal.typeName).name
-    let callCode = java_function_name(function) + "(" + data_constructor_call_arguments(function.parameters, literal.fields, 0, env, module, allModules) + ")"
-    if data_constructor_function_returns_result(function, module, allModules)
+    let callCode = data_constructor_java_function_name(binding, module) + "(" + data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules) + ")"
+    if data_constructor_function_returns_result(binding.function, binding.module, allModules)
     then "__capy_constructor_result(\"" + escape_java_string(typeName) + "\", " + callCode + ")"
     else "__capy_constructor_value(\"" + escape_java_string(typeName) + "\", " + callCode + ")"
 
@@ -7166,7 +7191,7 @@ private fun with_expression_receiver_depth(expression: CompiledExpression): int 
 
 /// Collects with constructor type names for compiler processing.
 private fun with_constructor_type_names(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
-    data_parent_constructor_type_names(typeName, module, allModules) + data_own_constructor_type_names(typeName, module)
+    data_parent_constructor_type_names(typeName, module, allModules) + data_own_constructor_type_names(typeName, module, allModules)
 
 /// Computes the compiled type for with constructor result.
 private fun with_constructor_result_type(receiverType: CompiledTypeReference, constructorTypes: List[String], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -7387,8 +7412,22 @@ private fun reduce_receiver_iterable_code(receiver: CompiledExpression, receiver
 /// Computes the compiled type for reduce result.
 private fun reduce_result_type(initial: CompiledExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if empty_collection_literal_assignable(expectedType, initial)
+        | result_empty_collection_literal_assignable(expectedType, initial)
     then expectedType
     else expression_type(initial, env, module, allModules)
+
+/// Checks whether a Result context supplies the element type for an empty Success collection.
+private fun result_empty_collection_literal_assignable(expectedType: CompiledTypeReference, initial: CompiledExpression): bool =
+    if result_type_name(expectedType.name)
+    then match initial with
+        case CompiledDataLiteral literal ->
+            if result_success_constructor(literal.typeName)
+            then match literal.fields[0] with
+                case Some { field } -> empty_collection_literal_assignable(first_type_argument(expectedType), field.value)
+                case None -> false
+            else false
+        case _ -> false
+    else false
 
 /// Computes the compiled type for reduce value.
 private fun reduce_value_type(receiverType: CompiledTypeReference): CompiledTypeReference =
@@ -7828,13 +7867,13 @@ private fun data_literal_expression_type(literal: CompiledDataLiteral, env: List
         let declaredType = data_literal_declared_type(literal.typeName)
         let parentConstructors = data_parent_constructor_type_names(declaredType.name, module, allModules)
         if parentConstructors.is_empty()
-        then match data_constructor_function(literal.typeName, module) with
-            case Some { function } -> data_constructor_literal_type(declaredType.name, function, module, allModules)
+        then match data_constructor_binding(literal.typeName, module, allModules) with
+            case Some { binding } -> data_constructor_literal_type(declaredType.name, binding.function, binding.module, allModules)
             case None ->
                 if declaredType.arguments.is_empty()
                 then inferred_data_literal_reference(declaredType.name, literal, env, module, allModules)
                 else declaredType
-        else data_constructor_pipeline_type(declaredType.name, parentConstructors + data_own_constructor_type_names(declaredType.name, module), module, allModules)
+        else data_constructor_pipeline_type(declaredType.name, parentConstructors + data_own_constructor_type_names(declaredType.name, module, allModules), module, allModules)
 
 /// Infers the expression type for with.
 private fun with_expression_type(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -7846,15 +7885,9 @@ private fun with_expression_type(withExpression: CompiledWithExpression, env: Li
 
 /// Computes the compiled type for data constructor literal.
 private fun data_constructor_literal_type(typeName: String, function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if result_type_name(function.returnType.name)
-    then function.returnType
-    else if concrete_return_type(function.returnType)
-    then function.returnType
-    else
-        let inferred = data_constructor_inferred_return_type(function, module, allModules)
-        if result_type_name(inferred.name)
-        then inferred
-        else data_type_reference(typeName)
+    if data_constructor_function_returns_result(function, module, allModules)
+    then result_type(data_type_reference(typeName))
+    else data_type_reference(typeName)
 
 /// Computes the compiled type for data constructor inferred return.
 private fun data_constructor_inferred_return_type(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -10040,10 +10073,10 @@ private fun find_extension_method_binding_in_imports(ownerName: String, methodNa
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.wildcard
-            & !stdlib_import(declaration.modulePath)
+        if !stdlib_import(declaration.modulePath)
             & !declaration.qualified
-            & !string_list_contains(declaration.excludedNames, methodName)
+            & ((declaration.wildcard & !string_list_contains(declaration.excludedNames, methodName))
+                | import_includes_name(method_owner_base_name(ownerName), declaration))
         then find_extension_method_binding_in_import(ownerName, methodName, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
         else find_extension_method_binding_in_imports(ownerName, methodName, imports[1:], module, allModules)
 
