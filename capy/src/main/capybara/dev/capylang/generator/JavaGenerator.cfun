@@ -4921,6 +4921,16 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
             expression_code(call.receiver, env, receiverType, module, allModules)
                 + ".map(" + lambda_code_for_value(lambda, valueType, bodyExpectedType, env, module, allModules) + ")"
         case _ -> "unsupported(\"effect map\")"
+    else if effect_flat_map_method_call(call, env, module, allModules)
+    then
+        let receiverType = expression_type(call.receiver, env, module, allModules)
+        let valueType = first_type_argument(receiverType)
+        let bodyExpectedType = if expectedType.name == "Effect" then expectedType else effect_type(object_type())
+        match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            expression_code(call.receiver, env, receiverType, module, allModules)
+                + ".flatMap(" + lambda_code_for_value(lambda, valueType, bodyExpectedType, env, module, allModules) + ")"
+        case _ -> "unsupported(\"effect flat map\")"
     else if string_parse_method_call(call, env, module, allModules)
     then string_parse_method_code(call, env, module, allModules)
     else if regex_method_call(call, env, module, allModules)
@@ -4957,6 +4967,11 @@ private fun function_value_method_call(call: CompiledMethodCallExpression, env: 
 
 private fun effect_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "map"
+    then expression_type(call.receiver, env, module, allModules).name == "Effect"
+    else false
+
+private fun effect_flat_map_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "flat_map"
     then expression_type(call.receiver, env, module, allModules).name == "Effect"
     else false
 
@@ -9207,6 +9222,12 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
         match argument(call.arguments, 0) with
         case CompiledLambdaExpression lambda -> effect_type(expression_type(lambda.body, declared_lambda_value_env(lambda, valueType, env), module, allModules))
         case _ -> effect_type(object_type())
+    else if call.name == "flat_map" & receiverType.name == "Effect"
+    then
+        let valueType = first_type_argument(receiverType)
+        match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda -> expression_type(lambda.body, declared_lambda_value_env(lambda, valueType, env), module, allModules)
+        case _ -> effect_type(object_type())
     else if string_parse_method(call.name) & call.arguments.is_empty() & receiverType.name == "String"
     then string_parse_result_type(call.name)
     else if native_stdlib_method_name(call.name) & native_stdlib_receiver_method(receiverType, call)
@@ -11315,6 +11336,15 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
         case CompiledLambdaExpression lambda ->
             expression_emittable(call.receiver, env, module, allModules)
                 & collection_lambda_emittable(lambda, first_type_argument(receiverType), env, module, allModules)
+        case _ -> false
+    else if call.name == "flat_map" & receiverType.name == "Effect"
+    then match argument(call.arguments, 0) with
+        case CompiledLambdaExpression lambda ->
+            let valueType = first_type_argument(receiverType)
+            let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
+            expression_emittable(call.receiver, env, module, allModules)
+                & collection_lambda_emittable(lambda, valueType, env, module, allModules)
+                & expression_type(lambda.body, lambdaEnv, module, allModules).name == "Effect"
         case _ -> false
     else if string_parse_method_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)

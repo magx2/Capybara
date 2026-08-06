@@ -99,7 +99,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
-    void reportsUnsupportedFlatMapBeforeCallableShape() throws Exception {
+    void reportsNonCallableFlatMapArgument() throws Exception {
         var source = writeSource("sample/FlatMapFailure.cfun", """
                 from /capy/io/Console import { println }
                 from /capy/lang/Effect import { Effect, pure }
@@ -109,31 +109,31 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     |> pure(''), (acc, print_effect) => acc.flat_map(print_effect)
                 """);
 
-        assertThat(compileGenerateStderr()).isEqualTo("""
-                Compilation failed with 1 error(s):
-                /sample/FlatMapFailure.cfun:6:40: Method `flat_map` on `Effect` is not supported by the Java backend.
-                """);
+        assertThatThrownBy(this::compileGenerate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("in function `broken`: method `flat_map` requires a callable mapper; "
+                        + "variable `print_effect` is not callable in this context")
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain("unresolved function call `println`"));
 
         assertThat(generatedPath(source)).doesNotExist();
     }
 
     @Test
-    void reportsUnsupportedMethodAtCallSite() throws Exception {
-        var source = writeSource("sample/EffectFlatMapFailure.cfun", """
+    void generatesEffectFlatMapCall() throws Exception {
+        var source = writeSource("sample/EffectFlatMap.cfun", """
                 import /capy/lang/Effect
-                from /capy/io/Console import { println }
 
-                fun broken(values: List[String]): Effect[String] =
-                    values | value => println(value)
-                    |> Effect.pure(''), (acc, print_effect) => acc.flat_map(_ => print_effect)
+                fun chained(effect: Effect[int], next: Effect[String]): Effect[String] =
+                    effect.flat_map(_ => next)
                 """);
 
-        assertThat(compileGenerateStderr()).isEqualTo("""
-                Compilation failed with 1 error(s):
-                /sample/EffectFlatMapFailure.cfun:6:47: Method `flat_map` on `Effect` is not supported by the Java backend.
-                """);
+        assertThat(compileGenerateStderr()).isEmpty();
 
-        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source))
+                .content()
+                .contains("effect.flatMap((__) -> next)")
+                .doesNotContain("Unsupported CFUN expression at");
     }
 
     @Test

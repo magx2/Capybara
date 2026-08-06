@@ -412,7 +412,7 @@ private fun backend_java_type_has_method_table(receiverType: String): bool =
 /// Checks whether Java supports a method on a receiver type with an explicit capability table.
 private fun backend_java_method_supported(receiverType: String, methodName: String): bool =
     if receiverType == "Effect"
-    then compiler_string_list_contains(["map", "start"], methodName)
+    then compiler_string_list_contains(["map", "flat_map", "start"], methodName)
     else if receiverType == "Result"
     then compiler_string_list_contains(["map", "flat_map", "reduce", "reduce_left", "or_else", "or"], methodName)
     else if receiverType == "Option"
