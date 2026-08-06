@@ -613,12 +613,10 @@ private fun python_import(declaration: CompiledImportDeclaration, module: Compil
 
 /// Emits Python import source for import extension method aliases.
 private fun python_import_extension_method_aliases(declaration: CompiledImportDeclaration, modulePath: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if declaration.wildcard
-    then if !declaration.qualified
-        then match python_find_imported_module(declaration, module, allModules) with
-            case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
-            case None -> ""
-        else ""
+    if !declaration.qualified
+    then match python_find_imported_module(declaration, module, allModules) with
+        case Some { importedModule } -> python_import_extension_method_aliases_for_functions(declaration, modulePath, importedModule.functions)
+        case None -> ""
     else ""
 
 /// Emits Python import source for import extension method aliases for functions.
@@ -636,7 +634,9 @@ private fun python_imported_extension_method_alias(function: CompiledFunction, d
     if python_extension_method_function(function)
     then if python_skip_function(function)
         then false
-        else !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+        else if declaration.wildcard
+            then !python_string_list_contains(python_method_member_name(python_method_owner_member_name(function.name)), declaration.excludedNames)
+            else python_import_includes_name(python_method_owner_base_name(python_method_owner_name(function.name)), declaration)
     else false
 
 /// Computes the Python name for method owner member.
@@ -985,7 +985,7 @@ private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter
         [PythonBinding {
             name: parameter.name,
             pythonName: python_identifier(parameter.name),
-            typeName: parameter.typeReference.name
+            typeName: python_type_reference_key(parameter.typeReference)
         }]
             + python_parameter_bindings(parameters[1:])
 
@@ -1370,7 +1370,7 @@ private fun python_this_field_access(access: CompiledFieldAccessExpression, env:
 private fun python_this_binding_is_object(name: String, env: List[PythonBinding], allModules: List[CompiledModule]): bool =
     match python_lookup_binding(name, env) with
     case Some { binding } -> {
-        match python_find_object_class_by_type(binding.typeName, allModules) with
+        match python_find_object_class_by_type(python_type_key_base(binding.typeName), allModules) with
         case Some _ -> true
         case None -> false
     }
@@ -1406,7 +1406,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         then python_option_pipe_code(python_option_method_binary(call), env, module, allModules)
         else if python_enum_name_method_call(call, receiverType, module, allModules)
         then "__capy_enum_name(" + receiver + ")"
-        else if python_char_to_string_method_call(call, receiverType)
+        else if python_to_string_method_call(call, receiverType, module, allModules)
         then "__capy_to_string(" + receiver + ")"
         else if python_string_get_method_call(call, receiverType)
         then python_string_get_method_code(call, env, module, allModules)
@@ -2074,7 +2074,7 @@ private fun python_collection_pipe_code(binary: CompiledBinaryExpression, env: L
             + "("
             + python_expression_code(binary.left, env, module, allModules)
             + ", "
-            + python_lambda_expression_code(lambda, env, module, allModules)
+            + python_lambda_expression_code_with_bindings(lambda, python_collection_lambda_bindings(binary.left, lambda.parameters, env, module, allModules), env, module, allModules)
             + ")"
     case CompiledFunctionReferenceExpression reference ->
         python_collection_pipe_helper(binary.operator)
@@ -2084,6 +2084,21 @@ private fun python_collection_pipe_code(binary: CompiledBinaryExpression, env: L
             + python_expression_code(reference, env, module, allModules)
             + ")"
     case _ -> "__capy_unsupported('collection pipe')"
+
+/// Creates a typed single-parameter lambda binding from a collection's generic element type.
+private fun python_collection_lambda_bindings(receiver: CompiledExpression, parameters: List[String], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): List[PythonBinding] =
+    if parameters[1:].is_empty()
+    then python_lambda_bindings_with_single_type(parameters, python_collection_item_type_key(receiver, env, module, allModules))
+    else python_lambda_bindings(parameters)
+
+/// Infers the element type yielded by a collection expression.
+private fun python_collection_item_type_key(receiver: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeKey = python_expression_type_key(receiver, env, module, allModules)
+    if python_type_key_base(typeKey) == python_string_type()
+    then "char"
+    else if python_type_key_has_argument(typeKey)
+    then python_type_key_argument(typeKey)
+    else python_unknown_type()
 
 /// Emits Python runtime helper source for collection pipe helper.
 private fun python_collection_pipe_helper(operator: String): String =
@@ -2427,15 +2442,21 @@ private fun python_set_method_call_code(call: CompiledMethodCallExpression, env:
         then "__capy_set_symmetric_difference(" + receiverCode + ", " + argumentCode + ")"
         else "__capy_set_cartesian_product(" + receiverCode + ", " + argumentCode + ")"
 
-/// Checks whether method metadata matches the character to string method call rule.
-private fun python_char_to_string_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+/// Checks whether method metadata matches a scalar or primitive-backed to-string call.
+private fun python_to_string_method_call(call: CompiledMethodCallExpression, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.name == "to_string"
         & call.arguments.is_empty()
-        & python_char_to_string_receiver_type(receiverType)
+        & python_to_string_receiver_type(receiverType, module, allModules)
 
-/// Checks whether a type reference matches the character to string receiver type rule.
-private fun python_char_to_string_receiver_type(typeName: String): bool =
-    typeName == "char" | typeName == python_unknown_type()
+/// Checks whether a type can use the Python runtime string conversion helper.
+private fun python_to_string_receiver_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    typeName == "char"
+        | typeName == python_bool_type()
+        | typeName == python_int_type()
+        | typeName == python_long_type()
+        | typeName == python_float_type()
+        | typeName == python_double_type()
+        | python_primitive_backed_type(typeName, module, allModules)
 
 /// Checks whether method metadata matches the string method call rule.
 private fun python_string_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
@@ -3174,7 +3195,7 @@ private fun python_reduce_value_type(receiver: CompiledExpression, env: List[Pyt
 /// Emits Python code for match expression.
 private fun python_match_expression_code(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_match_supported(matchExpression)
-    then "(lambda __capy_match_value: " + python_match_cases_code(python_ordered_match_cases(matchExpression.cases), env, module, allModules) + ")("
+    then "(lambda __capy_match_value: " + python_match_cases_code(python_ordered_match_cases(matchExpression.cases), python_expression_type_key(matchExpression.value, env, module, allModules), env, module, allModules) + ")("
         + python_expression_code(matchExpression.value, env, module, allModules) + ")"
     else "__capy_unsupported('match')"
 
@@ -3192,29 +3213,29 @@ private fun python_match_cases_with_guard(cases: List[CompiledMatchCase], guarde
         else python_match_cases_with_guard(cases[1:], guarded)
 
 /// Emits Python code for match cases.
-private fun python_match_cases_code(cases: List[CompiledMatchCase], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_match_cases_code(cases: List[CompiledMatchCase], matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match cases[0] with
     case None -> "__capy_no_match(__capy_match_value)"
     case Some { matchCase } ->
-        "(" + python_match_case_body_code(matchCase, env, module, allModules)
-            + " if " + python_match_case_condition_code(matchCase, env, module, allModules)
-            + " else " + python_match_cases_code(cases[1:], env, module, allModules)
+        "(" + python_match_case_body_code(matchCase, matchTypeKey, env, module, allModules)
+            + " if " + python_match_case_condition_code(matchCase, matchTypeKey, env, module, allModules)
+            + " else " + python_match_cases_code(cases[1:], matchTypeKey, env, module, allModules)
             + ")"
 
 /// Emits Python code for match case condition.
-private fun python_match_case_condition_code(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_match_case_condition_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let base = if matchCase.wildcard
         then "True"
         else if matchCase.hasLiteral
         then "__capy_match_value == " + python_expression_code(matchCase.literal, env, module, allModules)
         else "__capy_type_matches(__capy_match_value, " + python_string_literal(matchCase.typeName) + ")"
     if matchCase.hasGuard
-    then "(" + base + " and " + python_match_case_guard_code(matchCase, env, module, allModules) + ")"
+    then "(" + base + " and " + python_match_case_guard_code(matchCase, matchTypeKey, env, module, allModules) + ")"
     else base
 
 /// Emits Python code for match case guard.
-private fun python_match_case_guard_code(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let caseEnv = python_match_case_env(matchCase, env)
+private fun python_match_case_guard_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let caseEnv = python_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     let guard = python_truthy_expression_code(matchCase.guard, caseEnv, module, allModules)
     if matchCase.bindings.is_empty()
     then guard
@@ -3223,8 +3244,8 @@ private fun python_match_case_guard_code(matchCase: CompiledMatchCase, env: List
         + ")(" + python_match_case_arguments(matchCase.bindings, matchCase.bindsWholeValue, 0) + ")"
 
 /// Emits Python code for match case body.
-private fun python_match_case_body_code(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let caseEnv = python_match_case_env(matchCase, env)
+private fun python_match_case_body_code(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let caseEnv = python_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     if matchCase.bindings.is_empty()
     then python_expression_code(matchCase.body, caseEnv, module, allModules)
     else "(lambda " + python_match_case_parameters(matchCase.bindings) + ": "
@@ -3260,16 +3281,25 @@ private fun python_match_case_argument_tail(bindings: List[String], bindsWholeVa
     case Some _ -> ", " + python_match_case_arguments(bindings, bindsWholeValue, idx)
 
 /// Collects match case environmentironment for Python processing.
-private fun python_match_case_env(matchCase: CompiledMatchCase, env: List[PythonBinding]): List[PythonBinding] =
-    python_match_case_bindings(matchCase.bindings) + env
+private fun python_match_case_env(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): List[PythonBinding] =
+    python_match_case_bindings(matchCase.bindings, matchCase.typeName, matchTypeKey, 0, module, allModules) + env
 
 /// Creates Python name/type bindings for match case.
-private fun python_match_case_bindings(bindings: List[String]): List[PythonBinding] =
+private fun python_match_case_bindings(bindings: List[String], caseType: String, matchTypeKey: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): List[PythonBinding] =
     match bindings[0] with
     case None -> []
     case Some { binding } ->
-        [PythonBinding { name: binding, pythonName: python_identifier(binding), typeName: python_unknown_type() }]
-            + python_match_case_bindings(bindings[1:])
+        [PythonBinding { name: binding, pythonName: python_identifier(binding), typeName: python_match_case_binding_type(caseType, matchTypeKey, binding, idx, module, allModules) }]
+            + python_match_case_bindings(bindings[1:], caseType, matchTypeKey, idx + 1, module, allModules)
+
+/// Infers a match binding type from a generic Result or Option payload, then from declared data fields.
+private fun python_match_case_binding_type(caseType: String, matchTypeKey: String, binding: String, idx: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if idx == 0
+        & python_type_key_has_argument(matchTypeKey)
+        & ((caseType == "Success" & python_type_key_base(matchTypeKey) == python_result_type())
+            | (caseType == "Some" & python_type_key_base(matchTypeKey) == python_option_type()))
+    then python_type_key_argument(matchTypeKey)
+    else python_data_field_type(binding, python_data_type_fields(caseType, module, allModules))
 
 /// Emits Python code for block expression.
 private fun python_block_expression_code(block: CompiledBlockExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3395,7 +3425,7 @@ private fun python_let_binding_type_name(binding: CompiledLetBinding, env: List[
         else if binding.operator == "<-" & python_result_pipe_receiver_type(valueType)
         then python_result_payload_type(binding.value, env, module, allModules)
         else valueType
-    else binding.typeReference.name
+    else python_type_reference_key(binding.typeReference)
 
 /// Computes the Python name for binding Python.
 private fun python_binding_python_name(name: String): String =
@@ -3440,13 +3470,51 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
 /// Computes the Python type for variable.
 private fun python_variable_type(name: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_lookup_binding(name, env) with
-    case Some { binding } -> binding.typeName
+    case Some { binding } -> python_type_key_base(binding.typeName)
     case None ->
         if name == "receiver"
         then match python_lookup_binding("this", env) with
-            case Some { binding } -> binding.typeName
+            case Some { binding } -> python_type_key_base(binding.typeName)
             case None -> python_unbound_variable_type(name, module, allModules)
         else python_unbound_variable_type(name, module, allModules)
+
+/// Computes an expression type key, retaining generic arguments for bound variables.
+private fun python_expression_type_key(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledVariableExpression variable -> python_bound_variable_type_key(variable.name, expression, env, module, allModules)
+    case CompiledUnsupportedExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledIntLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledLongLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledFloatLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledDoubleLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledBoolLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledStringLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledIfExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledBinaryExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledUnaryExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledFunctionCallExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledFunctionReferenceExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledMethodCallExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledWithExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledLambdaExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledListLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledSetLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledDictLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledTupleLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledIndexExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledDataLiteral _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledFieldAccessExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledReduceExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledMatchExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledThrowExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledTryCatchExpression _ -> python_expression_type(expression, env, module, allModules)
+    case CompiledBlockExpression _ -> python_expression_type(expression, env, module, allModules)
+
+/// Resolves a variable's retained type key without nesting matches in expression dispatch.
+private fun python_bound_variable_type_key(name: String, expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_lookup_binding(name, env) with
+    case Some { binding } -> binding.typeName
+    case None -> python_expression_type(expression, env, module, allModules)
 
 /// Computes the Python type for unbound variable.
 private fun python_unbound_variable_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3861,7 +3929,7 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
         let receiverType = python_expression_type(call.receiver, env, module, allModules)
         if python_enum_name_method_call(call, receiverType, module, allModules)
         then python_string_type()
-        else if python_char_to_string_method_call(call, receiverType)
+        else if python_to_string_method_call(call, receiverType, module, allModules)
         then python_string_type()
         else if python_string_get_method_call(call, receiverType)
         then python_string_get_method_return_type(call)
@@ -5006,6 +5074,12 @@ private fun python_type_reference_name_key(name: String, argumentName: String): 
     then name
     else name + "[" + argumentName + "]"
 
+/// Computes a recursive type key while preserving nested generic arguments.
+private fun python_type_reference_key(typeReference: CompiledTypeReference): String =
+    match typeReference.arguments[0] with
+    case None -> typeReference.name
+    case Some { argument } -> python_type_reference_name_key(typeReference.name, python_type_reference_key(argument))
+
 /// Computes the match score for type key match score.
 private fun python_type_key_match_score(target: String, source: String): int =
     if target == source
@@ -5030,7 +5104,7 @@ private fun python_type_key_has_argument(typeKey: String): bool =
 /// Formats one type key argument for Python emission.
 private fun python_type_key_argument(typeKey: String): String =
     let start = python_first_index_of(typeKey, "[", 0)
-    let end = python_first_index_of(typeKey, "]", 0)
+    let end = python_last_index_of(typeKey, "]")
     if start < 0 | end <= start
     then python_unknown_type()
     else typeKey[start + 1, end]
@@ -5842,10 +5916,10 @@ private fun python_find_extension_method_binding_in_imports(ownerName: String, m
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if declaration.wildcard
-            & !declaration.qualified
+        if !declaration.qualified
             & !python_stdlib_import(declaration.modulePath)
-            & !python_string_list_contains(methodName, declaration.excludedNames)
+            & ((declaration.wildcard & !python_string_list_contains(methodName, declaration.excludedNames))
+                | python_import_includes_name(python_method_owner_base_name(ownerName), declaration))
         then python_find_extension_method_binding_in_import(ownerName, methodName, imports[1:], declaration, module, allModules)
         else python_find_extension_method_binding_in_imports(ownerName, methodName, imports[1:], module, allModules)
 
@@ -6221,7 +6295,7 @@ private fun python_test_runtime_effect_code(): String =
     + python_newline()
     + "def _console_print(value, newline, error):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
-    + "    builtins.print(__capy_str(value), end='\\n' if newline else '', file=sys.stderr if error else sys.stdout)" + python_newline()
+    + "    builtins.print(__capy_str(value), end=chr(10) if newline else '', file=sys.stderr if error else sys.stdout)" + python_newline()
     + "    return value" + python_newline()
     + python_newline()
     + "def print(value):" + python_newline()
@@ -8133,7 +8207,17 @@ private fun python_binary_expression_gatherable(binary: CompiledBinaryExpression
 /// Checks whether collection pipe can be included in generated test gathering.
 private fun python_collection_pipe_gatherable(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_expression_gatherable(binary.left, env, module, allModules)
-    then python_callable_expression_gatherable(binary.right, env, module, allModules)
+    then match binary.right with
+        case CompiledLambdaExpression lambda ->
+            python_lambda_expression_gatherable_with_bindings(
+                lambda,
+                python_collection_lambda_bindings(binary.left, lambda.parameters, env, module, allModules),
+                env,
+                module,
+                allModules
+            )
+        case CompiledFunctionReferenceExpression reference -> python_function_reference_gatherable(reference, module, allModules)
+        case _ -> false
     else false
 
 /// Checks whether lambda expression can be included in generated test gathering.
@@ -8281,7 +8365,7 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
         else false
     else
         let receiverType = python_expression_type(call.receiver, env, module, allModules)
-        if python_char_to_string_method_call(call, receiverType)
+        if python_to_string_method_call(call, receiverType, module, allModules)
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else if python_string_get_method_call(call, receiverType)
         then python_expression_gatherable(call.receiver, env, module, allModules)
@@ -8538,7 +8622,7 @@ private fun python_reduce_expression_gatherable(reduce: CompiledReduceExpression
 /// Checks whether match expression can be included in generated test gathering.
 private fun python_match_expression_gatherable(matchExpression: CompiledMatchExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_expression_gatherable(matchExpression.value, env, module, allModules)
-    then python_match_cases_gatherable(matchExpression.cases, env, module, allModules)
+    then python_match_cases_gatherable(matchExpression.cases, python_expression_type_key(matchExpression.value, env, module, allModules), env, module, allModules)
     else false
 
 /// Checks whether match is supported by the current backend.
@@ -8546,31 +8630,31 @@ private fun python_match_supported(matchExpression: CompiledMatchExpression): bo
     python_match_cases_supported(matchExpression.cases)
 
 /// Checks whether match cases can be included in generated test gathering.
-private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_match_cases_gatherable(cases: List[CompiledMatchCase], matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match cases[0] with
     case None -> false
     case Some { matchCase } ->
-        if python_match_case_gatherable(matchCase, env, module, allModules)
+        if python_match_case_gatherable(matchCase, matchTypeKey, env, module, allModules)
         then if cases[1:].is_empty()
             then true
-            else python_match_cases_gatherable(cases[1:], env, module, allModules)
+            else python_match_cases_gatherable(cases[1:], matchTypeKey, env, module, allModules)
         else false
 
 /// Checks whether match case can be included in generated test gathering.
-private fun python_match_case_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_match_case_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if python_match_case_supported(matchCase)
-    then python_match_case_literal_guard_body_gatherable(matchCase, env, module, allModules)
+    then python_match_case_literal_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
     else false
 
-private fun python_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+private fun python_match_case_literal_guard_body_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if matchCase.hasLiteral
     then if python_expression_gatherable(matchCase.literal, env, module, allModules)
-        then python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+        then python_match_case_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
         else false
-    else python_match_case_guard_body_gatherable(matchCase, env, module, allModules)
+    else python_match_case_guard_body_gatherable(matchCase, matchTypeKey, env, module, allModules)
 
-private fun python_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let caseEnv = python_match_case_env(matchCase, env)
+private fun python_match_case_guard_body_gatherable(matchCase: CompiledMatchCase, matchTypeKey: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let caseEnv = python_match_case_env(matchCase, matchTypeKey, env, module, allModules)
     if matchCase.hasGuard
     then if python_expression_gatherable(matchCase.guard, caseEnv, module, allModules)
         then python_expression_gatherable(matchCase.body, caseEnv, module, allModules)

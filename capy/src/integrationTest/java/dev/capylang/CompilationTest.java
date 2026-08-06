@@ -205,6 +205,7 @@ class CompilationTest {
                 import /capy/lang/Effect
                 import /capy/io/Console
                 import /capy/lang/Primitives
+                from /capy/lang/Option import { Some, None }
                 import /capy/lang/Async
                 from /capy/lang/Async import { Async }
                 import /capy/lang/System
@@ -398,10 +399,16 @@ class CompilationTest {
                 type digit -> int with constructor {
                     Success { value }
                 }
+
+                data Item { value: int }
+
+                fun Item.to_string(): String = this.value.to_string()
+
+                fun digit.render(): String = this.to_string()
                 """;
         var consumerSource = """
                 from /capy/lang/Result import { Result, Success }
-                from /sample/Digit import { digit }
+                from /sample/Digit import { digit, Item }
                 import /capy/lang/Effect
                 import /capy/io/Console
                 import /capy/lang/Primitives
@@ -428,6 +435,16 @@ class CompilationTest {
                 fun qualified_print(value: String): Effect[String] = Console.println(value)
 
                 fun qualified_parse(value: String): Result[int] = Primitives.to_int(value)
+
+                fun render_items(result: Result[List[Item]]): List[String] =
+                    match result with
+                    case Success { value } -> (value | item => item.to_string()).as_list()
+                    case Error _ -> []
+
+                fun first_or_zero(values: List[int]): int =
+                    match values[0] with
+                    case Some { value } -> value
+                    case None -> 0
                 """;
         var program = compileProgram(List.of(
                 rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
@@ -435,8 +452,19 @@ class CompilationTest {
                 rawModule("UseDigit", "/sample", consumerSource, SourceKind.FUNCTIONAL)
         ));
 
-        var code = PythonGenerator.pythonGenerator(program).modules().stream()
+        var generated = PythonGenerator.pythonGenerator(program);
+        var code = generated.modules().stream()
                 .filter(module -> module.relativePath().equals("sample/UseDigit.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var digitCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("sample/Digit.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var runtimeCode = generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.py"))
                 .findFirst()
                 .orElseThrow()
                 .code();
@@ -445,17 +473,24 @@ class CompilationTest {
                 .contains("__capy_result_flat_map(acc")
                 .contains("__capy_result_flat_map(int_result")
                 .contains("__capy_result_map(__capy_primitive_constructor_result(__import__(\"sample.Digit\", fromlist=['*'])")
-                .contains("__capy_dynamic_map(result")
-                .contains("__capy_dynamic_flat_map(result")
+                .contains("__capy_result_map(result")
+                .contains("__capy_result_flat_map(result")
                 .contains("return pure(value)")
                 .contains("return println(value)")
                 .contains("return __capy_parse_int(value)")
+                .contains(" = sample.Digit.Item_to_string__")
+                .contains("Item_to_string__")
+                .contains("__capy_index(values, 0)")
                 .doesNotContain("Effect_pure")
                 .doesNotContain("Console_println")
                 .doesNotContain("Primitives_to_int")
+                .doesNotContain("__capy_dynamic_map(result")
+                .doesNotContain("__capy_dynamic_flat_map(result")
                 .doesNotContain("__capy_seq_flat_map(acc")
                 .doesNotContain("__capy_seq_flat_map(int_result")
                 .doesNotContain("int_value.map(");
+        assertThat(digitCode).contains("return __capy_to_string(this)");
+        assertThat(runtimeCode).contains("end=chr(10) if newline else ''");
     }
 
     @Test
