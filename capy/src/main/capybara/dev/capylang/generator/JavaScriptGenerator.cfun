@@ -97,7 +97,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
-    + java_script_imports(module.imports, module)
+    + java_script_imports(module.imports, module, allModules)
     + java_script_newline()
     + sections.constants
     + java_script_newline()
@@ -305,22 +305,22 @@ private fun java_script_runtime_import(module: CompiledModule): String =
         + java_script_newline()
 
 /// Emits JavaScript import source for imports.
-private fun java_script_imports(imports: List[CompiledImportDeclaration], module: CompiledModule): String =
-    java_script_unique_imports(imports, module, {:})
+private fun java_script_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_unique_imports(imports, module, allModules, {:})
 
 /// Emits JavaScript import statements for unique.
-private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, emittedAliases: Dict[bool]): String =
+private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], emittedAliases: Dict[bool]): String =
     match imports[0] with
     case None -> ""
     case Some { declaration } ->
         let alias = java_script_import_alias(declaration, module)
         match emittedAliases.get(alias) with
-        case Some _ -> java_script_unique_imports(imports[1:], module, emittedAliases)
-        case None -> java_script_import(declaration, module) + java_script_unique_imports(imports[1:], module, emittedAliases + (alias, true))
+        case Some _ -> java_script_unique_imports(imports[1:], module, allModules, emittedAliases)
+        case None -> java_script_import(declaration, module, allModules) + java_script_unique_imports(imports[1:], module, allModules, emittedAliases + (alias, true))
 
 /// Emits JavaScript import source for import.
-private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule): String =
-    if java_script_stdlib_import(declaration.modulePath)
+private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_script_stdlib_import(declaration.modulePath) & !java_script_imported_module_available(declaration, module, allModules)
     then ""
     else "const "
             + java_script_import_alias(declaration, module)
@@ -328,6 +328,12 @@ private fun java_script_import(declaration: CompiledImportDeclaration, module: C
             + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_import_module_path(declaration.modulePath, module)))
             + ");"
             + java_script_newline()
+
+/// Checks whether an imported module is part of the generated program.
+private fun java_script_imported_module_available(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match java_script_find_imported_module(declaration, module, allModules) with
+    case Some _ -> true
+    case None -> false
 
 /// Checks whether a function matches the object helper function metadata.
 private fun java_script_object_helper_function(function: CompiledFunction): bool =
@@ -1580,14 +1586,17 @@ private fun java_script_native_provider_declarations_by_module_with_acc(declarat
 
 private fun java_script_native_provider_add_declaration(declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[JavaScriptNativeProviderDeclarations] =
     let moduleKey = java_script_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
-    let declarations = match declarationsByModule.get(moduleKey) with
-        case Some { moduleDeclarations } -> moduleDeclarations.declarations
-        case None -> java_script_empty_native_provider_declaration_dict()
+    let declarations = java_script_native_provider_declarations_for_module(declarationsByModule.get(moduleKey))
     match declarations.get(declaration.providerName) with
     case Some _ -> declarationsByModule
     case None -> declarationsByModule + (moduleKey, JavaScriptNativeProviderDeclarations {
         declarations: declarations + (declaration.providerName, declaration)
     })
+
+private fun java_script_native_provider_declarations_for_module(moduleDeclarations: /capy/lang/Option[JavaScriptNativeProviderDeclarations]): Dict[CompiledNativeProviderDeclaration] =
+    match moduleDeclarations with
+    case Some { declarations } -> declarations.declarations
+    case None -> java_script_empty_native_provider_declaration_dict()
 
 private fun java_script_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
     java_script_native_provider_binding_dict_with_acc(bindings, {:})
@@ -3227,15 +3236,29 @@ private fun java_script_reduce_bindings_from_names(accumulatorName: String, keyN
 
 /// Formats one reduce key parameter for JavaScript emission.
 private fun java_script_reduce_key_parameter(parameters: List[String], receiverType: String): String =
-    if receiverType == "Dict" | !parameters[2:].is_empty()
+    if java_script_reduce_has_key_parameter(parameters, receiverType)
     then java_script_lambda_parameter_at(parameters, 1)
     else ""
 
 /// Formats one reduce value parameter for JavaScript emission.
 private fun java_script_reduce_value_parameter(parameters: List[String], receiverType: String): String =
-    if receiverType == "Dict" | !parameters[2:].is_empty()
+    if java_script_reduce_has_key_parameter(parameters, receiverType)
     then java_script_lambda_parameter_at(parameters, 2)
     else java_script_lambda_parameter_at(parameters, 1)
+
+/// Checks whether reduce metadata includes a key parameter.
+private fun java_script_reduce_has_key_parameter(parameters: List[String], receiverType: String): bool =
+    if receiverType == "Dict"
+    then true
+    else match parameters[0] with
+    case None -> false
+    case Some _ ->
+        match parameters[1] with
+        case None -> false
+        case Some _ ->
+            match parameters[2] with
+            case None -> false
+            case Some _ -> true
 
 /// Formats JavaScript source text for lambda parameter at.
 private fun java_script_lambda_parameter_at(parameters: List[String], target: int): String =
@@ -4085,7 +4108,7 @@ private fun java_script_primitive_backed_data_literal_code(typeName: String, lit
 
 /// Emits the backing value of a primitive-backed literal.
 private fun java_script_primitive_backed_literal_value_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_expression_code(java_script_data_constructor_argument_value(literal.fields, "value", literal.typeName, module, allModules), env, module, allModules)
+    java_script_data_constructor_argument_code(literal.fields, "value", "$0", env, module, allModules)
 
 /// Checks whether the current value satisfies the raw data literal rule for JavaScript processing.
 private fun java_script_raw_data_literal(typeName: String): bool =
@@ -9229,9 +9252,9 @@ private fun java_script_escape_string(value: String): String =
     value
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
-        .replace('\n', '\\n')
-        .replace('\r', '\\r')
-        .replace('\t', '\\t')
+        .replace('\n', "\\" + "n")
+        .replace('\r', "\\" + "r")
+        .replace('\t', "\\" + "t")
 
 /// Formats integer as a JavaScript literal.
 private fun java_script_integer_literal(source: String): String =

@@ -9555,9 +9555,9 @@ private fun escape_python_string(value: String): String =
     value
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
-        .replace('\n', '\\n')
-        .replace('\r', '\\r')
-        .replace('\t', '\\t')
+        .replace('\n', "\\" + "n")
+        .replace('\r', "\\" + "r")
+        .replace('\t', "\\" + "t")
 
 /// Formats long as a Python literal.
 private fun python_long_literal(source: String): String =

@@ -172,6 +172,143 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateImportedUnqualifiedEnumValuesInJava() {
+        var orderingSource = """
+                enum Ordering { LESS, EQUAL, GREATER }
+                """;
+        var seqSource = """
+                fun Seq[T].drop_until(pred: T => bool): Seq[T] = this
+                """;
+        var pathSource = """
+                data Path { value: String }
+                fun Path.`/`(segment: String): Path = this
+                fun Path.`/`(other: Path): Path = this
+                fun Path.normalize(): Path = this
+                """;
+        var dateTimeSource = """
+                data DateTime {}
+                fun from_timestamp(value: long): DateTime = DateTime {}
+                fun DateTime.to_iso_8601(): String = "timestamp"
+                """;
+        var comparisonSource = """
+                from /sample/lib/Ordering import { Ordering, EQUAL, GREATER }
+                from /capy/collection/Seq import { * }
+                from /capy/io/Path import { * }
+                from /capy/date_time/DateTime import { * }
+                import /capy/lang/Effect
+
+                data Version { value: int }
+                data Error { message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+                data Assertion { result: bool }
+                data Check { assertions: List[() => Assertion] }
+                data TestOutput { path: Path, content: String }
+
+                fun compare_core(left: Version, right: Version): Ordering = GREATER
+
+                fun compare_details(left: Version, right: Version): Ordering = GREATER
+
+                fun compare_strings(left: String, right: String): Ordering = left.compare(right)
+
+                fun pipe_then_or(result: Result[String]): Result[String] =
+                    result
+                    | (value => value)
+                    .or(Success { "fallback" })
+
+                fun unwrap_effects(effects: List[Effect[String]]): Effect[List[String]] =
+                    match effects[0] with
+                    case None -> Effect.pure([])
+                    case Some { effect } -> {
+                        let value <- effect
+                        let rest <- unwrap_effects(effects[1:])
+                        [value] + rest
+                    }
+
+                fun invoke_suppliers(suppliers: List[() => Assertion]): Option[Assertion] =
+                    to_seq(suppliers)
+                    | (supplier => supplier())
+                    .drop_until(assertion => !assertion.result)
+                    .first()
+
+                fun create_parent(path: Path): Effect[Result[Path]] =
+                    Effect.pure(Success { path })
+
+                fun write_changed(path: Path, content: String): Effect[Result[String]] =
+                    Effect.pure(Success { content })
+
+                fun write_output(output_dir: Path, test_output: TestOutput): Effect[Result[Path]] =
+                    let relative_path = test_output.path.normalize()
+                    let output_path = output_dir / relative_path
+                    create_parent(output_path).flat_map(parent_result =>
+                        match parent_result with
+                        case Error e -> Effect.pure(e)
+                        case Success _ ->
+                            write_changed(output_path, test_output.content).map(write_result =>
+                                match write_result with
+                                case Error e -> e
+                                case Success _ -> Success { relative_path }
+                            )
+                    )
+
+                fun normalize_paths(result: Result[List[Path]]): Result[List[Path]] =
+                    match result with
+                    case Error e -> e
+                    case Success { paths } ->
+                        let normalized = (paths | path => path.normalize()).as_list()
+                        Success { normalized }
+
+                fun timestamp(value: long): String = from_timestamp(value).to_iso_8601()
+
+                fun check_error(result: Result[String], check: Error => Check): List[() => Assertion] =
+                    match result with
+                    case Error e -> check(e).assertions
+                    case Success _ -> []
+
+                fun join_values(values: List[String]): String =
+                    (values |> "", (acc, item) => if acc == "" then item else acc + "," + item)
+
+                fun contains_exponent(value: String): bool = value == "" | value ? "E" | value ? "e"
+
+                fun escaped_controls(): String = "\\n\\r\\t"
+
+                fun Version.compare(other: Version): Ordering =
+                    match compare_core(this, other) with
+                    case EQUAL -> compare_details(this, other)
+                    case order -> order
+
+                fun Version.`>`(other: Version): bool = this.compare(other) == GREATER
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Ordering", "/sample/lib", orderingSource, SourceKind.FUNCTIONAL),
+                rawModule("Seq", "/capy/collection", seqSource, SourceKind.FUNCTIONAL),
+                rawModule("Path", "/capy/io", pathSource, SourceKind.FUNCTIONAL),
+                rawModule("DateTime", "/capy/date_time", dateTimeSource, SourceKind.FUNCTIONAL),
+                rawModule("Comparison", "/sample/app", comparisonSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Comparison.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("sample.lib.Ordering.GREATER")
+                .contains("import static sample.lib.Ordering.GREATER;")
+                .contains(".compareTo(")
+                .contains("capy.lang.Ordering.EQUAL")
+                .contains("import static capy.collection.Seq.*;")
+                .contains("__capy_result_or_")
+                .contains("flatMap(")
+                .contains("supplier.get()")
+                .contains(".contains(\"E\")")
+                .contains("return \"\\n\\r\\t\";")
+                .doesNotContain("Ordering.GREATER__")
+                .doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+    }
+
+    @Test
     void shouldGenerateJavaProgramMainEntrypoint() {
         var source = """
                 from /capy/lang/Effect import { Effect, pure }
@@ -405,6 +542,8 @@ class CompilationTest {
                 fun Item.to_string(): String = this.value.to_string()
 
                 fun digit.render(): String = this.to_string()
+
+                fun raw_digit(): digit = digit! { 1 }
                 """;
         var consumerSource = """
                 from /capy/lang/Result import { Result, Success }
@@ -519,7 +658,9 @@ class CompilationTest {
                 .contains("return __capy_parse_int(value)")
                 .contains("Item_to_string__")
                 .contains("(__capy_size(acc) === 0)")
-                .doesNotContain("const __capy_import_capy_")
+                .doesNotContain("__capy_import_capy_lang_Effect")
+                .doesNotContain("__capy_import_capy_io_Console")
+                .doesNotContain("__capy_import_capy_lang_Primitives")
                 .doesNotContain("Effect_pure")
                 .doesNotContain("Console_println")
                 .doesNotContain("Primitives_to_int")
@@ -527,6 +668,7 @@ class CompilationTest {
                 .doesNotContain("acc.is_empty(");
         assertThat(javaScriptDigitCode)
                 .contains("return __capy_to_string(this_)")
+                .contains("return 1")
                 .contains("\"__capy_constructor_digit");
         assertThat(javaScriptRuntimeCode)
                 .contains("function __capy_primitive_constructor_result(value)")

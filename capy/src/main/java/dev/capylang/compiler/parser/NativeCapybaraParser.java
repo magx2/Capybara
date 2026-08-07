@@ -866,6 +866,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx == null) {
             return List.of();
         }
+        if (ctx.identifier() != null) {
+            return List.of(ctx.identifier().getText());
+        }
         if (ctx.typedPattern() != null && ctx.typedPattern().NAME() != null) {
             return List.of(ctx.typedPattern().NAME().getText());
         }
@@ -897,7 +900,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     private static boolean objectPatternBindsWholeValue(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
-        return ctx != null && (ctx.typedPattern() != null || ctx.wildcardPattern() != null);
+        return ctx != null
+                && (ctx.identifier() != null || ctx.typedPattern() != null || ctx.wildcardPattern() != null);
     }
 
     private static boolean objectPatternHasLiteral(dev.capylang.parser.antlr.ObjectOrientedParser.PatternContext ctx) {
@@ -2433,7 +2437,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                     expressionNoLet(ctx.expressionNoLet(0)),
                     expressionNoLet(ctx.expressionNoLet(1)),
                     location(ctx),
-                    isGrouped(ctx.expressionNoLet(0))
+                    isGrouped(ctx.expressionNoLet(0)),
+                    isGrouped(ctx.expressionNoLet(1))
             );
         }
         if (ctx.infixOperator() != null && ctx.expressionNoLet().size() == 2) {
@@ -2449,7 +2454,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                     expressionNoLet(ctx.expressionNoLet(0)),
                     expressionNoLet(ctx.expressionNoLet(1)),
                     location(ctx),
-                    isGrouped(ctx.expressionNoLet(0))
+                    isGrouped(ctx.expressionNoLet(0)),
+                    isGrouped(ctx.expressionNoLet(1))
             );
         }
         if (ctx.identifier() != null && ctx.expressionNoLet().size() == 1 && hasChild(ctx, ".")) {
@@ -2484,10 +2490,29 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     private static Expression expressionNoPipe(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoPipeContext ctx) {
-        if (!ctx.letExpressionNoPipe().isEmpty()) {
-            return unsupported(ctx);
+        var bindings = new ArrayList<Expression.LetBinding>();
+        for (var let : ctx.letExpressionNoPipe()) {
+            bindings.add(letBinding(let));
         }
-        return expressionNoLetNoPipe(ctx.expressionNoLetNoPipe());
+        var result = expressionNoLetNoPipe(ctx.expressionNoLetNoPipe());
+        if (bindings.isEmpty()) {
+            return result;
+        }
+        return new Expression.BlockExpression(List.copyOf(bindings), result, location(ctx));
+    }
+
+    private static Expression.LetBinding letBinding(
+            dev.capylang.parser.antlr.FunctionalParser.LetExpressionNoPipeContext ctx
+    ) {
+        var type = ctx.type() == null ? missingType() : typeReference(ctx.type());
+        return new Expression.LetBinding(
+                ctx.identifier().getText(),
+                type,
+                ctx.letBindingOperator().getText(),
+                expressionNoLet(ctx.expressionNoLet()),
+                List.of(),
+                location(ctx)
+        );
     }
 
     private static Expression expressionNoLetNoPipe(
@@ -2547,7 +2572,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                     expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
                     expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(1)),
                     location(ctx),
-                    isGrouped(ctx.expressionNoLetNoPipe(0))
+                    isGrouped(ctx.expressionNoLetNoPipe(0)),
+                    isGrouped(ctx.expressionNoLetNoPipe(1))
             );
         }
         if (ctx.infixOperatorNoPipe() != null && ctx.expressionNoLetNoPipe().size() == 2) {
@@ -2556,7 +2582,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                     expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(0)),
                     expressionNoLetNoPipe(ctx.expressionNoLetNoPipe(1)),
                     location(ctx),
-                    isGrouped(ctx.expressionNoLetNoPipe(0))
+                    isGrouped(ctx.expressionNoLetNoPipe(0)),
+                    isGrouped(ctx.expressionNoLetNoPipe(1))
             );
         }
         if (ctx.identifier() != null && ctx.expressionNoLetNoPipe().size() == 1 && hasChild(ctx, ".")) {
@@ -2637,18 +2664,60 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         return null;
     }
 
-    private static Expression binaryExpression(String operator, Expression left, Expression right, SourceLocation location, boolean leftGrouped) {
+    private static Expression binaryExpression(
+            String operator,
+            Expression left,
+            Expression right,
+            SourceLocation location,
+            boolean leftGrouped,
+            boolean rightGrouped
+    ) {
+        if (!rightGrouped && isPipeOperator(operator) && pipeMethodChainStartsWithLambda(right)) {
+            return reassociatePipeMethodChain(operator, left, right, location);
+        }
         if (!leftGrouped
                 && left instanceof Expression.BinaryExpression leftBinary
                 && precedence(operator) > precedence(leftBinary.operator())) {
             return new Expression.BinaryExpression(
                     leftBinary.operator(),
                     leftBinary.left(),
-                    binaryExpression(operator, leftBinary.right(), right, location, false),
+                    binaryExpression(operator, leftBinary.right(), right, location, false, rightGrouped),
                     leftBinary.location()
             );
         }
         return new Expression.BinaryExpression(operator, left, right, location);
+    }
+
+    private static boolean isPipeOperator(String operator) {
+        return operator.equals("|") || operator.equals("|-") || operator.equals("|*") || operator.equals("|!");
+    }
+
+    private static boolean pipeMethodChainStartsWithLambda(Expression expression) {
+        if (expression instanceof Expression.LambdaExpression) {
+            return true;
+        }
+        if (expression instanceof Expression.MethodCallExpression methodCall) {
+            return pipeMethodChainStartsWithLambda(methodCall.receiver());
+        }
+        return false;
+    }
+
+    private static Expression reassociatePipeMethodChain(
+            String operator,
+            Expression left,
+            Expression right,
+            SourceLocation location
+    ) {
+        if (right instanceof Expression.LambdaExpression) {
+            return new Expression.BinaryExpression(operator, left, right, location);
+        }
+        var methodCall = (Expression.MethodCallExpression) right;
+        return new Expression.MethodCallExpression(
+                reassociatePipeMethodChain(operator, left, methodCall.receiver(), location),
+                methodCall.name(),
+                methodCall.arguments(),
+                methodCall.location()
+        );
     }
 
     private static boolean isGrouped(ParserRuleContext ctx) {
@@ -2666,7 +2735,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             case "^" -> 4;
             case "*", "/", "%" -> 3;
             case "+", "-" -> 2;
-            case ">", "<", ">=", "<=", "==", "!=" -> 1;
+            case ">", "<", ">=", "<=", "==", "!=", "?" -> 1;
             default -> 0;
         };
     }
@@ -2882,7 +2951,32 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         for (var expression : ctx.expression()) {
             values.add(expression(expression));
         }
+        var reduce = tupleReduceExpression(values, location(ctx));
+        if (reduce != null) {
+            return reduce;
+        }
         return new Expression.TupleLiteral(List.copyOf(values), location(ctx));
+    }
+
+    private static Expression tupleReduceExpression(List<Expression> values, SourceLocation location) {
+        if (values.size() != 2
+                || !(values.get(0) instanceof Expression.BinaryExpression binary)
+                || !binary.operator().equals("|>")
+                || !(values.get(1) instanceof Expression.LambdaExpression lambda)
+                || (lambda.parameters().size() != 2 && lambda.parameters().size() != 3)) {
+            return null;
+        }
+        var keyName = lambda.parameters().size() == 3 ? lambda.parameters().get(1) : "";
+        var valueName = lambda.parameters().size() == 3 ? lambda.parameters().get(2) : lambda.parameters().get(1);
+        return new Expression.ReduceExpression(
+                binary.left(),
+                binary.right(),
+                lambda.parameters().get(0),
+                keyName,
+                valueName,
+                lambda.body(),
+                location
+        );
     }
 
     private static Expression indexExpression(
@@ -3111,6 +3205,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx == null) {
             return List.of();
         }
+        if (ctx.identifier() != null) {
+            return List.of(ctx.identifier().getText());
+        }
         if (ctx.typedPattern() != null && ctx.typedPattern().NAME() != null) {
             return List.of(ctx.typedPattern().NAME().getText());
         }
@@ -3140,7 +3237,8 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     private static boolean patternBindsWholeValue(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {
-        return ctx != null && (ctx.typedPattern() != null || ctx.wildcardPattern() != null);
+        return ctx != null
+                && (ctx.identifier() != null || ctx.typedPattern() != null || ctx.wildcardPattern() != null);
     }
 
     private static boolean patternHasLiteral(dev.capylang.parser.antlr.FunctionalParser.PatternContext ctx) {

@@ -133,7 +133,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(generatedPath(source))
                 .content()
-                .contains("effect.flatMap((__) -> next)")
+                .contains("flatMap((__) -> next)")
                 .doesNotContain("Unsupported CFUN expression at");
     }
 

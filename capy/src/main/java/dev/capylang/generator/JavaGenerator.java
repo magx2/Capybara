@@ -28,7 +28,7 @@ public final class JavaGenerator {
 
     public static GeneratedProgram javaGenerator(CompiledProgram program) {
         var compiledProgram = dataMap(toGeneratedValue(program));
-        var generated = dataMap(GeneratedJavaGenerator.java_generator__130_0(compiledProgram));
+        var generated = dataMap(GeneratedJavaGenerator.java_generator__132_0(compiledProgram));
         var modules = list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
                 .toList();
