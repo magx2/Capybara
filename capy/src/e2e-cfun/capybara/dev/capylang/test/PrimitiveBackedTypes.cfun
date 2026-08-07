@@ -45,6 +45,7 @@ fun uppercase_triple(value: triple): String = value.to_upper_case()
 fun replace_triple(value: triple): triple = value.triple()
 fun append_to_triple(value: triple, suffix: String): String = value + suffix
 fun plus_triple(value: triple, suffix: String): String = value.plus(suffix)
+fun label_triple_with_external_backing_method(value: triple): String = value.backing_proxy_label()
 
 fun proxied_long_to_int(value: proxied_long): int = value.to_int()
 fun custom_long.to_int(): int = 99
