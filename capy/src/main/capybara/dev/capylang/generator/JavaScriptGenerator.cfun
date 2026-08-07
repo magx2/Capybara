@@ -2429,10 +2429,17 @@ private fun java_script_callable_binding_type(typeName: String): bool =
 private fun java_script_binary_runtime_call(name: String, binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     name
         + "("
-        + java_script_expression_code(binary.left, env, module, allModules)
+        + java_script_primitive_backed_value_code(binary.left, env, module, allModules)
         + ", "
-        + java_script_expression_code(binary.right, env, module, allModules)
+        + java_script_primitive_backed_value_code(binary.right, env, module, allModules)
         + ")"
+
+/// Emits an expression's unwrapped backing value when its declared type is primitive-backed.
+private fun java_script_primitive_backed_value_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = java_script_expression_code(expression, env, module, allModules)
+    match java_script_primitive_backed_backing_type(java_script_expression_type(expression, env, module, allModules), module, allModules) with
+    case Some _ -> "__capy_get_field(" + code + ", 'value')"
+    case None -> code
 
 /// Emits JavaScript code for binary extension operator.
 private fun java_script_binary_extension_operator_code(function: CompiledFunction, binary: CompiledBinaryExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2632,7 +2639,21 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
             case None ->
                 match java_script_find_imported_method_function(receiverType, call.name, module.imports, module, allModules) with
                 case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
-                case None -> java_script_raw_method_call_code(call, env, module, allModules)
+                case None ->
+                    match java_script_find_type_or_backing_method_binding(receiverType, call.name, module, allModules) with
+                    case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
+                    case None ->
+                        match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
+                        case Some { backingType } -> java_script_primitive_backed_method_call_code(call, backingType, env, module, allModules)
+                        case None -> java_script_raw_method_call_code(call, env, module, allModules)
+
+/// Emits a missing method call against a primitive-backed value's unwrapped backing value.
+private fun java_script_primitive_backed_method_call_code(call: CompiledMethodCallExpression, backingType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiver = "__capy_get_field(" + java_script_expression_code(call.receiver, env, module, allModules) + ", 'value')"
+    if backingType == "String" & call.name == "plus" & java_script_one_method_argument(call.arguments)
+    then "__capy_add(" + receiver + ", " + java_script_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else receiver + "." + java_script_method_name(call.name)
+        + "(" + java_script_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Emits JavaScript code for object-oriented constructor call.
 private fun java_script_oo_constructor_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4878,7 +4899,19 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
         case None ->
             match java_script_find_imported_extension_method_return_type_with_receiver_type(receiverType, call, module, allModules) with
             case Some { returnType } -> returnType
-            case None -> java_script_unknown_type()
+            case None ->
+                match java_script_find_type_or_backing_method_return_type(receiverType, call.name, module, allModules) with
+                case Some { returnType } -> returnType
+                case None ->
+                    match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
+                    case Some { backingType } -> java_script_primitive_backed_method_call_type(call, backingType)
+                    case None -> java_script_unknown_type()
+
+/// Computes the return type of a method proxied to a primitive backing value.
+private fun java_script_primitive_backed_method_call_type(call: CompiledMethodCallExpression, backingType: String): String =
+    if backingType == "String" & call.name == "plus" & java_script_one_method_argument(call.arguments)
+    then "String"
+    else java_script_unknown_type()
 
 /// Infers the expression type for callable call.
 private fun java_script_callable_call_expression_type(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5944,6 +5977,42 @@ private fun java_script_find_imported_extension_method_return_type_with_receiver
     if receiverType == java_script_unknown_type()
     then /capy/lang/Option.None {}
     else java_script_find_imported_method_function_return_type(receiverType, call.name, module.imports, module, allModules)
+
+/// Finds a method binding on the declared type before proxying to a primitive-backed type's backing type.
+private fun java_script_find_type_or_backing_method_binding(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_method_binding_in_modules(receiverType, methodName, allModules, module) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None ->
+        match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
+        case Some { backingType } -> java_script_find_method_binding_in_modules(backingType, methodName, allModules, module)
+        case None -> /capy/lang/Option.None {}
+
+/// Finds a method return type on the declared type before proxying to a primitive-backed type's backing type.
+private fun java_script_find_type_or_backing_method_return_type(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    match java_script_find_method_return_type_in_modules(receiverType, methodName, allModules) with
+    case Some { returnType } -> /capy/lang/Option.Some { returnType }
+    case None ->
+        match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
+        case Some { backingType } -> java_script_find_method_return_type_in_modules(backingType, methodName, allModules)
+        case None -> /capy/lang/Option.None {}
+
+/// Finds a method binding by its exact receiver type in compiled modules.
+private fun java_script_find_method_binding_in_modules(receiverType: String, methodName: String, modules: List[CompiledModule], module: CompiledModule): /capy/lang/Option[String] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { targetModule } ->
+        match java_script_find_local_method_function(receiverType, methodName, targetModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { java_script_module_function_binding(targetModule, function, module) }
+        case None -> java_script_find_method_binding_in_modules(receiverType, methodName, modules[1:], module)
+
+/// Finds a method return type by its exact receiver type in compiled modules.
+private fun java_script_find_method_return_type_in_modules(receiverType: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[String] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { targetModule } ->
+        match java_script_find_local_method_function(receiverType, methodName, targetModule.functions) with
+        case Some { function } -> /capy/lang/Option.Some { function.returnType.name }
+        case None -> java_script_find_method_return_type_in_modules(receiverType, methodName, modules[1:])
 
 /// Finds an imported method function in scope, imports, or compiled modules.
 private fun java_script_find_imported_method_function(receiverType: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
@@ -8425,12 +8494,15 @@ private fun java_script_data_import_matches(name: String, declaration: CompiledI
 private fun java_script_primitive_backed_backing_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
     if java_script_qualified_call_name(name)
     then java_script_primitive_backed_backing_type_in_qualified_name(name, module, allModules)
-    else match java_script_primitive_backed_backing_type_in_functions(name, module.functions) with
-    case Some { backingType } -> /capy/lang/Option.Some { backingType }
+    else match module.visiblePrimitiveBackedTypes.get(java_script_type_unqualified_name(name)) with
+    case Some { primitiveBackedType } -> /capy/lang/Option.Some { primitiveBackedType.backingType.name }
     case None ->
-        match java_script_primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
+        match java_script_primitive_backed_backing_type_in_functions(name, module.functions) with
         case Some { backingType } -> /capy/lang/Option.Some { backingType }
-        case None -> java_script_primitive_backed_backing_type_in_modules(name, allModules)
+        case None ->
+            match java_script_primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
+            case Some { backingType } -> /capy/lang/Option.Some { backingType }
+            case None -> java_script_primitive_backed_backing_type_in_modules(name, allModules)
 
 /// Computes the JavaScript name for primitive backed backing type in qualified.
 private fun java_script_primitive_backed_backing_type_in_qualified_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
