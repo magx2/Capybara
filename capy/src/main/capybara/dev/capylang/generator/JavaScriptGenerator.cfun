@@ -5,6 +5,7 @@ from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnot
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionBinding import { CompiledFunctionBinding }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
@@ -2640,22 +2641,16 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
                 match java_script_find_imported_method_function(receiverType, call.name, module.imports, module, allModules) with
                 case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
                 case None ->
-                    match java_script_find_method_binding_in_modules(receiverType, call.name, allModules, module) with
-                    case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
+                    match java_script_find_primitive_backed_proxy_binding(receiverType, call.name, module) with
+                    case Some { binding } -> java_script_primitive_backed_extension_method_binding_call_code(binding, call, env, module, allModules)
                     case None ->
                         match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
-                        case Some { backingType } -> java_script_primitive_backed_method_or_extension_call_code(call, backingType, env, module, allModules)
+                        case Some { backingType } -> java_script_primitive_backed_method_call_code(call, backingType, env, module, allModules)
                         case None -> java_script_raw_method_call_code(call, env, module, allModules)
 
-/// Emits a proxied extension method when available, otherwise a raw backing-value method call.
-private fun java_script_primitive_backed_method_or_extension_call_code(call: CompiledMethodCallExpression, backingType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match java_script_find_method_binding_in_modules(backingType, call.name, allModules, module) with
-    case Some { binding } -> java_script_primitive_backed_extension_method_binding_call_code(binding, call, env, module, allModules)
-    case None -> java_script_primitive_backed_method_call_code(call, backingType, env, module, allModules)
-
 /// Emits a backing-type extension method with an unwrapped primitive-backed receiver.
-private fun java_script_primitive_backed_extension_method_binding_call_code(binding: String, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    binding
+private fun java_script_primitive_backed_extension_method_binding_call_code(binding: CompiledFunctionBinding, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_script_linked_function_binding(binding, module, java_script_primitive_backed_proxy_bindings(java_script_expression_type(call.receiver, env, module, allModules), module))
         + "("
         + java_script_primitive_backed_value_code(call.receiver, env, module, allModules)
         + java_script_extension_method_argument_tail(call.arguments, env, module, allModules)
@@ -5885,6 +5880,38 @@ private fun java_script_module_function_binding(targetModule: CompiledModule, fu
         + java_script_string_literal(java_script_imported_function_export_name(function, targetModule.functions))
         + "]"
 
+/// Creates a JavaScript function reference from compiler-linked origin metadata.
+private fun java_script_linked_function_binding(binding: CompiledFunctionBinding, module: CompiledModule, bindings: List[CompiledFunctionBinding]): String =
+    if binding.moduleName == module.name & binding.modulePath == module.path
+    then java_script_function_name(binding.function)
+    else "require("
+        + java_script_string_literal(java_script_relative_require_path(java_script_module_path(module), java_script_function_binding_module_path(binding)))
+        + ")["
+        + java_script_string_literal(java_script_linked_function_export_name(binding, bindings))
+        + "]"
+
+/// Computes the generated module path owning a linked function.
+private fun java_script_function_binding_module_path(binding: CompiledFunctionBinding): String =
+    if binding.modulePath.is_empty()
+    then binding.moduleName
+    else binding.modulePath + "/" + binding.moduleName
+
+/// Computes the JavaScript export key for a linked function.
+private fun java_script_linked_function_export_name(binding: CompiledFunctionBinding, bindings: List[CompiledFunctionBinding]): String =
+    if java_script_linked_function_name_overloaded(binding, bindings, 0) > 1
+    then binding.function.name
+    else java_script_export_name(binding.function)
+
+/// Counts linked overloads with the same generated function name.
+private fun java_script_linked_function_name_overloaded(target: CompiledFunctionBinding, bindings: List[CompiledFunctionBinding], count: int): int =
+    match bindings[0] with
+    case None -> count
+    case Some { binding } ->
+        let sameFunction = binding.function.name == target.function.name
+            & binding.moduleName == target.moduleName
+            & binding.modulePath == target.modulePath
+        java_script_linked_function_name_overloaded(target, bindings[1:], if sameFunction then count + 1 else count)
+
 /// Collects imported function export name visible to the current module.
 private fun java_script_imported_function_export_name(function: CompiledFunction, functions: List[CompiledFunction]): String =
     if java_script_exported_function_overloaded(function.name, functions)
@@ -6006,30 +6033,9 @@ private fun java_script_find_imported_extension_method_return_type_with_receiver
 
 /// Finds a method return type on the declared type before proxying to a primitive-backed type's backing type.
 private fun java_script_find_type_or_backing_method_return_type(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    match java_script_find_method_return_type_in_modules(receiverType, methodName, allModules) with
-    case Some { returnType } -> /capy/lang/Option.Some { returnType }
-    case None ->
-        match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
-        case Some { backingType } -> java_script_find_method_return_type_in_modules(backingType, methodName, allModules)
-        case None -> /capy/lang/Option.None {}
-
-/// Finds a method binding by its exact receiver type in compiled modules.
-private fun java_script_find_method_binding_in_modules(receiverType: String, methodName: String, modules: List[CompiledModule], module: CompiledModule): /capy/lang/Option[String] =
-    match modules[0] with
+    match java_script_find_primitive_backed_proxy_binding(receiverType, methodName, module) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function.returnType.name }
     case None -> /capy/lang/Option.None {}
-    case Some { targetModule } ->
-        match java_script_find_local_method_function(receiverType, methodName, targetModule.functions) with
-        case Some { function } -> /capy/lang/Option.Some { java_script_module_function_binding(targetModule, function, module) }
-        case None -> java_script_find_method_binding_in_modules(receiverType, methodName, modules[1:], module)
-
-/// Finds a method return type by its exact receiver type in compiled modules.
-private fun java_script_find_method_return_type_in_modules(receiverType: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[String] =
-    match modules[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { targetModule } ->
-        match java_script_find_local_method_function(receiverType, methodName, targetModule.functions) with
-        case Some { function } -> /capy/lang/Option.Some { function.returnType.name }
-        case None -> java_script_find_method_return_type_in_modules(receiverType, methodName, modules[1:])
 
 /// Finds an imported method function in scope, imports, or compiled modules.
 private fun java_script_find_imported_method_function(receiverType: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
@@ -6127,6 +6133,25 @@ private fun java_script_find_local_binary_extension_operator_with_left_type(bina
 private fun java_script_find_local_method_function(receiverType: String, methodName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     let normalizedMethodName = java_script_method_member_name(methodName)
     java_script_find_local_method_function_with_suffixes(receiverType, methodName, "." + normalizedMethodName, ".`" + normalizedMethodName + "`", functions)
+
+/// Finds a backing function selected and linked by the compiler for a primitive-backed type.
+private fun java_script_find_primitive_backed_proxy_binding(receiverType: String, methodName: String, module: CompiledModule): /capy/lang/Option[CompiledFunctionBinding] =
+    java_script_find_function_binding(java_script_primitive_backed_proxy_bindings(receiverType, module), methodName)
+
+/// Returns compiler-linked proxy bindings for a primitive-backed receiver.
+private fun java_script_primitive_backed_proxy_bindings(receiverType: String, module: CompiledModule): List[CompiledFunctionBinding] =
+    match module.visiblePrimitiveBackedTypes.get(java_script_method_owner_base_name(receiverType)) with
+    case Some { primitiveBackedType } -> primitiveBackedType.proxiedFunctions
+    case None -> []
+
+/// Finds a linked proxy binding by method member name.
+private fun java_script_find_function_binding(bindings: List[CompiledFunctionBinding], methodName: String): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if java_script_method_function_matches(java_script_method_owner_name(binding.function.name), methodName, binding.function)
+        then /capy/lang/Option.Some { binding }
+        else java_script_find_function_binding(bindings[1:], methodName)
 
 private fun java_script_find_local_method_function_with_suffixes(receiverType: String, methodName: String, directSuffix: String, quotedSuffix: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
