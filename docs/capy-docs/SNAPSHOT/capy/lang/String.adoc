@@ -251,11 +251,6 @@ Single-character String value.
 Returns true when both chars contain the same character.
 
 
-===== fun char.compare(other: xref:#type-char[char]): xref:../../capy/lang/Ordering.adoc#type-Ordering[Ordering]
-
-Compares this char with `other` using case-sensitive lexicographic ordering.
-
-
 ===== fun char.to_lower_case(): xref:#type-char[char]
 
 Returns this char converted to lowercase when it is an ASCII uppercase letter.
