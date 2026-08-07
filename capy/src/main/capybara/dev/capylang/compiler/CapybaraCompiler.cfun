@@ -8,6 +8,7 @@ from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnot
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionBinding import { CompiledFunctionBinding }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
@@ -55,11 +56,11 @@ from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 /// Captured placeholders and original arguments for expanding a partially applied call.
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
 /// Library import additions computed together to avoid repeated import/library scans.
-private data CompiledLibraryImports { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+private data CompiledLibraryImports { functions: List[CompiledFunction], functionBindings: List[CompiledFunctionBinding], staticImports: List[StaticImport] }
 /// Compiled modules accumulated by module key while preserving the historical reversed output order.
 private data CompiledModuleMergeIndex { modules: Dict[CompiledModule], order: List[String] }
 /// Imported library function and explicit static-import selection computed in one function scan.
-private data CompiledLibraryImportSelection { functions: List[CompiledFunction], staticImports: List[StaticImport] }
+private data CompiledLibraryImportSelection { functions: List[CompiledFunction], functionBindings: List[CompiledFunctionBinding], staticImports: List[StaticImport] }
 /// Imported and excluded name indexes for one import declaration.
 private data CompiledImportNameIndexes { importedNames: Dict[bool], excludedNames: Dict[bool] }
 /// Precomputed import path forms used while matching one import against available libraries.
@@ -158,9 +159,57 @@ private fun validation_library_modules(libraries: List[CompiledModule]): List[St
 
 /// Compiles parsed modules and merges module fragments that share the same name and path.
 private fun compile_modules(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex): List[CompiledModule] =
-    compiled_module_merge_index_values(
+    let compiledModules = compiled_module_merge_index_values(
         compile_module_merge_index(modules, allModules, libraryIndex, CompiledModuleMergeIndex { modules: {:}, order: [] })
     )
+    link_compiled_module_proxies(compiledModules, compiledModules)
+
+/// Resolves source-module imports and primitive-backed proxy functions after module fragments are merged.
+private fun link_compiled_module_proxies(modules: List[CompiledModule], allModules: List[CompiledModule]): List[CompiledModule] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        let visibleFunctionBindings = module.functionBindings + linked_source_import_bindings(module.imports, module, allModules)
+        [module.with(
+            visiblePrimitiveBackedTypes: compile_primitive_backed_type_proxies(module.visiblePrimitiveBackedTypes, visibleFunctionBindings)
+        )] + link_compiled_module_proxies(modules[1:], allModules)
+
+/// Collects origin-preserving bindings selected by unqualified source-module imports.
+private fun linked_source_import_bindings(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): List[CompiledFunctionBinding] =
+    match imports[0] with
+    case None -> []
+    case Some { declaration } ->
+        let rest = linked_source_import_bindings(imports[1:], module, allModules)
+        if declaration.qualified
+        then rest
+        else match find_compiled_source_import(declaration, module, allModules) with
+        case None -> rest
+        case Some { importedModule } ->
+            imported_library_selection_from_module(declaration, importedModule.functionBindings, false).functionBindings + rest
+
+/// Finds the compiled source module targeted by an import declaration.
+private fun find_compiled_source_import(declaration: CompiledImportDeclaration, module: CompiledModule, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    let className = compiled_imported_module_class(module, declaration.modulePath)
+    find_compiled_module_by_class(className, modules)
+
+/// Finds a compiled module by its generated class name.
+private fun find_compiled_module_by_class(className: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { module } ->
+        if compiled_module_class_name(module) == className
+        then /capy/lang/Option.Some { module }
+        else find_compiled_module_by_class(className, modules[1:])
+
+/// Resolves an import path relative to a compiled module as a generated class name.
+private fun compiled_imported_module_class(module: CompiledModule, modulePath: String): String =
+    if compiler_string_has_prefix(modulePath, "/")
+    then normalize_import_module_path(modulePath).replace("/", ".")
+    else if modulePath ? "/"
+    then normalize_import_module_path(modulePath).replace("/", ".")
+    else if module.path.is_empty()
+    then modulePath
+    else module.path.replace("/", ".") + "." + modulePath
 
 /// Builds a merge index for compiled modules without repeatedly scanning the already-compiled tail.
 private fun compile_module_merge_index(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex, index: CompiledModuleMergeIndex): CompiledModuleMergeIndex =
@@ -208,6 +257,7 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
         types: first.types + second.types,
         visiblePrimitiveBackedTypes: first.visiblePrimitiveBackedTypes + second.visiblePrimitiveBackedTypes,
         functions: first.functions + second.functions,
+        functionBindings: first.functionBindings + second.functionBindings,
         imports: first.imports + second.imports,
         derivers: first.derivers + second.derivers,
         annotations: first.annotations + second.annotations,
@@ -217,14 +267,17 @@ private fun merge_compiled_modules(first: CompiledModule, second: CompiledModule
 /// Converts a parsed module into compiled metadata.
 private fun compile_module(module: ParsedModule, allModules: List[ParsedModule]): CompiledModule =
     let definitionIndexes = compile_definition_indexes(module.definitions, module, allModules)
+    let functions = compile_functions(module.definitions, definitionIndexes, module, allModules)
+        + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
+        + compile_object_class_functions(module.objectOriented.classes, module, allModules)
+    let path = normalize_module_path(module.path)
     CompiledModule {
         name: module.name,
-        path: normalize_module_path(module.path),
+        path: path,
         types: {:},
         visiblePrimitiveBackedTypes: definitionIndexes.visiblePrimitiveBackedTypes,
-        functions: compile_functions(module.definitions, definitionIndexes, module, allModules)
-            + compile_object_interface_functions(module.objectOriented.interfaces, module, allModules)
-            + compile_object_class_functions(module.objectOriented.classes, module, allModules),
+        functions: functions,
+        functionBindings: compile_function_bindings(functions, module.name, path),
         imports: compile_imports(module.imports),
         derivers: definitionIndexes.compiledDerivers,
         annotations: definitionIndexes.annotations,
@@ -238,21 +291,89 @@ private fun compile_primitive_backed_type(declaration: PrimitiveBackedTypeDeclar
         visibility: declaration.visibility,
         documentation: declaration.documentation,
         backingType: compile_type_in_module(declaration.backingType, module, allModules),
+        proxiedFunctions: [],
         location: compile_location(declaration.location)
     }
+
+/// Attaches linked backing-function bindings to every primitive-backed type.
+private fun compile_primitive_backed_type_proxies(types: Dict[CompiledPrimitiveBackedType], bindings: List[CompiledFunctionBinding]): Dict[CompiledPrimitiveBackedType] =
+    types.entries().reduce({:}, (resolved, entry) =>
+        let type = entry[1]
+        resolved + (entry[0], type.with(proxiedFunctions: compile_primitive_backed_type_proxy_bindings(type, bindings, bindings)))
+    )
+
+/// Selects visible backing functions that are not shadowed by functions declared for the custom type.
+private fun compile_primitive_backed_type_proxy_bindings(type: CompiledPrimitiveBackedType, bindings: List[CompiledFunctionBinding], allBindings: List[CompiledFunctionBinding]): List[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> []
+    case Some { binding } ->
+        let rest = compile_primitive_backed_type_proxy_bindings(type, bindings[1:], allBindings)
+        let function = binding.function
+        if compiler_extension_function_owner_matches(function, type.backingType.name)
+        then
+            let methodName = compiler_extension_function_member(function.name)
+            if compiler_function_bindings_have_method(allBindings, type.name, methodName)
+            then rest
+            else [binding] + rest
+        else rest
+
+/// Checks whether visible bindings contain a function declared directly for a requested type.
+private fun compiler_function_bindings_have_method(bindings: List[CompiledFunctionBinding], ownerName: String, methodName: String): bool =
+    match bindings[0] with
+    case None -> false
+    case Some { binding } ->
+        if compiler_extension_function_owner_matches(binding.function, ownerName)
+            & compiler_extension_function_member(binding.function.name) == methodName
+        then true
+        else compiler_function_bindings_have_method(bindings[1:], ownerName, methodName)
+
+/// Checks whether a function is an extension declared for a requested receiver type.
+private fun compiler_extension_function_owner_matches(function: CompiledFunction, ownerName: String): bool =
+    let separator = compiler_last_index_of(function.name, ".", 0, -1)
+    if separator < 0 | function.name ? "__local__" | compiler_string_has_prefix(function.visibility, "const:")
+    then false
+    else compiler_extension_owner_base(function.name[0, separator]) == compiler_extension_owner_base(ownerName)
+
+/// Computes the normalized member name of an extension function.
+private fun compiler_extension_function_member(name: String): String =
+    let separator = compiler_last_index_of(name, ".", 0, -1)
+    compiler_extension_member_normalized(name[separator + 1, name.size().value])
+
+/// Computes an extension owner without generic arguments.
+private fun compiler_extension_owner_base(name: String): String =
+    let bracket = compiler_first_index_of(name, "[", 0)
+    if bracket < 0 then name else name[0, bracket]
+
+/// Removes optional backticks from an extension member.
+private fun compiler_extension_member_normalized(name: String): String =
+    if name.size().value >= 2 & compiler_string_has_prefix(name, "`")
+    then name[1, name.size().value - 1]
+    else name
+
+/// Builds origin-preserving bindings for functions declared by one module.
+private fun compile_function_bindings(functions: List[CompiledFunction], moduleName: String, modulePath: String): List[CompiledFunctionBinding] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [CompiledFunctionBinding {
+        moduleName: moduleName,
+        modulePath: modulePath,
+        function: function
+    }] + compile_function_bindings(functions[1:], moduleName, modulePath)
 
 /// Compiles a parsed module and appends functions and static imports made visible by library imports.
 private fun compile_module_with_libraries(module: ParsedModule, allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex): CompiledModule =
     let compiled = compile_module(module, allModules)
     let libraryImports = compile_library_imports(compiled.imports, libraryIndex)
+    let functionBindings = compiled.functionBindings + libraryImports.functionBindings
     compiled.with(
         functions: compiled.functions + libraryImports.functions,
+        functionBindings: functionBindings,
         staticImports: libraryImports.staticImports
     )
 
 private fun compile_library_imports(imports: List[CompiledImportDeclaration], libraryIndex: CompiledLibraryIndex): CompiledLibraryImports =
     match imports[0] with
-    case None -> CompiledLibraryImports { functions: [], staticImports: [] }
+    case None -> CompiledLibraryImports { functions: [], functionBindings: [], staticImports: [] }
     case Some { declaration } ->
         let rest = compile_library_imports(imports[1:], libraryIndex)
         if declaration.qualified
@@ -261,31 +382,33 @@ private fun compile_library_imports(imports: List[CompiledImportDeclaration], li
             case Some { library } ->
                 let selection = imported_library_selection_from_module(
                     declaration,
-                    library.functions,
-                    compiled_module_class_name(library),
+                    library.functionBindings,
                     library_requires_explicit_static_imports(declaration)
                 )
                 CompiledLibraryImports {
                     functions: selection.functions + rest.functions,
+                    functionBindings: selection.functionBindings + rest.functionBindings,
                     staticImports: library_static_imports_from_selection(declaration, library, selection) + rest.staticImports
                 }
             case None -> rest
 
 /// Filters exported library functions and explicit static imports in one pass.
-private fun imported_library_selection_from_module(declaration: CompiledImportDeclaration, functions: List[CompiledFunction], className: String, includeStaticImports: bool): CompiledLibraryImportSelection =
-    imported_library_selection_from_module_with_indexes(declaration, compiled_import_name_indexes(declaration), functions, className, includeStaticImports)
+private fun imported_library_selection_from_module(declaration: CompiledImportDeclaration, bindings: List[CompiledFunctionBinding], includeStaticImports: bool): CompiledLibraryImportSelection =
+    imported_library_selection_from_module_with_indexes(declaration, compiled_import_name_indexes(declaration), bindings, includeStaticImports)
 
 /// Filters exported library functions and explicit static imports with precomputed import-name indexes.
-private fun imported_library_selection_from_module_with_indexes(declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes, functions: List[CompiledFunction], className: String, includeStaticImports: bool): CompiledLibraryImportSelection =
-    match functions[0] with
-    case None -> CompiledLibraryImportSelection { functions: [], staticImports: [] }
-    case Some { function } ->
-        let rest = imported_library_selection_from_module_with_indexes(declaration, indexes, functions[1:], className, includeStaticImports)
+private fun imported_library_selection_from_module_with_indexes(declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes, bindings: List[CompiledFunctionBinding], includeStaticImports: bool): CompiledLibraryImportSelection =
+    match bindings[0] with
+    case None -> CompiledLibraryImportSelection { functions: [], functionBindings: [], staticImports: [] }
+    case Some { binding } ->
+        let function = binding.function
+        let rest = imported_library_selection_from_module_with_indexes(declaration, indexes, bindings[1:], includeStaticImports)
         if imported_library_function(declaration, indexes, function)
         then CompiledLibraryImportSelection {
             functions: [function.with(visibility: "imported")] + rest.functions,
+            functionBindings: [binding] + rest.functionBindings,
             staticImports: if includeStaticImports
-                then [StaticImport { className: className, memberName: compiler_java_function_name(function), enumValue: false }] + rest.staticImports
+                then [StaticImport { className: compiled_function_binding_class_name(binding), memberName: compiler_java_function_name(function), enumValue: false }] + rest.staticImports
                 else rest.staticImports
         }
         else rest
@@ -418,6 +541,12 @@ private fun compiled_module_path(module: CompiledModule): String =
 /// Computes the generated Java class name for a compiled module.
 private fun compiled_module_class_name(module: CompiledModule): String =
     compiled_module_path(module).replace("/", ".")
+
+/// Computes the generated Java class name for an origin-preserving function binding.
+private fun compiled_function_binding_class_name(binding: CompiledFunctionBinding): String =
+    if binding.modulePath.is_empty()
+    then binding.moduleName
+    else binding.modulePath.replace("/", ".") + "." + binding.moduleName
 
 /// Checks whether an import path targets the Capybara standard library.
 private fun compiler_stdlib_import(modulePath: String): bool =
@@ -1741,6 +1870,14 @@ private fun compiler_last_index_of(value: String, needle: String, idx: int, foun
         case None -> found
         case Some { char } ->
             compiler_last_index_of(value, needle, idx + 1, if char == needle then idx else found)
+
+/// Computes the first index of a character from an offset.
+private fun compiler_first_index_of(value: String, needle: String, idx: int): int =
+    if idx >= value.size().value
+    then -1
+    else match value[idx] with
+        case None -> -1
+        case Some { char } -> if char == needle then idx else compiler_first_index_of(value, needle, idx + 1)
 
 /// Computes the compiled type for preferred data object.
 private fun compiler_preferred_data_object_type(first: TypeReference, second: TypeReference): TypeReference =

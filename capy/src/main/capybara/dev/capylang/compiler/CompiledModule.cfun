@@ -3,6 +3,7 @@ from /capy/collection/List import { List }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionBinding import { CompiledFunctionBinding }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
 from /dev/capylang/compiler/GenericDataType import { GenericDataType }
@@ -17,6 +18,7 @@ data CompiledModule {
     types: Dict[GenericDataType],
     visiblePrimitiveBackedTypes: Dict[CompiledPrimitiveBackedType],
     functions: List[CompiledFunction],
+    functionBindings: List[CompiledFunctionBinding],
     imports: List[CompiledImportDeclaration],
     derivers: Dict[CompiledDeriverDeclaration],
     annotations: Dict[CompiledAnnotationDeclaration],

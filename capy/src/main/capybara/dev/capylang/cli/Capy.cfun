@@ -17,6 +17,7 @@ from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnot
 from /dev/capylang/compiler/CompiledDeriverDeclaration import { CompiledDeriverDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { * }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionBinding import { CompiledFunctionBinding }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
@@ -2069,6 +2070,8 @@ private fun linked_decode_module(node: any): Result[CompiledModule] =
     let types <- linked_dict_field(node, "types", value => linked_decode_generic_data_type_value(value))
     let visiblePrimitiveBackedTypes <- linked_dict_field(node, "visiblePrimitiveBackedTypes", value => linked_decode_primitive_backed_type_value(value))
     let functions <- linked_list_field(node, "functions", value => linked_decode_function_value(value))
+    let decodedFunctionBindings <- linked_list_field_or_empty(node, "functionBindings", value => linked_decode_function_binding_value(value))
+    let functionBindings = if decodedFunctionBindings.is_empty() then linked_default_function_bindings(functions, name, path) else decodedFunctionBindings
     let imports <- linked_list_field(node, "imports", value => linked_decode_import_value(value))
     let derivers <- linked_dict_field(node, "derivers", value => linked_decode_deriver_value(value))
     let annotations <- linked_dict_field(node, "annotations", value => linked_decode_annotation_value(value))
@@ -2079,6 +2082,7 @@ private fun linked_decode_module(node: any): Result[CompiledModule] =
         types: types,
         visiblePrimitiveBackedTypes: visiblePrimitiveBackedTypes,
         functions: functions,
+        functionBindings: functionBindings,
         imports: imports,
         derivers: derivers,
         annotations: annotations,
@@ -2102,6 +2106,7 @@ private fun linked_decode_primitive_backed_type(node: any): Result[CompiledPrimi
     let documentation <- linked_list_field(node, "documentation", value => linked_string_value(value))
     let backingTypeData <- linked_data_field(node, "backingType")
     let backingType <- linked_decode_type_reference(backingTypeData)
+    let proxiedFunctions <- linked_list_field_or_empty(node, "proxiedFunctions", value => linked_decode_function_binding_value(value))
     let locationData <- linked_data_field(node, "location")
     let location <- linked_decode_source_location(locationData)
     CompiledPrimitiveBackedType {
@@ -2109,8 +2114,29 @@ private fun linked_decode_primitive_backed_type(node: any): Result[CompiledPrimi
         visibility: visibility,
         documentation: documentation,
         backingType: backingType,
+        proxiedFunctions: proxiedFunctions,
         location: location
     }
+
+private fun linked_decode_function_binding_value(value: any): Result[CompiledFunctionBinding] =
+    linked_decode_data_value(value, "CompiledFunctionBinding", node => linked_decode_function_binding(node))
+
+private fun linked_decode_function_binding(node: any): Result[CompiledFunctionBinding] =
+    let checked <- linked_expect_data(node, "CompiledFunctionBinding")
+    let moduleName <- linked_string_field(node, "moduleName")
+    let modulePath <- linked_string_field(node, "modulePath")
+    let functionData <- linked_data_field(node, "function")
+    let function <- linked_decode_function(functionData)
+    CompiledFunctionBinding { moduleName: moduleName, modulePath: modulePath, function: function }
+
+private fun linked_default_function_bindings(functions: List[CompiledFunction], moduleName: String, modulePath: String): List[CompiledFunctionBinding] =
+    match functions[0] with
+    case None -> []
+    case Some { function } -> [CompiledFunctionBinding {
+        moduleName: moduleName,
+        modulePath: modulePath,
+        function: function
+    }] + linked_default_function_bindings(functions[1:], moduleName, modulePath)
 
 private fun linked_decode_function_value(value: any): Result[CompiledFunction] =
     linked_decode_data_value(value, "CompiledFunction", node => linked_decode_function(node))

@@ -4,6 +4,7 @@ from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
 from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionBinding import { CompiledFunctionBinding }
 from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
 from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
 from /dev/capylang/compiler/CompiledModule import { CompiledModule }
@@ -5859,10 +5860,16 @@ private fun extension_method_call_code_with_receiver_type(function: CompiledFunc
 private fun extension_method_call_name(function: CompiledFunction, receiverType: CompiledTypeReference, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_extension_method_binding_in_scope(receiverType.name, methodName, module, allModules) with
     case Some { binding } ->
-        if same_java_module(binding.module, module)
+        if binding.moduleName == module.name & binding.modulePath == module.path
         then java_function_name(binding.function)
-        else module_fqcn(binding.module) + "." + java_function_name(binding.function)
+        else java_function_binding_class_name(binding) + "." + java_function_name(binding.function)
     case None -> java_function_name(function)
+
+/// Computes the generated Java class name for a linked function binding.
+private fun java_function_binding_class_name(binding: CompiledFunctionBinding): String =
+    if binding.modulePath.is_empty()
+    then binding.moduleName
+    else binding.modulePath.replace("/", ".") + "." + binding.moduleName
 
 /// Resolves a proxied extension method's receiver to its primitive backing type.
 private fun extension_method_receiver_type(function: CompiledFunction, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -8482,6 +8489,7 @@ private fun stdlib_annotations_module(): CompiledModule =
         types: {:},
         visiblePrimitiveBackedTypes: {:},
         functions: [],
+        functionBindings: [],
         imports: [],
         derivers: {:},
         annotations: {:},
@@ -9715,57 +9723,33 @@ private fun find_extension_method_in_scope(ownerName: String, methodName: String
     case None -> /capy/lang/Option.None {}
 
 /// Finds an extension method and its declaring module in scope.
-private fun find_extension_method_binding_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
-    match find_method_function(ownerName, methodName, module.functions) with
-    case Some { function } -> /capy/lang/Option.Some { JavaQualifiedFunctionBinding { module: module, function: function } }
-    case None ->
-        match find_extension_method_binding_in_imports(ownerName, methodName, module.imports, module, allModules) with
-        case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> find_extension_method_binding_in_type_or_backing_type(ownerName, methodName, module, allModules)
-
-/// Finds an extension method declared on a visible type before proxying to a primitive-backed type's backing type.
-private fun find_extension_method_in_type_or_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_extension_method_binding_in_type_or_backing_type(ownerName, methodName, module, allModules) with
-    case Some { binding } -> /capy/lang/Option.Some { binding.function }
-    case None -> /capy/lang/Option.None {}
-
-/// Finds an extension method binding on a visible type before proxying to its backing type.
-private fun find_extension_method_binding_in_type_or_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
-    match find_extension_method_binding_in_modules(ownerName, methodName, allModules) with
+private fun find_extension_method_binding_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match find_method_function_binding(ownerName, methodName, module.functionBindings) with
     case Some { binding } -> /capy/lang/Option.Some { binding }
     case None ->
-        match primitive_backed_backing_type(ownerName, module, allModules) with
-        case Some { backingType } -> find_extension_method_binding_for_backing_type(backingType.name, methodName, module, allModules)
-        case None -> /capy/lang/Option.None {}
-
-/// Finds a proxied backing-type method using normal local and import precedence.
-private fun find_extension_method_binding_for_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
-    match find_method_function(ownerName, methodName, module.functions) with
-    case Some { function } -> /capy/lang/Option.Some { JavaQualifiedFunctionBinding { module: module, function: function } }
-    case None ->
         match find_extension_method_binding_in_imports(ownerName, methodName, module.imports, module, allModules) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> find_extension_method_binding_in_modules(ownerName, methodName, allModules)
+        case None -> find_primitive_backed_proxy_binding(ownerName, methodName, module)
 
-/// Finds an extension method by its exact receiver type in compiled modules.
-private fun find_extension_method_in_modules(ownerName: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_extension_method_binding_in_modules(ownerName, methodName, modules) with
-    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+/// Finds a backing function selected and linked by the compiler for a primitive-backed type.
+private fun find_primitive_backed_proxy_binding(ownerName: String, methodName: String, module: CompiledModule): /capy/lang/Option[CompiledFunctionBinding] =
+    match module.visiblePrimitiveBackedTypes.get(method_owner_base_name(ownerName)) with
     case None -> /capy/lang/Option.None {}
-
-/// Finds an extension method and its declaring module by exact receiver type.
-private fun find_extension_method_binding_in_modules(ownerName: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
-    match modules[0] with
-    case None -> /capy/lang/Option.None {}
-    case Some { module } ->
-        match find_method_function(ownerName, methodName, module.functions) with
-        case Some { function } -> /capy/lang/Option.Some { JavaQualifiedFunctionBinding { module: module, function: function } }
-        case None -> find_extension_method_binding_in_modules(ownerName, methodName, modules[1:])
+    case Some { primitiveBackedType } -> find_method_function_binding(primitiveBackedType.backingType.name, methodName, primitiveBackedType.proxiedFunctions)
 
 /// Finds a method function in available declarations, imports, or modules.
 private fun find_method_function(ownerName: String, methodName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     let normalizedMethodName = method_member_name_normalized(methodName)
     find_method_function_with_suffixes(method_owner_base_name(ownerName), methodName, "." + normalizedMethodName, ".`" + normalizedMethodName + "`", functions)
+
+/// Finds an origin-preserving linked binding for a method function.
+private fun find_method_function_binding(ownerName: String, methodName: String, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if method_function_matches(method_owner_base_name(ownerName), methodName, binding.function)
+        then /capy/lang/Option.Some { binding }
+        else find_method_function_binding(ownerName, methodName, bindings[1:])
 
 private fun find_method_function_with_suffixes(ownerBaseName: String, methodName: String, directSuffix: String, quotedSuffix: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
     match functions[0] with
@@ -9820,7 +9804,7 @@ private fun find_extension_method_in_imports(ownerName: String, methodName: Stri
     case None -> /capy/lang/Option.None {}
 
 /// Finds an imported extension method and its declaring module.
-private fun find_extension_method_binding_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaQualifiedFunctionBinding] =
+private fun find_extension_method_binding_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
@@ -9838,7 +9822,7 @@ private fun find_extension_method_in_import(ownerName: String, methodName: Strin
     case None -> /capy/lang/Option.None {}
 
 /// Finds an extension method binding in one imported module.
-private fun find_extension_method_binding_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[JavaQualifiedFunctionBinding] =
+private fun find_extension_method_binding_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledFunctionBinding] =
     match find_module_by_class(className, allModules) with
     case Some { importedModule } -> find_extension_method_binding_in_imported_module(ownerName, methodName, rest, module, allModules, importedModule)
     case _ -> find_extension_method_binding_in_imports(ownerName, methodName, rest, module, allModules)
@@ -9850,9 +9834,9 @@ private fun find_extension_method_in_imported_module(ownerName: String, methodNa
     case None -> /capy/lang/Option.None {}
 
 /// Finds an extension method binding in a resolved imported module.
-private fun find_extension_method_binding_in_imported_module(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[JavaQualifiedFunctionBinding] =
-    match find_method_function(ownerName, methodName, importedModule.functions) with
-    case Some { function } -> /capy/lang/Option.Some { JavaQualifiedFunctionBinding { module: importedModule, function: function } }
+private fun find_extension_method_binding_in_imported_module(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledFunctionBinding] =
+    match find_method_function_binding(ownerName, methodName, importedModule.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
     case _ -> find_extension_method_binding_in_imports(ownerName, methodName, rest, module, allModules)
 
 /// Finds a function in import in available declarations, imports, or modules.

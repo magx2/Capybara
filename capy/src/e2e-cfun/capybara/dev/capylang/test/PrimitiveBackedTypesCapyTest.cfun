@@ -36,6 +36,7 @@ private fun primitive_backed_types_proxy_missing_methods_to_their_backing_type()
         assert_that(append_to_triple(triple! { "xyz" }, "def")).is_equal_to("xyzdef"),
         assert_that(plus_triple(triple! { "xyz" }, "def")).is_equal_to("xyzdef"),
         assert_that(label_triple_with_external_backing_method(triple! { "xyz" })).is_equal_to("backing:xyz"),
+        assert_that(ordered_string_compares_equal(ordered_string! { "abc" }, "abc")).is_true(),
     ])
 
 private fun all_numeric_primitive_backed_types_proxy_methods_and_operators(): Assert =
