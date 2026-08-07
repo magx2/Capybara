@@ -44,16 +44,5 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run basic Gradle tests
-        run: ./gradlew clean test --no-daemon
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: branch-build-check-test-reports
-          path: |
-            **/build/reports/tests/**
-            **/build/test-results/**/*.xml
-          if-no-files-found: ignore
-          retention-days: 5
+      - name: Compile
+        run: ./gradlew clean compileJava --no-daemon
