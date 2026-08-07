@@ -12,6 +12,11 @@ type user_id -> int with constructor {
 type order_id -> int
 type score -> int
 type token -> String
+type triple -> String with constructor {
+    if value.size() == 3
+    then Success { value }
+    else Error { kind: "capy.lang.argument.invalid", message: "triple must contain exactly three characters" }
+}
 
 const FIRST_USER_ID = user_id! { 1 }
 
@@ -27,6 +32,13 @@ fun append_token_suffix(value: String): String = value + "_suffix"
 fun pass_token_to_string(value: token): String = append_token_suffix(value)
 fun token.compare(other: token): bool = this.value == other.value
 fun tokens_match(left: token, right: token): bool = left.compare(right)
+
+fun triple.to_upper_case(): String = "TRIPLE"
+fun triple.triple(): triple = triple! { "abc" }
+fun uppercase_triple(value: triple): String = value.to_upper_case()
+fun replace_triple(value: triple): triple = value.triple()
+fun append_to_triple(value: triple, suffix: String): String = value + suffix
+fun plus_triple(value: triple, suffix: String): String = value.plus(suffix)
 
 fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
 fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }
