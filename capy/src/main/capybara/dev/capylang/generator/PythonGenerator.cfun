@@ -1179,7 +1179,8 @@ private fun python_binary_extension_operator_code_with_left_type(binary: Compile
 
 /// Emits Python code for binary extension operator.
 private fun python_binary_extension_operator_code(function: CompiledFunction, binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_function_name(function)
+    let receiverType = python_expression_type(binary.left, env, module, allModules)
+    python_extension_method_call_name(function, receiverType, binary.operator, module, allModules)
         + "("
         + python_expression_code(binary.left, env, module, allModules)
         + python_extension_method_argument_tail([binary.right], env, module, allModules)
@@ -1967,11 +1968,21 @@ private fun python_result_error_callable_code(mapper: CompiledExpression, env: L
 
 /// Emits Python code for extension method call.
 private fun python_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    python_function_name(function)
+    let receiverType = python_expression_type(call.receiver, env, module, allModules)
+    python_extension_method_call_name(function, receiverType, call.name, module, allModules)
         + "("
         + python_expression_code(call.receiver, env, module, allModules)
         + python_extension_method_argument_tail(call.arguments, env, module, allModules)
         + ")"
+
+/// Computes the declaring-module-qualified Python name for an extension method call.
+private fun python_extension_method_call_name(function: CompiledFunction, receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_extension_method_binding_in_scope(receiverType, methodName, module, allModules) with
+    case Some { binding } ->
+        if python_same_module(binding.module, module)
+        then python_function_name(binding.function)
+        else python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
+    case None -> python_function_name(function)
 
 /// Formats the recursive tail segment for extension method argument.
 private fun python_extension_method_argument_tail(arguments: List[CompiledExpression], env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2963,7 +2974,7 @@ private fun python_built_in_sequence_receiver_type(receiverType: String): bool =
 private fun python_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
     case Some { function } ->
-        python_function_name(function)
+        python_extension_method_call_name(function, receiverType, "get", module, allModules)
             + "("
             + python_expression_code(index.receiver, env, module, allModules)
             + python_index_argument_tail(index, env, module, allModules)
@@ -5616,30 +5627,57 @@ private fun python_find_binary_extension_operator_with_left_type(binary: Compile
 
 /// Finds an extension method in scope in scope, imports, or compiled modules.
 private fun python_find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_extension_method_binding_in_scope(ownerName, methodName, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an extension method and its declaring module in scope.
+private fun python_find_extension_method_binding_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_method_function(ownerName, methodName, module.functions) with
-    case Some { function } -> /capy/lang/Option.Some { function }
+    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: module, function: function } }
     case None ->
-        match python_find_extension_method_in_imports(ownerName, methodName, module.imports, module, allModules) with
-        case Some { function } -> /capy/lang/Option.Some { function }
-        case None -> python_find_extension_method_in_type_or_backing_type(ownerName, methodName, module, allModules)
+        match python_find_extension_method_binding_in_imports(ownerName, methodName, module.imports, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_extension_method_binding_in_type_or_backing_type(ownerName, methodName, module, allModules)
 
 /// Finds an extension method declared on a visible type before proxying to a primitive-backed type's backing type.
 private fun python_find_extension_method_in_type_or_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match python_find_extension_method_in_modules(ownerName, methodName, allModules) with
-    case Some { function } -> /capy/lang/Option.Some { function }
+    match python_find_extension_method_binding_in_type_or_backing_type(ownerName, methodName, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an extension method binding on a visible type before proxying to its backing type.
+private fun python_find_extension_method_binding_in_type_or_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_extension_method_binding_in_modules(ownerName, methodName, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
     case None ->
         match python_primitive_backed_backing_type(ownerName, module, allModules) with
-        case Some { backingType } -> python_find_extension_method_in_modules(backingType, methodName, allModules)
+        case Some { backingType } -> python_find_extension_method_binding_for_backing_type(backingType, methodName, module, allModules)
         case None -> /capy/lang/Option.None {}
+
+/// Finds a proxied backing-type method using normal local and import precedence.
+private fun python_find_extension_method_binding_for_backing_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_method_function(ownerName, methodName, module.functions) with
+    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: module, function: function } }
+    case None ->
+        match python_find_extension_method_binding_in_imports(ownerName, methodName, module.imports, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_extension_method_binding_in_modules(ownerName, methodName, allModules)
 
 /// Finds an extension method by its exact receiver type in compiled modules.
 private fun python_find_extension_method_in_modules(ownerName: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_extension_method_binding_in_modules(ownerName, methodName, modules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an extension method and its declaring module by exact receiver type.
+private fun python_find_extension_method_binding_in_modules(ownerName: String, methodName: String, modules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match modules[0] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
         match python_find_method_function(ownerName, methodName, module.functions) with
-        case Some { function } -> /capy/lang/Option.Some { function }
-        case None -> python_find_extension_method_in_modules(ownerName, methodName, modules[1:])
+        case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: module, function: function } }
+        case None -> python_find_extension_method_binding_in_modules(ownerName, methodName, modules[1:])
 
 /// Finds a method function in scope, imports, or compiled modules.
 private fun python_find_method_function(ownerName: String, methodName: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
@@ -5665,6 +5703,12 @@ private fun python_method_function_matches(ownerName: String, methodName: String
 
 /// Finds an extension method in imports in scope, imports, or compiled modules.
 private fun python_find_extension_method_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_extension_method_binding_in_imports(ownerName, methodName, imports, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an imported extension method and its declaring module.
+private fun python_find_extension_method_binding_in_imports(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
@@ -5672,17 +5716,23 @@ private fun python_find_extension_method_in_imports(ownerName: String, methodNam
             & !declaration.qualified
             & !python_stdlib_import(declaration.modulePath)
             & !python_string_list_contains(methodName, declaration.excludedNames)
-        then python_find_extension_method_in_import(ownerName, methodName, imports[1:], declaration, module, allModules)
-        else python_find_extension_method_in_imports(ownerName, methodName, imports[1:], module, allModules)
+        then python_find_extension_method_binding_in_import(ownerName, methodName, imports[1:], declaration, module, allModules)
+        else python_find_extension_method_binding_in_imports(ownerName, methodName, imports[1:], module, allModules)
 
 /// Finds an extension method in import in scope, imports, or compiled modules.
 private fun python_find_extension_method_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_extension_method_binding_in_import(ownerName, methodName, rest, declaration, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an extension method binding in one imported module.
+private fun python_find_extension_method_binding_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     match python_find_imported_module(declaration, module, allModules) with
-    case None -> python_find_extension_method_in_imports(ownerName, methodName, rest, module, allModules)
+    case None -> python_find_extension_method_binding_in_imports(ownerName, methodName, rest, module, allModules)
     case Some { importedModule } ->
         match python_find_method_function(ownerName, methodName, importedModule.functions) with
-        case Some { function } -> /capy/lang/Option.Some { function }
-        case None -> python_find_extension_method_in_imports(ownerName, methodName, rest, module, allModules)
+        case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
+        case None -> python_find_extension_method_binding_in_imports(ownerName, methodName, rest, module, allModules)
 
 /// Computes the output or module path for import module.
 private fun python_import_module_path(modulePath: String, module: CompiledModule): String =
