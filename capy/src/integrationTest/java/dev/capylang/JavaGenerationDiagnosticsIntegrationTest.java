@@ -423,6 +423,39 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesSupportedListMethodWithoutFreeFunctionSymbol() throws Exception {
+        var source = writeSource("sample/ListSize.cfun", """
+                fun count(values: List[int]): int =
+                    values.size().value
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("values.size()")
+                .doesNotContain("Unsupported CFUN expression at");
+    }
+
+    @Test
+    void validatesTestProgramBeforeJavaGeneration() throws Exception {
+        writeSource("sample/Main.cfun", """
+                fun count(values: List[int]): int = values.size().value
+                """);
+        var testSource = writeTestSource("sample/MainTest.cfun", """
+                fun broken(values: List[int]): bool =
+                    values.length() == 4
+                """);
+
+        assertThat(compileGenerateWithTestsStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/MainTest.cfun:2:4: Method `length` on `List` is not supported by the Java backend.
+                """);
+
+        assertThat(generatedTestPath(testSource)).doesNotExist();
+    }
+
+    @Test
     void allowsJavaUnsupportedMethodForJavaScriptTarget() throws Exception {
         var source = writeSource("sample/EffectFlatMapJavaScript.cfun", """
                 import /capy/lang/Effect
@@ -491,8 +524,40 @@ class JavaGenerationDiagnosticsIntegrationTest {
         return buffer.toString(StandardCharsets.UTF_8);
     }
 
+    private String compileGenerateWithTestsStderr() {
+        var originalError = System.err;
+        var buffer = new ByteArrayOutputStream();
+        try (var errorStream = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
+            System.setErr(errorStream);
+            BackendCompilationContext.withOutputType("java", () -> Capy.runCompileGenerate(
+                    new Capy.CompileGenerateOptions(
+                            "java",
+                            inputDir().toString(),
+                            outputDir().toString(),
+                            Optional.empty(),
+                            Optional.of(testInputDir().toString()),
+                            Optional.of(testOutputDir().toString()),
+                            Optional.empty(),
+                            Optional.empty(),
+                            false,
+                            false,
+                            Capy.LogLevel.WARN
+                    )).unsafeRun());
+        } finally {
+            System.setErr(originalError);
+        }
+        return buffer.toString(StandardCharsets.UTF_8);
+    }
+
     private Path writeSource(String relativePath, String source) throws IOException {
         var path = inputDir().resolve(relativePath);
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, source);
+        return path;
+    }
+
+    private Path writeTestSource(String relativePath, String source) throws IOException {
+        var path = testInputDir().resolve(relativePath);
         Files.createDirectories(path.getParent());
         Files.writeString(path, source);
         return path;
@@ -508,12 +573,26 @@ class JavaGenerationDiagnosticsIntegrationTest {
         return outputDir().resolve(relative).resolveSibling(fileName);
     }
 
+    private Path generatedTestPath(Path source) {
+        var relative = testInputDir().relativize(source);
+        var fileName = relative.getFileName().toString().replaceFirst("\\.cfun$", ".java");
+        return testOutputDir().resolve(relative).resolveSibling(fileName);
+    }
+
     private Path inputDir() {
         return tempDir.resolve("input");
     }
 
     private Path outputDir() {
         return tempDir.resolve("output");
+    }
+
+    private Path testInputDir() {
+        return tempDir.resolve("test-input");
+    }
+
+    private Path testOutputDir() {
+        return tempDir.resolve("test-output");
     }
 
     private void assertJavaCompiles(Path source) throws IOException {

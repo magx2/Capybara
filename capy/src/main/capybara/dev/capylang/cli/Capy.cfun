@@ -3063,10 +3063,15 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                                             match testResult with
                                             case Error { message } -> runtime_error(message)
                                             case Success { testProgram } ->
-                                                write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
-                                                    match writeResult with
-                                                    case Error { message } -> runtime_error(message)
-                                                    case Success _ -> pure(/capy/lang/Program.Success {})
+                                                validate_compile_generate_test_program(testProgram, options.output_type).flat_map(testBackendErrors =>
+                                                    if !testBackendErrors.is_empty()
+                                                    then print_compiler_errors(testBackendErrors)
+                                                        .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                                                    else write_compile_generate_outputs(options, program, testProgram).flat_map(writeResult =>
+                                                        match writeResult with
+                                                        case Error { message } -> runtime_error(message)
+                                                        case Success _ -> pure(/capy/lang/Program.Success {})
+                                                    )
                                                 )
                                         )
                                 )
@@ -3074,6 +3079,11 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                     )
             )
     )
+
+private fun validate_compile_generate_test_program(testProgram: Option[CompiledProgram], outputType: String): Effect[List[CompilerError]] =
+    match testProgram with
+    case None -> pure([])
+    case Some { program } -> /dev/capylang/compiler/CapybaraCompiler.validate_backend(program, outputType)
 
 fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
     let moduleFile = from_string(options.module)

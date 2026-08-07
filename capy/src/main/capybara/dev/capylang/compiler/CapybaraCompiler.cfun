@@ -441,8 +441,10 @@ private fun backend_java_method_errors(call: CompiledMethodCallExpression, conte
     case None -> []
     case Some { typeReference } ->
         let receiverType = backend_unqualified_type_name(typeReference.name)
-        if backend_known_function(context.knownFunctions, call.name)
-            & (!backend_java_type_has_method_table(receiverType) | backend_java_method_supported(receiverType, call.name))
+        if (backend_java_type_has_method_table(receiverType) & backend_java_method_supported(receiverType, call.name))
+            | (!backend_java_type_has_method_table(receiverType)
+                & (backend_known_function(context.knownFunctions, call.name)
+                    | backend_known_function(context.knownFunctions, receiverType + "." + call.name)))
         then []
         else [CompilerError {
             message: "Method `" + call.name + "` on `" + receiverType + "` is not supported by the Java backend.",
