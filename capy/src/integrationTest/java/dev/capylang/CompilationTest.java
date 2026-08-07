@@ -149,6 +149,50 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateListFoldFollowedByOptionFallback() {
+        var source = """
+                data Some[T] { value: T }
+                data None {}
+                union Option[T] = Some[T] | None
+
+                fun render(values: List[String]): String =
+                    values
+                        .fold((acc, value) => acc + "," + value)
+                        .or_else("empty")
+                """;
+        var program = compileProgram(List.of(rawModule("Fold", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Fold.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains(".stream().reduce((acc, value) ->")
+                .contains(".orElse(\"empty\")")
+                .doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Fold.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonCode)
+                .contains("__capy_option_or_else(__capy_fold(values, lambda acc, value:")
+                .doesNotContain(".fold(");
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Fold.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(javaScriptCode)
+                .contains("__capy_fold(values, (acc, value) =>")
+                .doesNotContain(".fold(");
+    }
+
+    @Test
     void shouldUseDeclaredFunctionalLambdaParameterTypes() {
         var source = """
                 fun typed_map(values: List[String]): Seq[String] =

@@ -4949,6 +4949,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then collection_predicate_call_code(call, env, module, allModules)
     else if collection_reduce_method_call(call, env, module, allModules)
     then reduce_expression_code(collection_reduce_method_expression(call, expression_type(call.receiver, env, module, allModules)), env, expectedType, module, allModules)
+    else if collection_fold_method_call(call, env, module, allModules)
+    then collection_fold_method_code(call, env, module, allModules)
     else if option_method_call(call, env, module, allModules)
     then option_pipe_code(option_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
     else if collection_method_call(call, env, module, allModules)
@@ -5106,7 +5108,9 @@ private fun result_or_else_method_call(call: CompiledMethodCallExpression, env: 
     if call.name == "or_else"
     then
         if one_method_argument(call.arguments)
-        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        then
+            let receiverTypeName = expression_type(call.receiver, env, module, allModules).name
+            result_type_name(receiverTypeName) | option_type_name(receiverTypeName)
         else false
     else false
 
@@ -5115,7 +5119,9 @@ private fun result_or_method_call(call: CompiledMethodCallExpression, env: List[
     if call.name == "or"
     then
         if one_method_argument(call.arguments)
-        then result_type_name(expression_type(call.receiver, env, module, allModules).name)
+        then
+            let receiverTypeName = expression_type(call.receiver, env, module, allModules).name
+            result_type_name(receiverTypeName) | option_type_name(receiverTypeName)
         else false
     else false
 
@@ -5181,27 +5187,43 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
 private fun result_or_else_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let resultType = result_or_else_method_type_with_receiver(call, receiverType, env, module, allModules)
-    let resultName = "__capy_result_or_else_" + call.location.line + "_" + call.location.column
-    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
-    + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
-    + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
-    + "                return ((" + boxed_java_type(resultType) + ") __capy_result_success_value(" + resultName + "));" + newline()
-    + "            }" + newline()
-    + "            return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
-    + "        }).get()"
+    if option_type_name(receiverType.name)
+    then "((java.util.Optional<" + boxed_java_type(resultType) + ">) __capy_optional_value("
+        + expression_code(call.receiver, env, receiverType, module, allModules)
+        + ")).orElse("
+        + expression_code(argument(call.arguments, 0), env, resultType, module, allModules)
+        + ")"
+    else
+        let resultName = "__capy_result_or_else_" + call.location.line + "_" + call.location.column
+        "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+        + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
+        + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
+        + "                return ((" + boxed_java_type(resultType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+        + "            }" + newline()
+        + "            return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
+        + "        }).get()"
 
 /// Emits generated code for result or method.
 private fun result_or_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let resultType = result_or_method_type_with_receiver(call, receiverType, env, module, allModules)
-    let resultName = "__capy_result_or_" + call.location.line + "_" + call.location.column
-    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
-    + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
-    + "            if (__capy_result_is_error(" + resultName + ")) {" + newline()
-    + "                return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
-    + "            }" + newline()
-    + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
-    + "        }).get()"
+    if option_type_name(receiverType.name)
+    then
+        let valueType = first_type_argument(resultType)
+        "((java.util.Optional<" + boxed_java_type(valueType) + ">) __capy_optional_value("
+        + expression_code(call.receiver, env, receiverType, module, allModules)
+        + ")).or(() -> ((java.util.Optional<" + boxed_java_type(valueType) + ">) __capy_optional_value("
+        + expression_code(argument(call.arguments, 0), env, resultType, module, allModules)
+        + ")))"
+    else
+        let resultName = "__capy_result_or_" + call.location.line + "_" + call.location.column
+        "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+        + "            java.lang.Object " + resultName + " = " + expression_code(call.receiver, env, receiverType, module, allModules) + ";" + newline()
+        + "            if (__capy_result_is_error(" + resultName + ")) {" + newline()
+        + "                return " + expression_code(argument(call.arguments, 0), env, resultType, module, allModules) + ";" + newline()
+        + "            }" + newline()
+        + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
+        + "        }).get()"
 
 /// Formats one result reduce lambda argument for generated emission.
 private fun result_reduce_lambda_argument(expression: CompiledExpression): CompiledLambdaExpression =
@@ -5410,6 +5432,79 @@ private fun reduce_lambda_parameter(parameters: List[String], idx: int): String 
 /// Computes the compiled type for collection reduce method.
 private fun collection_reduce_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     expression_type(argument(call.arguments, 0), env, module, allModules)
+
+/// Checks whether method metadata matches the collection fold method call rule.
+private fun collection_fold_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "fold" & one_method_argument(call.arguments)
+    then
+        let receiverType = expression_type(call.receiver, env, module, allModules)
+        (receiverType.name == "List" | seq_type_name(receiverType.name))
+            & match argument(call.arguments, 0) with
+                case CompiledLambdaExpression lambda -> reduce_lambda_arity_supported(lambda.parameters, 2)
+                case CompiledFunctionReferenceExpression _ -> true
+                case _ -> false
+    else false
+
+/// Resolves collection fold reducer metadata for generated emission.
+private fun collection_fold_reducer(call: CompiledMethodCallExpression): CompiledReduceExpression =
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda ->
+        CompiledReduceExpression {
+            receiver: call.receiver,
+            initial: missing_argument(),
+            accumulatorName: reduce_lambda_parameter(lambda.parameters, 0),
+            keyName: "",
+            valueName: reduce_lambda_parameter(lambda.parameters, 1),
+            body: lambda.body,
+            location: call.location
+        }
+    case CompiledFunctionReferenceExpression reference ->
+        let accumulatorName = "__capy_acc"
+        let valueName = "__capy_value"
+        CompiledReduceExpression {
+            receiver: call.receiver,
+            initial: missing_argument(),
+            accumulatorName: accumulatorName,
+            keyName: "",
+            valueName: valueName,
+            body: CompiledFunctionCallExpression {
+                name: reference.name,
+                arguments: collection_reduce_reference_arguments(accumulatorName, "", valueName, reference.location),
+                location: reference.location
+            },
+            location: call.location
+        }
+    case _ -> CompiledReduceExpression {
+        receiver: call.receiver,
+        initial: missing_argument(),
+        accumulatorName: "",
+        keyName: "",
+        valueName: "",
+        body: missing_argument(),
+        location: call.location
+    }
+
+/// Emits Java code for collection fold as an Optional stream reduction.
+private fun collection_fold_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let valueType = collection_value_type(receiverType)
+    let reducer = collection_fold_reducer(call)
+    let foldEnv = [
+        java_binding(reducer.accumulatorName, valueType),
+        java_binding(reducer.valueName, valueType),
+    ] + env
+    reduce_receiver_iterable_code(call.receiver, receiverType, env, module, allModules)
+        + ".stream().reduce(("
+        + java_identifier(reducer.accumulatorName)
+        + ", "
+        + java_identifier(reducer.valueName)
+        + ") -> "
+        + expression_code(reducer.body, foldEnv, valueType, module, allModules)
+        + ")"
+
+/// Computes the compiled type for collection fold.
+private fun collection_fold_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    option_type(collection_value_type(expression_type(call.receiver, env, module, allModules)))
 
 /// Checks whether a call has the seq first call shape.
 private fun seq_first_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -6017,12 +6112,53 @@ private fun extension_method_call_code_with_receiver_type(function: CompiledFunc
 
 /// Computes the declaring-module-qualified Java name for an extension method call.
 private fun extension_method_call_name(function: CompiledFunction, receiverType: CompiledTypeReference, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    match find_extension_method_binding_in_scope(receiverType.name, methodName, module, allModules) with
+    match find_selected_extension_method_binding_in_scope(function, receiverType.name, methodName, module, allModules) with
     case Some { binding } ->
         if binding.moduleName == module.name & binding.modulePath == module.path
         then java_function_name(binding.function)
         else java_function_binding_class_name(binding) + "." + java_function_name(binding.function)
     case None -> java_function_name(function)
+
+/// Finds the origin-preserving binding for an extension overload already selected by argument types.
+private fun find_selected_extension_method_binding_in_scope(function: CompiledFunction, ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match find_selected_function_binding(function, module.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None ->
+        match find_selected_extension_method_binding_in_imports(function, ownerName, methodName, module.imports, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_selected_primitive_backed_proxy_binding(function, ownerName, module)
+
+/// Finds the selected extension overload in unqualified imports.
+private fun find_selected_extension_method_binding_in_imports(function: CompiledFunction, ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified
+            & ((declaration.wildcard & !string_list_contains(declaration.excludedNames, methodName))
+                | import_includes_name(method_owner_base_name(ownerName), declaration))
+        then
+            match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } ->
+                match find_selected_function_binding(function, importedModule.functionBindings) with
+                case Some { binding } -> /capy/lang/Option.Some { binding }
+                case None -> find_selected_extension_method_binding_in_imports(function, ownerName, methodName, imports[1:], module, allModules)
+            case None -> find_selected_extension_method_binding_in_imports(function, ownerName, methodName, imports[1:], module, allModules)
+        else find_selected_extension_method_binding_in_imports(function, ownerName, methodName, imports[1:], module, allModules)
+
+/// Finds the selected extension overload among primitive-backed proxy bindings.
+private fun find_selected_primitive_backed_proxy_binding(function: CompiledFunction, ownerName: String, module: CompiledModule): /capy/lang/Option[CompiledFunctionBinding] =
+    match module.visiblePrimitiveBackedTypes.get(method_owner_base_name(ownerName)) with
+    case None -> /capy/lang/Option.None {}
+    case Some { primitiveBackedType } -> find_selected_function_binding(function, primitiveBackedType.proxiedFunctions)
+
+/// Finds a binding whose function identity matches the selected overload.
+private fun find_selected_function_binding(function: CompiledFunction, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if same_function(function, binding.function)
+        then /capy/lang/Option.Some { binding }
+        else find_selected_function_binding(function, bindings[1:])
 
 /// Computes the generated Java class name for a linked function binding.
 private fun java_function_binding_class_name(binding: CompiledFunctionBinding): String =
@@ -9327,6 +9463,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then bool_type()
     else if (call.name == "reduce" | call.name == "reduce_left") & collection_pipe_receiver_type(receiverType) & collection_reduce_method_arguments(call.arguments, receiverType)
     then collection_reduce_method_type(call, env, module, allModules)
+    else if collection_fold_method_call(call, env, module, allModules)
+    then collection_fold_method_type(call, env, module, allModules)
     else if option_method_name(call.name) & one_method_argument(call.arguments) & option_type_name(receiverType.name)
         & match argument(call.arguments, 0) with
             case CompiledLambdaExpression _ -> true
@@ -9344,9 +9482,9 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if (call.name == "map" | call.name == "flat_map") & result_map_method_argument(call.arguments) & result_type_name(receiverType.name)
     then result_map_method_type_with_receiver(call, receiverType, env, module, allModules)
-    else if call.name == "or_else" & one_method_argument(call.arguments) & result_type_name(receiverType.name)
+    else if call.name == "or_else" & one_method_argument(call.arguments) & (result_type_name(receiverType.name) | option_type_name(receiverType.name))
     then result_or_else_method_type_with_receiver(call, receiverType, env, module, allModules)
-    else if call.name == "or" & one_method_argument(call.arguments) & result_type_name(receiverType.name)
+    else if call.name == "or" & one_method_argument(call.arguments) & (result_type_name(receiverType.name) | option_type_name(receiverType.name))
     then result_or_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if call.name == "start" & call.arguments.is_empty() & receiverType.name == "Effect"
     then async_type(first_type_argument(receiverType))
@@ -9439,7 +9577,11 @@ private fun result_or_method_type(call: CompiledMethodCallExpression, env: List[
 private fun result_or_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let valueType = first_type_argument(receiverType)
     let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
-    if result_value_type_needs_context(valueType) & result_type_name(argumentType.name) then argumentType else receiverType
+    if result_value_type_needs_context(valueType)
+        & ((result_type_name(receiverType.name) & result_type_name(argumentType.name))
+            | (option_type_name(receiverType.name) & option_type_name(argumentType.name)))
+    then argumentType
+    else receiverType
 
 /// Checks whether a type reference matches the result value type needs context rule.
 private fun result_value_type_needs_context(type: CompiledTypeReference): bool =
@@ -11547,6 +11689,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then collection_predicate_call_emittable(call, receiverType, env, module, allModules)
     else if collection_reduce_method_call(call, env, module, allModules)
     then reduce_expression_emittable(collection_reduce_method_expression(call, receiverType), env, module, allModules)
+    else if collection_fold_method_call(call, env, module, allModules)
+    then collection_fold_method_emittable(call, receiverType, env, module, allModules)
     else if option_method_call(call, env, module, allModules)
     then option_pipe_emittable(option_method_binary(call), env, module, allModules)
     else if collection_method_call(call, env, module, allModules)
@@ -11656,6 +11800,17 @@ private fun result_or_method_emittable(call: CompiledMethodCallExpression, env: 
     expression_emittable(call.receiver, env, module, allModules)
         & expression_emittable(argumentExpression, env, module, allModules)
         & value_assignable(receiverType, argumentType, module, allModules)
+
+/// Checks whether a collection fold call can be emitted by the Java backend.
+private fun collection_fold_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let valueType = collection_value_type(receiverType)
+    let reducer = collection_fold_reducer(call)
+    let foldEnv = [
+        java_binding(reducer.accumulatorName, valueType),
+        java_binding(reducer.valueName, valueType),
+    ] + env
+    expression_emittable(call.receiver, env, module, allModules)
+        & expression_emittable(reducer.body, foldEnv, module, allModules)
 
 /// Checks whether result reduce argument can be emitted by the target backend.
 private fun result_reduce_argument_emittable(expression: CompiledExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =

@@ -74,7 +74,7 @@ public final class NativeCompilerValidator {
     private static final Map<String, Set<String>> JAVA_SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
             Map.entry("Effect", Set.of("map", "flat_map", "start")),
             Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "or_else", "or")),
-            Map.entry("Option", Set.of("map", "filter", "flat_map")),
+            Map.entry("Option", Set.of("map", "filter", "flat_map", "or_else", "or")),
             Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`")),
             Map.entry("List", Set.of(
                     "size", "is_empty", "plus", "minus", "any", "all", "contains", "reduce", "reduce_left",

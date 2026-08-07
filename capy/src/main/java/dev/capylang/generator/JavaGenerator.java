@@ -28,7 +28,7 @@ public final class JavaGenerator {
 
     public static GeneratedProgram javaGenerator(CompiledProgram program) {
         var compiledProgram = dataMap(toGeneratedValue(program));
-        var generated = dataMap(GeneratedJavaGenerator.java_generator__132_0(compiledProgram));
+        var generated = dataMap(GeneratedJavaGenerator.java_generator__133_0(compiledProgram));
         var modules = list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
                 .toList();
@@ -412,7 +412,30 @@ public final class JavaGenerator {
                 throw new IllegalStateException("Unable to adapt " + record.getClass().getName(), exception);
             }
         }
+        addBootstrapCompatibilityFields(result);
         return Collections.unmodifiableMap(result);
+    }
+
+    private static void addBootstrapCompatibilityFields(Map<String, Object> data) {
+        if ("CompiledModule".equals(data.get("__type")) && !data.containsKey("functionBindings")) {
+            var moduleName = string(data.get("name"));
+            var modulePath = string(data.get("path"));
+            var bindings = list(data.get("functions")).stream()
+                    .map(function -> {
+                        var binding = new LinkedHashMap<String, Object>();
+                        binding.put("__type", "CompiledFunctionBinding");
+                        binding.put("moduleName", moduleName);
+                        binding.put("modulePath", modulePath);
+                        binding.put("function", function);
+                        return Collections.unmodifiableMap(binding);
+                    })
+                    .toList();
+            data.put("functionBindings", bindings);
+        }
+        if ("CompiledPrimitiveBackedType".equals(data.get("__type"))
+                && !data.containsKey("proxiedFunctions")) {
+            data.put("proxiedFunctions", List.of());
+        }
     }
 
     @SuppressWarnings("unchecked")

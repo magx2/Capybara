@@ -11,7 +11,7 @@ public final class JavaScriptGenerator {
     public static GeneratedProgram javaScriptGenerator(CompiledProgram program) {
         var compiledProgram = JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program));
         var generated = JavaGenerator.dataMap(
-                GeneratedJavaScriptGenerator.java_script_generator__75_0(compiledProgram)
+                GeneratedJavaScriptGenerator.java_script_generator__76_0(compiledProgram)
         );
         var modules = JavaGenerator.list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)

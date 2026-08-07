@@ -10,7 +10,7 @@ public final class PythonGenerator {
 
     public static GeneratedProgram pythonGenerator(CompiledProgram program) {
         var compiledProgram = JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program));
-        var generated = JavaGenerator.dataMap(GeneratedPythonGenerator.python_generator__80_0(compiledProgram));
+        var generated = JavaGenerator.dataMap(GeneratedPythonGenerator.python_generator__81_0(compiledProgram));
         var modules = JavaGenerator.list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
                 .toList();
