@@ -2628,7 +2628,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         then java_script_collection_reduce_method_code_with_receiver_type(call, receiverBaseType, env, module, allModules)
         else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
         then java_script_collection_predicate_call_code(call, env, module, allModules)
-        else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
+        else if java_script_primitive_conversion_call(call, env, module, allModules)
         then java_script_primitive_conversion_code(call, env, module, allModules)
         else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
         then java_script_result_reduce_method_call_code(call, env, module, allModules)
@@ -2640,12 +2640,26 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
                 match java_script_find_imported_method_function(receiverType, call.name, module.imports, module, allModules) with
                 case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
                 case None ->
-                    match java_script_find_type_or_backing_method_binding(receiverType, call.name, module, allModules) with
+                    match java_script_find_method_binding_in_modules(receiverType, call.name, allModules, module) with
                     case Some { binding } -> java_script_extension_method_binding_call_code(binding, call, env, module, allModules)
                     case None ->
                         match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
-                        case Some { backingType } -> java_script_primitive_backed_method_call_code(call, backingType, env, module, allModules)
+                        case Some { backingType } -> java_script_primitive_backed_method_or_extension_call_code(call, backingType, env, module, allModules)
                         case None -> java_script_raw_method_call_code(call, env, module, allModules)
+
+/// Emits a proxied extension method when available, otherwise a raw backing-value method call.
+private fun java_script_primitive_backed_method_or_extension_call_code(call: CompiledMethodCallExpression, backingType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match java_script_find_method_binding_in_modules(backingType, call.name, allModules, module) with
+    case Some { binding } -> java_script_primitive_backed_extension_method_binding_call_code(binding, call, env, module, allModules)
+    case None -> java_script_primitive_backed_method_call_code(call, backingType, env, module, allModules)
+
+/// Emits a backing-type extension method with an unwrapped primitive-backed receiver.
+private fun java_script_primitive_backed_extension_method_binding_call_code(binding: String, call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    binding
+        + "("
+        + java_script_primitive_backed_value_code(call.receiver, env, module, allModules)
+        + java_script_extension_method_argument_tail(call.arguments, env, module, allModules)
+        + ")"
 
 /// Emits a missing method call against a primitive-backed value's unwrapped backing value.
 private fun java_script_primitive_backed_method_call_code(call: CompiledMethodCallExpression, backingType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3621,12 +3635,24 @@ private fun java_script_second_method_argument_code(arguments: List[CompiledExpr
 
 /// Checks whether a call has the primitive conversion call shape.
 private fun java_script_primitive_conversion_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if java_script_primitive_conversion_method(call.name)
+    if java_script_primitive_conversion_method(call.name) & call.arguments.is_empty()
     then
-        if call.arguments.is_empty()
-        then java_script_primitive_conversion_receiver(call.name, java_script_expression_type(call.receiver, env, module, allModules))
-        else false
+        let receiverType = java_script_expression_type(call.receiver, env, module, allModules)
+        if java_script_extension_method_declared_for_type(receiverType, call.name, module, allModules)
+        then false
+        else match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
+        case Some { backingType } -> java_script_primitive_conversion_receiver(call.name, backingType)
+        case None -> java_script_primitive_conversion_receiver(call.name, receiverType)
     else false
+
+/// Checks whether the declared JavaScript receiver type provides its own extension method in scope.
+private fun java_script_extension_method_declared_for_type(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match java_script_find_local_method_function(receiverType, methodName, module.functions) with
+    case Some _ -> true
+    case None ->
+        match java_script_find_imported_method_function(receiverType, methodName, module.imports, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether method metadata matches the primitive conversion method rule.
 private fun java_script_primitive_conversion_method(name: String): bool =
@@ -3644,8 +3670,8 @@ private fun java_script_primitive_conversion_receiver(name: String, receiverType
 /// Emits JavaScript code for primitive conversion.
 private fun java_script_primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "to_int"
-    then "__capy_to_int(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
-    else "__capy_to_long(" + java_script_expression_code(call.receiver, env, module, allModules) + ")"
+    then "__capy_to_int(" + java_script_primitive_backed_value_code(call.receiver, env, module, allModules) + ")"
+    else "__capy_to_long(" + java_script_primitive_backed_value_code(call.receiver, env, module, allModules) + ")"
 
 /// Checks whether method metadata matches the result reduce method call rule.
 private fun java_script_result_reduce_method_call(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -4890,7 +4916,7 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
         then java_script_collection_reduce_method_type(call, env, module, allModules)
         else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
         then "bool"
-        else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
+        else if java_script_primitive_conversion_call(call, env, module, allModules)
         then java_script_primitive_conversion_result_type(call.name)
         else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
         then java_script_unknown_type()
@@ -5977,15 +6003,6 @@ private fun java_script_find_imported_extension_method_return_type_with_receiver
     if receiverType == java_script_unknown_type()
     then /capy/lang/Option.None {}
     else java_script_find_imported_method_function_return_type(receiverType, call.name, module.imports, module, allModules)
-
-/// Finds a method binding on the declared type before proxying to a primitive-backed type's backing type.
-private fun java_script_find_type_or_backing_method_binding(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
-    match java_script_find_method_binding_in_modules(receiverType, methodName, allModules, module) with
-    case Some { binding } -> /capy/lang/Option.Some { binding }
-    case None ->
-        match java_script_primitive_backed_backing_type(receiverType, module, allModules) with
-        case Some { backingType } -> java_script_find_method_binding_in_modules(backingType, methodName, allModules, module)
-        case None -> /capy/lang/Option.None {}
 
 /// Finds a method return type on the declared type before proxying to a primitive-backed type's backing type.
 private fun java_script_find_type_or_backing_method_return_type(receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
@@ -7448,7 +7465,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         then java_script_collection_reduce_method_gatherable(call, env, module, allModules)
         else if (call.name == "any" | call.name == "all") & java_script_single_callable_argument(call.arguments) & java_script_collection_receiver_type(receiverType)
         then java_script_collection_predicate_gatherable(call, env, module, allModules)
-        else if java_script_primitive_conversion_method(call.name) & emptyArguments & java_script_primitive_conversion_receiver(call.name, receiverType)
+        else if java_script_primitive_conversion_call(call, env, module, allModules)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)
         else if (call.name == "reduce" | call.name == "reduce_left") & twoArguments & java_script_result_pipe_receiver_type(receiverType)
         then java_script_expression_gatherable(call.receiver, env, module, allModules)

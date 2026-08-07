@@ -3682,10 +3682,11 @@ private fun partial_method_call_type(call: CompiledMethodCallExpression, env: Li
     let receiverType = expression_type(call.receiver, env, module, allModules)
     match find_extension_method(call, env, module, allModules) with
     case Some { function } ->
+        let effectiveReceiverType = extension_method_receiver_type(function, receiverType, module, allModules)
         CompiledTypeReference {
             name: function_type_reference_text(
-                partial_extension_method_parameter_types(bound_extension_method_parameters(function, receiverType), call.arguments),
-                bound_extension_method_return_type(function, receiverType)
+                partial_extension_method_parameter_types(bound_extension_method_parameters(function, effectiveReceiverType), call.arguments),
+                bound_extension_method_return_type(function, effectiveReceiverType)
             ),
             arguments: []
         }
@@ -3761,7 +3762,7 @@ private fun partial_method_return_type(call: CompiledMethodCallExpression, recei
     if receiverType.name == "String" & string_java_method(call.name)
     then string_java_method_type(call.name)
     else match find_extension_method(call, env, module, allModules) with
-        case Some { function } -> bound_extension_method_return_type(function, receiverType)
+        case Some { function } -> bound_extension_method_return_type(function, extension_method_receiver_type(function, receiverType, module, allModules))
         case None -> object_type()
 
 /// Checks whether partial function call can be emitted by the target backend.
@@ -4855,7 +4856,7 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then string_parse_method_code(call, env, module, allModules)
     else if regex_method_call(call, env, module, allModules)
     then regex_method_code(call, env, module, allModules)
-    else if primitive_conversion_method(call.name)
+    else if primitive_conversion_method_call(call, env, module, allModules)
     then primitive_conversion_code(call, env, module, allModules)
     else if object_type_method_call(call, module, allModules)
     then object_type_method_call_code(call, module, allModules)
@@ -5845,12 +5846,24 @@ private fun extension_method_call_code(function: CompiledFunction, call: Compile
 
 /// Computes the compiled type for extension method call code with receiver.
 private fun extension_method_call_code_with_receiver_type(function: CompiledFunction, call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let parameters = bound_extension_method_parameters(function, receiverType)
+    let effectiveReceiverType = extension_method_receiver_type(function, receiverType, module, allModules)
+    let parameters = bound_extension_method_parameters(function, effectiveReceiverType)
     java_function_name(function)
         + "("
-        + expression_code(call.receiver, env, receiverType, module, allModules)
+        + expression_code(call.receiver, env, effectiveReceiverType, module, allModules)
         + extension_method_call_argument_tail(function.parameters, parameters, call.arguments, env, module, allModules)
         + ")"
+
+/// Resolves a proxied extension method's receiver to its primitive backing type.
+private fun extension_method_receiver_type(function: CompiledFunction, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if method_owner_matches(method_owner_name(function.name), receiverType.name)
+    then receiverType
+    else match primitive_backed_backing_type(receiverType.name, module, allModules) with
+    case Some { backingType } ->
+        if method_owner_matches(method_owner_name(function.name), backingType.name)
+        then backingType
+        else receiverType
+    case None -> receiverType
 
 /// Formats the recursive tail segment for extension method call argument.
 private fun extension_method_call_argument_tail(declaredParameters: List[CompiledFunctionParameter], boundParameters: List[CompiledFunctionParameter], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5996,7 +6009,7 @@ private fun type_reference_list_tail(types: List[CompiledTypeReference]): String
 
 /// Emits generated code for primitive conversion.
 private fun primitive_conversion_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let receiverType = primitive_backed_effective_type(expression_type(call.receiver, env, module, allModules), module, allModules)
     let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     if call.name == "to_int"
     then primitive_to_int_code(receiverCode, receiverType)
@@ -6233,7 +6246,7 @@ private fun user_defined_index_code(index: CompiledIndexExpression, receiverType
     let call = index_get_call(index)
     match find_extension_method_in_scope(receiverType.name, "get", module, allModules) with
     case Some { function } ->
-        let callType = bound_extension_method_return_type(function, receiverType)
+        let callType = bound_extension_method_return_type(function, extension_method_receiver_type(function, receiverType, module, allModules))
         value_conversion_code(extension_method_call_code_with_receiver_type(function, call, receiverType, env, module, allModules), callType, expectedType, module, allModules)
     case None -> value_conversion_code("unsupported(\"index get\")", object_type(), expectedType, module, allModules)
 
@@ -8981,9 +8994,9 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then stdlib_date_time_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if string_java_method(call.name) & receiverType.name == "String"
     then string_java_method_type(call.name)
-    else if call.name == "to_int"
+    else if primitive_conversion_method_call(call, env, module, allModules) & call.name == "to_int"
     then int_type()
-    else if call.name == "to_long"
+    else if primitive_conversion_method_call(call, env, module, allModules) & call.name == "to_long"
     then long_type()
     else if object_type_method_call(call, module, allModules)
     then object_type_method_call_type(call, module, allModules)
@@ -8991,7 +9004,7 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
         case Some { binding } -> effect_type(binding.method.returnType)
         case None ->
             match find_extension_method_in_scope(receiverType.name, call.name, module, allModules) with
-            case Some { function } -> bound_extension_method_return_type(function, receiverType)
+            case Some { function } -> bound_extension_method_return_type(function, extension_method_receiver_type(function, receiverType, module, allModules))
             case None ->
                 match primitive_backed_backing_type(receiverType.name, module, allModules) with
                 case Some { backingType } -> primitive_backed_method_call_type(call, backingType)
@@ -9171,7 +9184,7 @@ private fun indexed_type(indexExpression: CompiledIndexExpression, receiverType:
 /// Computes the compiled type for user defined index.
 private fun user_defined_index_type(receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_extension_method_in_scope(receiverType.name, "get", module, allModules) with
-    case Some { function } -> bound_extension_method_return_type(function, receiverType)
+    case Some { function } -> bound_extension_method_return_type(function, extension_method_receiver_type(function, receiverType, module, allModules))
     case None -> object_type()
 
 /// Computes the index used to split or rank normalized tuple slice end index.
@@ -11043,8 +11056,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then regex_method_emittable(call, env, module, allModules)
     else if stdlib_date_time_method_call(call, env, module, allModules)
     then stdlib_date_time_method_emittable(call, env, module, allModules)
-    else if primitive_conversion_method(call.name)
-    then primitive_conversion_method_emittable(call, receiverType, env, module, allModules)
+    else if primitive_conversion_method_call(call, env, module, allModules)
+    then primitive_conversion_method_emittable(call, env, module, allModules)
     else if object_type_method_call(call, module, allModules)
     then true
     else if object_method_call(call, env, module, allModules)
@@ -11129,8 +11142,9 @@ private fun extension_method_call_emittable(function: CompiledFunction, call: Co
 
 /// Checks whether extension method call emittable with receiver type can be emitted by the target backend.
 private fun extension_method_call_emittable_with_receiver_type(function: CompiledFunction, call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let parameters = bound_extension_method_parameters(function, receiverType)
-    concrete_return_type(bound_extension_method_return_type(function, receiverType))
+    let effectiveReceiverType = extension_method_receiver_type(function, receiverType, module, allModules)
+    let parameters = bound_extension_method_parameters(function, effectiveReceiverType)
+    concrete_return_type(bound_extension_method_return_type(function, effectiveReceiverType))
         & expression_emittable(call.receiver, env, module, allModules)
         & parameters_assignable(parameters, call.arguments, env, module, allModules)
         & ordinary_call_arguments_emittable(call.arguments, env, module, allModules)
@@ -11188,9 +11202,8 @@ private fun index_method_arguments_emittable(arguments: List[CompiledExpression]
                 case Some { second } -> arguments[2:].is_empty() & index_argument_emittable(second, env, module, allModules)
 
 /// Checks whether primitive conversion method can be emitted by the target backend.
-private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    call.arguments.is_empty()
-        & primitive_conversion_receiver(call.name, receiverType)
+private fun primitive_conversion_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    primitive_conversion_method_call(call, env, module, allModules)
         & expression_emittable(call.receiver, env, module, allModules)
 
 /// Checks whether result assert succeeds lambda can be emitted by the target backend.
@@ -11285,6 +11298,25 @@ private fun assert_is_empty_arguments_emittable(arguments: List[CompiledExpressi
 /// Checks whether method metadata matches the primitive conversion method rule.
 private fun primitive_conversion_method(name: String): bool =
     name == "to_int" | name == "to_long"
+
+/// Checks whether a method call delegates to a primitive conversion on its effective receiver type.
+private fun primitive_conversion_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if primitive_conversion_method(call.name) & call.arguments.is_empty()
+    then
+        let receiverType = expression_type(call.receiver, env, module, allModules)
+        if extension_method_declared_for_type(receiverType.name, call.name, module, allModules)
+        then false
+        else primitive_conversion_receiver(call.name, primitive_backed_effective_type(receiverType, module, allModules))
+    else false
+
+/// Checks whether the declared receiver type provides its own extension method in scope.
+private fun extension_method_declared_for_type(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match find_method_function(ownerName, methodName, module.functions) with
+    case Some _ -> true
+    case None ->
+        match find_extension_method_in_imports(ownerName, methodName, module.imports, module, allModules) with
+        case Some _ -> true
+        case None -> false
 
 /// Checks whether a receiver type matches the primitive conversion receiver rule.
 private fun primitive_conversion_receiver(name: String, receiverType: CompiledTypeReference): bool =
