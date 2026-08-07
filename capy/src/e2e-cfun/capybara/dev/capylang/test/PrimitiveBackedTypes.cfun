@@ -18,7 +18,6 @@ type ordered_string -> String
 type proxied_byte -> byte
 type proxied_int -> int
 type proxied_long -> long
-type custom_long -> long
 type proxied_float -> float
 type proxied_double -> double
 type triple -> String with constructor {
@@ -51,9 +50,17 @@ fun append_to_triple(value: triple, suffix: String): String = value + suffix
 fun plus_triple(value: triple, suffix: String): String = value.plus(suffix)
 fun label_triple_with_external_backing_method(value: triple): String = value.backing_proxy_label()
 
+fun proxied_byte.`+`(other: byte): byte = 0x7f
+fun proxied_int.`+`(other: int): int = 101
+fun proxied_long.`+`(other: long): long = 102L
+fun proxied_float.`+`(other: float): float = 103.0f
+fun proxied_double.`+`(other: double): double = 104.0
+
+fun proxied_long.to_int(): int = 99
+fun proxied_float.to_int(): int = 98
+fun proxied_double.to_int(): int = 97
+
 fun proxied_long_to_int(value: proxied_long): int = value.to_int()
-fun custom_long.to_int(): int = 99
-fun custom_long_to_int(value: custom_long): int = value.to_int()
 fun proxied_float_to_int(value: proxied_float): int = value.to_int()
 fun proxied_double_to_int(value: proxied_double): int = value.to_int()
 fun proxied_float_to_long(value: proxied_float): long = value.to_long()
@@ -64,6 +71,12 @@ fun add_to_proxied_int(value: proxied_int): int = value + 2
 fun add_to_proxied_long(value: proxied_long): long = value + 2L
 fun add_to_proxied_float(value: proxied_float): float = value + 2.0f
 fun add_to_proxied_double(value: proxied_double): double = value + 2.0
+
+fun subtract_from_proxied_byte(value: proxied_byte): byte = value - 0x02
+fun subtract_from_proxied_int(value: proxied_int): int = value - 2
+fun subtract_from_proxied_long(value: proxied_long): long = value - 2L
+fun subtract_from_proxied_float(value: proxied_float): float = value - 2.0f
+fun subtract_from_proxied_double(value: proxied_double): double = value - 2.0
 
 fun user_id.plus(other: user_id): user_id = user_id! { this.value + other.value }
 fun user_id.`+`(other: user_id): user_id = user_id! { this.value + other.value }

@@ -7,6 +7,7 @@ fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/PrimitiveBackedTypes.cfun", [
         test("primitive backed values run as primitive ints and strings", () => primitive_backed_values_run_as_primitive_ints_and_strings()),
         test("primitive backed types proxy missing methods to their backing type", () => primitive_backed_types_proxy_missing_methods_to_their_backing_type()),
+        test("numeric primitive backed types override base functions", () => numeric_primitive_backed_types_override_base_functions()),
         test("all numeric primitive backed types proxy methods and operators", () => all_numeric_primitive_backed_types_proxy_methods_and_operators()),
         test("result returning constructor retags payload type", () => result_returning_constructor_retags_payload_type()),
         test("result returning constructor rejects invalid values", () => result_returning_constructor_rejects_invalid_values()),
@@ -41,17 +42,25 @@ private fun primitive_backed_types_proxy_missing_methods_to_their_backing_type()
 
 private fun all_numeric_primitive_backed_types_proxy_methods_and_operators(): Assert =
     assert_all([
-        assert_that(proxied_long_to_int(proxied_long! { 6L })).is_equal_to(6),
-        assert_that(custom_long_to_int(custom_long! { 6L })).is_equal_to(99),
-        assert_that(proxied_float_to_int(proxied_float! { 6.5f })).is_equal_to(6),
-        assert_that(proxied_double_to_int(proxied_double! { 6.5 })).is_equal_to(6),
         assert_that(proxied_float_to_long(proxied_float! { 6.5f })).is_equal_to(6L),
         assert_that(proxied_double_to_long(proxied_double! { 6.5 })).is_equal_to(6L),
-        assert_that(add_to_proxied_byte(proxied_byte! { 0x06 })).is_equal_to(0x08),
-        assert_that(add_to_proxied_int(proxied_int! { 6 })).is_equal_to(8),
-        assert_that(add_to_proxied_long(proxied_long! { 6L })).is_equal_to(8L),
-        assert_that(add_to_proxied_float(proxied_float! { 6.0f })).is_equal_to(8.0f),
-        assert_that(add_to_proxied_double(proxied_double! { 6.0 })).is_equal_to(8.0),
+        assert_that(subtract_from_proxied_byte(proxied_byte! { 0x06 })).is_equal_to(0x04),
+        assert_that(subtract_from_proxied_int(proxied_int! { 6 })).is_equal_to(4),
+        assert_that(subtract_from_proxied_long(proxied_long! { 6L })).is_equal_to(4L),
+        assert_that(subtract_from_proxied_float(proxied_float! { 6.0f })).is_equal_to(4.0f),
+        assert_that(subtract_from_proxied_double(proxied_double! { 6.0 })).is_equal_to(4.0),
+    ])
+
+private fun numeric_primitive_backed_types_override_base_functions(): Assert =
+    assert_all([
+        assert_that(proxied_long_to_int(proxied_long! { 6L })).is_equal_to(99),
+        assert_that(proxied_float_to_int(proxied_float! { 6.5f })).is_equal_to(98),
+        assert_that(proxied_double_to_int(proxied_double! { 6.5 })).is_equal_to(97),
+        assert_that(add_to_proxied_byte(proxied_byte! { 0x06 })).is_equal_to(0x7f),
+        assert_that(add_to_proxied_int(proxied_int! { 6 })).is_equal_to(101),
+        assert_that(add_to_proxied_long(proxied_long! { 6L })).is_equal_to(102L),
+        assert_that(add_to_proxied_float(proxied_float! { 6.0f })).is_equal_to(103.0f),
+        assert_that(add_to_proxied_double(proxied_double! { 6.0 })).is_equal_to(104.0),
     ])
 
 private fun result_returning_constructor_rejects_invalid_values(): Assert =
