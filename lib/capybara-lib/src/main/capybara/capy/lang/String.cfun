@@ -46,9 +46,6 @@ type char -> String with constructor {
 /// Returns true when both chars contain the same character.
 fun char.`==`(other: char): bool = this.value == other.value
 
-/// Compares this char with `other` using case-sensitive lexicographic ordering.
-fun char.compare(other: char): Ordering = this.value.compare(other.value)
-
 private const LOWER_CASE_ASCII_LETTERS: String = "abcdefghijklmnopqrstuvwxyz"
 private const UPPER_CASE_ASCII_LETTERS: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 

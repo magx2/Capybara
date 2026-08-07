@@ -19,7 +19,7 @@ fun tests(): Effect[TestFile] =
         test("trim_method trims surrounding whitespace", () => trim_method_trims_surrounding_whitespace()),
         test("replace_method replaces all occurrences", () => replace_method_replaces_all_occurrences()),
         test("String.compare returns ordering", () => compare_method_returns_ordering()),
-        test("char.compare does not proxy to String.compare", () => char_compare_method_returns_ordering()),
+        test("char.compare proxies to String.compare", () => char_compare_method_proxies_to_string_compare()),
         test("is_empty_method detects empty strings", () => is_empty_method_detects_empty_strings()),
         test("not_is_empty_method negates emptiness", () => not_is_empty_method_negates_emptiness()),
         test("not_nested_is_empty reads nested buffer", () => not_nested_is_empty_reads_nested_buffer()),
@@ -109,7 +109,7 @@ private fun compare_method_returns_ordering(): Assert =
         assert_that(compare_method("", "a")).is_equal_to(LESS),
     ])
 
-private fun char_compare_method_returns_ordering(): Assert =
+private fun char_compare_method_proxies_to_string_compare(): Assert =
     assert_all([
         assert_that(make_char("a")).succeeds(left =>
             assert_that(make_char("a")).succeeds(right =>
