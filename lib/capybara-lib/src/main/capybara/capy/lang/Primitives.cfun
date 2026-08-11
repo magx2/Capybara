@@ -22,6 +22,42 @@ const FLOAT_BOUND_AS_FLOAT: float = 16777216.0f
 /// Floating-point representation of `DOUBLE_BOUND`.
 const DOUBLE_BOUND_AS_DOUBLE: double = 9007199254740992.0
 
+/// Decimal digit between zero and nine.
+type digit -> int with constructor {
+    if value >= 0 & value <= 9
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "Digits must be between 0 and 9. Was `{value}`." }
+}
+
+/// Decimal digit zero.
+const ZERO_DIGIT: digit = digit! { 0 }
+/// Decimal digit one.
+const ONE_DIGIT: digit = digit! { 1 }
+/// Decimal digit two.
+const TWO_DIGIT: digit = digit! { 2 }
+/// Decimal digit three.
+const THREE_DIGIT: digit = digit! { 3 }
+/// Decimal digit four.
+const FOUR_DIGIT: digit = digit! { 4 }
+/// Decimal digit five.
+const FIVE_DIGIT: digit = digit! { 5 }
+/// Decimal digit six.
+const SIX_DIGIT: digit = digit! { 6 }
+/// Decimal digit seven.
+const SEVEN_DIGIT: digit = digit! { 7 }
+/// Decimal digit eight.
+const EIGHT_DIGIT: digit = digit! { 8 }
+/// Decimal digit nine.
+const NINE_DIGIT: digit = digit! { 9 }
+
+/// Returns the following digit, wrapping nine to zero.
+fun digit.next(): digit =
+    if this.value == 9 then ZERO_DIGIT else digit! { this.value + 1 }
+
+/// Returns the preceding digit, wrapping zero to nine.
+fun digit.previous(): digit =
+    if this.value == 0 then NINE_DIGIT else digit! { this.value - 1 }
+
 /// Parses this String as an int.
 ///
 /// Example: `to_int("42")` returns `Success { value: 42 }`.

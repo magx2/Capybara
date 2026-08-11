@@ -13,6 +13,15 @@ fun tests(): Effect[TestFile] =
         test("DOUBLE_BOUND should match double precision bound", () => assert_that(DOUBLE_BOUND).is_equal_to(9007199254740992L)),
         test("FLOAT_BOUND_AS_FLOAT should match float precision bound", () => assert_that(FLOAT_BOUND_AS_FLOAT).is_equal_to(16777216.0f)),
         test("DOUBLE_BOUND_AS_DOUBLE should match double precision bound", () => assert_that(DOUBLE_BOUND_AS_DOUBLE).is_equal_to(9007199254740992.0)),
+        test("digit should accept zero", () => assert_that(digit { 0 }).succeeds(ZERO_DIGIT)),
+        test("digit should accept nine", () => assert_that(digit { 9 }).succeeds(NINE_DIGIT)),
+        test("digit should reject values below zero", () => assert_that(digit { -1 }).fails("Digits must be between 0 and 9. Was `-1`.")),
+        test("digit should reject values above nine", () => assert_that(digit { 10 }).fails("Digits must be between 0 and 9. Was `10`.")),
+        test("digit constants should represent zero through nine", () => should_define_digit_constants()),
+        test("digit.next should advance middle digits", () => assert_that(FOUR_DIGIT.next()).is_equal_to(FIVE_DIGIT)),
+        test("digit.next should wrap nine to zero", () => assert_that(NINE_DIGIT.next()).is_equal_to(ZERO_DIGIT)),
+        test("digit.previous should rewind middle digits", () => assert_that(FIVE_DIGIT.previous()).is_equal_to(FOUR_DIGIT)),
+        test("digit.previous should wrap zero to nine", () => assert_that(ZERO_DIGIT.previous()).is_equal_to(NINE_DIGIT)),
         test("to_int(\"123\") should succeed with 123", () => assert_that(to_int("123")).succeeds(123)),
         test("to_int(\"abc\") should fail", () => assert_that(to_int("abc")).fails("Cannot parse string to int: abc")),
         test("to_long(\"12345678901\") should succeed with 12345678901L", () => assert_that(to_long("12345678901")).succeeds(12345678901L)),
@@ -52,3 +61,17 @@ private fun should_safely_convert(value: long, expected: int): Assert =
 
 private fun should_fail_safe_conversion(value: long, expected_message: String): Assert =
     assert_that(safe_long_to_int(value)).fails(expected_message)
+
+private fun should_define_digit_constants(): Assert =
+    assert_all([
+        assert_that(ZERO_DIGIT.value).is_equal_to(0),
+        assert_that(ONE_DIGIT.value).is_equal_to(1),
+        assert_that(TWO_DIGIT.value).is_equal_to(2),
+        assert_that(THREE_DIGIT.value).is_equal_to(3),
+        assert_that(FOUR_DIGIT.value).is_equal_to(4),
+        assert_that(FIVE_DIGIT.value).is_equal_to(5),
+        assert_that(SIX_DIGIT.value).is_equal_to(6),
+        assert_that(SEVEN_DIGIT.value).is_equal_to(7),
+        assert_that(EIGHT_DIGIT.value).is_equal_to(8),
+        assert_that(NINE_DIGIT.value).is_equal_to(9),
+    ])
