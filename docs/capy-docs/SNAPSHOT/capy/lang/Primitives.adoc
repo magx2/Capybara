@@ -53,6 +53,16 @@ Number of distinct mantissa steps used to map random long values into `double`.
 Floating-point representation of `DOUBLE_BOUND`.
 
 
+=== const EIGHT_DIGIT: xref:#type-digit[digit]
+
+Decimal digit eight.
+
+
+=== const FIVE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit five.
+
+
 === const FLOAT_BOUND: long
 
 Number of distinct mantissa steps used to map random long values into `float`.
@@ -61,6 +71,11 @@ Number of distinct mantissa steps used to map random long values into `float`.
 === const FLOAT_BOUND_AS_FLOAT: float
 
 Floating-point representation of `FLOAT_BOUND`.
+
+
+=== const FOUR_DIGIT: xref:#type-digit[digit]
+
+Decimal digit four.
 
 
 === const MAX_INT_VALUE: int
@@ -82,6 +97,61 @@ Smallest value representable by `int`.
 
 Smallest value representable by `long`.
 
+
+=== const NINE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit nine.
+
+
+=== const ONE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit one.
+
+
+=== const SEVEN_DIGIT: xref:#type-digit[digit]
+
+Decimal digit seven.
+
+
+=== const SIX_DIGIT: xref:#type-digit[digit]
+
+Decimal digit six.
+
+
+=== const THREE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit three.
+
+
+=== const TWO_DIGIT: xref:#type-digit[digit]
+
+Decimal digit two.
+
+
+=== const ZERO_DIGIT: xref:#type-digit[digit]
+
+Decimal digit zero.
+
+
+
+
+== Types
+
+[[type-digit]]
+=== type digit: int
+
+Decimal digit between zero and nine.
+
+==== Functions
+
+===== fun digit.next(): xref:#type-digit[digit]
+
+Returns the following digit, wrapping nine to zero.
+
+
+===== fun digit.previous(): xref:#type-digit[digit]
+
+Returns the preceding digit, wrapping zero to nine.
 
 
 
