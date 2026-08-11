@@ -254,7 +254,7 @@ private fun java_seq_module_code(module: CompiledModule): String =
         + ".toList());\n        }\n        if (value instanceof java.lang.Iterable<?> iterable) {\n            java.util.ArrayList<T> list = new java.util.ArrayList<>();\n            for (java.lang.Object item : iterable) {\n                list.add((T) item);\n            }\n            return new Seq<>(list);\n        }\n        if (value == null) {\n            return new Seq<>(java.util.List.of());\n        }\n        return new Seq<>(java.util.List.of((T) value));\n    }\n\n"
         + java_seq_to_seq_aliases(module.functions)
         + java_seq_drop_until_aliases(module.functions)
-        + "    public java.util.List<T> asList() {\n        return values;\n    }\n\n    public java.util.Optional<T> first() {\n        return values.isEmpty() ? java.util.Optional.empty() : java.util.Optional.ofNullable(values.getFirst());\n    }\n\n    public <Y> Seq<Y> map(Function<? super T, ? extends Y> map) {\n        java.util.ArrayList<Y> mapped = new java.util.ArrayList<>();\n        for (T value : values) {\n            mapped.add(map.apply(value));\n        }\n        return new Seq<>(mapped);\n    }\n\n    public <Y> Seq<Y> flatMap(Function<? super T, Seq<Y>> flatmap) {\n        java.util.ArrayList<Y> mapped = new java.util.ArrayList<>();\n        for (T value : values) {\n            "
+        + "    public java.util.List<T> asList() {\n        return values;\n    }\n\n    public java.util.Optional<T> first() {\n        return values.isEmpty() ? java.util.Optional.empty() : java.util.Optional.ofNullable(values.getFirst());\n    }\n\n    public Seq<T> rest() {\n        return values.isEmpty() ? this : new Seq<>(values.subList(1, values.size()));\n    }\n\n    public <Y> Seq<Y> map(Function<? super T, ? extends Y> map) {\n        java.util.ArrayList<Y> mapped = new java.util.ArrayList<>();\n        for (T value : values) {\n            mapped.add(map.apply(value));\n        }\n        return new Seq<>(mapped);\n    }\n\n    public <Y> Seq<Y> flatMap(Function<? super T, Seq<Y>> flatmap) {\n        java.util.ArrayList<Y> mapped = new java.util.ArrayList<>();\n        for (T value : values) {\n            "
         + "mapped.addAll(flatmap.apply(value).asList());\n        }\n        return new Seq<>(mapped);\n    }\n\n    public Seq<T> filter(Predicate<? super T> pred) {\n        return new Seq<>(values.stream().filter(pred).toList());\n    }\n\n    public Seq<T> dropUntil(Function<? super T, Boolean> pred) {\n        int index = 0;\n        while (index < values.size() && !Boolean.TRUE.equals(pred.apply(values.get(index)))) {\n            index++;\n        }\n        return new Seq<>(values.subList(index, values.size()));\n    }\n\n    public boolean any(Predicate<? super T> pred) {\n        return values.stream().anyMatch(pred);\n    }\n\n    public boolean all(Predicate<? super T> pred) {\n        return values.stream().allMatch(pred);\n    }\n}\n"
 
 private fun java_seq_to_seq_aliases(functions: List[CompiledFunction]): String =
@@ -1635,7 +1635,7 @@ private fun java_program_main_entrypoint(function: CompiledFunction): String =
     then
         "    public static final void main(java.lang.String... args) {" + newline()
         + "        var __capybaraArgsList = java.util.List.of(args);" + newline()
-        + "        capy.lang.Program __capybaraProgram = main(__capybaraArgsList).unsafeRun();" + newline()
+        + "        capy.lang.Program __capybaraProgram = main(" + java_program_main_argument(function.parameters) + ").unsafeRun();" + newline()
         + "        if (__capybaraProgram instanceof capy.lang.Program.Failed __capybaraFailed) {" + newline()
         + "            java.lang.System.exit(__capybaraFailed.exit_code());" + newline()
         + "        }" + newline()
@@ -1650,14 +1650,23 @@ private fun java_effect_program_main(function: CompiledFunction): bool =
         & java_program_type(first_type_argument(function.returnType))
         & java_program_main_parameters(function.parameters)
 
-/// Checks the List[String] parameter shape required by a program entrypoint.
+/// Checks the List[String] or Seq[String] parameter shape required by a program entrypoint.
 private fun java_program_main_parameters(parameters: List[CompiledFunctionParameter]): bool =
     match parameters[0] with
     case None -> false
     case Some { parameter } ->
         parameters[1:].is_empty()
-            & parameter.typeReference.name == "List"
+            & (parameter.typeReference.name == "List" | seq_type_name(parameter.typeReference.name))
             & first_type_argument(parameter.typeReference).name == "String"
+
+/// Adapts JVM launcher arguments to the collection type declared by the Capy entrypoint.
+private fun java_program_main_argument(parameters: List[CompiledFunctionParameter]): String =
+    match parameters[0] with
+    case Some { parameter } ->
+        if seq_type_name(parameter.typeReference.name)
+        then "capy.collection.Seq.<java.lang.String>toSeq(__capybaraArgsList)"
+        else "__capybaraArgsList"
+    case None -> "__capybaraArgsList"
 
 /// Checks whether a type reference names the standard Program type.
 private fun java_program_type(type: CompiledTypeReference): bool =
@@ -2373,7 +2382,7 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
     else if collection_pipe_chained_method_expression(binary, leftType)
     then expression_code(collection_pipe_chained_method_call(binary), env, expectedType, module, allModules)
     else if collection_pipe_expression(binary, leftType)
-    then collection_pipe_code(binary, leftType, env, module, allModules)
+    then collection_pipe_code(binary, leftType, expectedType, env, module, allModules)
     else
         let rightType = expression_type(binary.right, env, module, allModules)
         let effectiveLeftType = primitive_backed_effective_type(leftType, module, allModules)
@@ -2458,7 +2467,7 @@ private fun contextual_binary_result_type(naturalResultType: CompiledTypeReferen
 /// Checks whether an expression has the collection plus expression shape.
 private fun collection_plus_expression(operator: String, leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     if operator == "+"
-    then list_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType)
+    then list_plus_expression(leftType, rightType) | seq_plus_expression(leftType, rightType) | set_plus_expression(leftType, rightType) | dict_plus_expression(leftType, rightType)
     else false
 
 /// Checks whether an expression has the collection minus expression shape.
@@ -2470,6 +2479,10 @@ private fun collection_minus_expression(operator: String, leftType: CompiledType
 /// Checks whether an expression has the list plus expression shape.
 private fun list_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
     if leftType.name == "List" then !rightType.name.is_empty() else false
+
+/// Checks whether an expression appends to or concatenates a sequence.
+private fun seq_plus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
+    if seq_type_name(leftType.name) then !rightType.name.is_empty() else false
 
 /// Checks whether an expression has the list minus expression shape.
 private fun list_minus_expression(leftType: CompiledTypeReference, rightType: CompiledTypeReference): bool =
@@ -2499,6 +2512,11 @@ private fun collection_plus_code(binary: CompiledBinaryExpression, leftType: Com
         if rightType.name == "List"
         then "__capy_list_concat(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
         else "__capy_list_append(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
+    else if seq_type_name(leftType.name)
+    then
+        if seq_type_name(rightType.name)
+        then "__capy_seq_concat(" + leftCode + ", " + expression_code(binary.right, env, leftType, module, allModules) + ")"
+        else "__capy_seq_append(" + leftCode + ", " + expression_code(binary.right, env, first_type_argument(leftType), module, allModules) + ")"
     else if leftType.name == "Set"
     then
         if rightType.name == "Set"
@@ -2727,6 +2745,7 @@ private fun built_in_binary_operator_left_type(leftType: CompiledTypeReference):
         | leftType.name == "bool"
         | leftType.name == "String"
         | leftType.name == "List"
+        | seq_type_name(leftType.name)
         | leftType.name == "Set"
         | leftType.name == "Dict"
         | regex_type_name(leftType.name)
@@ -3450,7 +3469,7 @@ private fun lambda_expression(expression: CompiledExpression): bool =
     case _ -> false
 
 /// Emits generated code for collection pipe.
-private fun collection_pipe_code(binary: CompiledBinaryExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun collection_pipe_code(binary: CompiledBinaryExpression, receiverType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if receiverType.name == "Dict"
     then dict_pipe_code(binary, receiverType, env, module, allModules)
     else
@@ -3464,14 +3483,26 @@ private fun collection_pipe_code(binary: CompiledBinaryExpression, receiverType:
             then receiverCode + ".filter(" + lambda_code_for_value(lambda, valueType, bool_type(), env, module, allModules) + ")"
             else if binary.operator == "|*"
             then receiverCode + ".flatMap(" + flat_map_lambda_code(lambda, valueType, env, module, allModules) + ")"
-            else receiverCode + ".map(" + lambda_code_for_value(lambda, valueType, expression_type(lambda.body, declared_lambda_value_env(lambda, valueType, env), module, allModules), env, module, allModules) + ")"
+            else
+                let naturalValueType = expression_type(lambda.body, declared_lambda_value_env(lambda, valueType, env), module, allModules)
+                let mappedValueType = collection_map_expected_value_type(binary, naturalValueType, expectedType)
+                receiverCode + ".map(" + lambda_code_for_value(lambda, valueType, mappedValueType, env, module, allModules) + ")"
         case CompiledFunctionReferenceExpression reference ->
             if binary.operator == "|!"
             then receiverCode + ".filter(" + predicate_function_reference_lambda_code(reference, valueType, true, module, allModules) + ")"
             else if binary.operator == "|-"
             then receiverCode + ".filter(" + predicate_function_reference_lambda_code(reference, valueType, false, module, allModules) + ")"
-            else receiverCode + ".map(" + function_reference_lambda_code(reference, valueType, function_reference_type(reference, module, allModules), module, allModules) + ")"
+            else
+                let naturalValueType = function_reference_type(reference, module, allModules)
+                let mappedValueType = collection_map_expected_value_type(binary, naturalValueType, expectedType)
+                receiverCode + ".map(" + function_reference_lambda_code(reference, valueType, mappedValueType, module, allModules) + ")"
         case _ -> "unsupported(\"collection pipe\")"
+
+/// Uses the declared sequence element type while lowering a collection map.
+private fun collection_map_expected_value_type(binary: CompiledBinaryExpression, naturalValueType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
+    if binary.operator == "|" & seq_type_name(expectedType.name)
+    then first_type_argument(expectedType)
+    else naturalValueType
 
 /// Emits generated code for reject lambda.
 private fun reject_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3582,7 +3613,11 @@ private fun numeric_widening_code(code: String, sourceType: CompiledTypeReferenc
 
 /// Emits generated code for value conversion.
 private fun value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if type_assignable(expectedType, sourceType) & type_assignable(sourceType, expectedType)
+    if seq_type_name(expectedType.name) & sourceType.name == "List"
+    then "((" + java_seq_type(expectedType) + ") (capy.collection.Seq<?>) capy.collection.Seq.toSeq(" + code + "))"
+    else if expectedType.name == "List" & seq_type_name(sourceType.name)
+    then "((" + java_seq_type(sourceType) + ") (capy.collection.Seq<?>) " + code + ").asList()"
+    else if type_assignable(expectedType, sourceType) & type_assignable(sourceType, expectedType)
     then code
     else match primitive_backed_backing_type(expectedType.name, module, allModules) with
         case Some { backingType } ->
@@ -3789,7 +3824,7 @@ private fun partial_method_call_body_code(call: CompiledMethodCallExpression, na
 private fun partial_extension_method_call_body_code(function: CompiledFunction, call: CompiledMethodCallExpression, names: List[String], receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let effectiveReceiverType = extension_method_receiver_type(function, receiverType, module, allModules)
     let parameters = bound_extension_method_parameters(function, effectiveReceiverType)
-    extension_method_call_name(function, receiverType, call.name, module, allModules)
+    extension_method_call_name(function, receiverType, call.name, env, module, allModules)
         + "("
         + expression_code(call.receiver, env, effectiveReceiverType, module, allModules)
         + partial_extension_method_call_argument_tail(function.parameters, parameters, call.arguments, names, env, module, allModules)
@@ -4954,7 +4989,7 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     else if option_method_call(call, env, module, allModules)
     then option_pipe_code(option_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
     else if collection_method_call(call, env, module, allModules)
-    then collection_pipe_code(collection_method_binary(call), expression_type(call.receiver, env, module, allModules), env, module, allModules)
+    then collection_pipe_code(collection_method_binary(call), expression_type(call.receiver, env, module, allModules), expectedType, env, module, allModules)
     else if set_method_call(call, env, module, allModules)
     then set_method_call_code(call, env, module, allModules)
     else if stdlib_date_time_method_call(call, env, module, allModules)
@@ -4965,6 +5000,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".asList()"
     else if seq_first_call(call, env, module, allModules)
     then seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ".first()"
+    else if seq_rest_call(call, env, module, allModules)
+    then "__capy_seq_rest(" + seq_receiver_code(call.receiver, expression_type(call.receiver, env, module, allModules), env, module, allModules) + ")"
     else if effect_start_method_call(call, env, module, allModules)
     then "capy.lang.Async.start((capy.lang.Effect) " + expression_code(call.receiver, env, expression_type(call.receiver, env, module, allModules), module, allModules) + ")"
     else if async_join_method_call(call, env, module, allModules)
@@ -5161,8 +5198,16 @@ private fun result_map_method_lambda_argument(expression: CompiledExpression): b
 
 /// Emits generated code for result map method.
 private fun result_map_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let receiverType = contextual_result_receiver_type(expression_type(call.receiver, env, module, allModules), expectedType)
     result_pipe_code(result_map_method_binary(call), receiverType, expectedType, env, module, allModules)
+
+/// Uses a concrete expected Result payload when the receiver payload still requires context.
+private fun contextual_result_receiver_type(receiverType: CompiledTypeReference, expectedType: CompiledTypeReference): CompiledTypeReference =
+    if result_type_name(receiverType.name)
+        & result_type_name(expectedType.name)
+        & result_value_type_needs_context(first_type_argument(receiverType))
+    then expectedType
+    else receiverType
 
 /// Emits generated code for result reduce method.
 private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5509,6 +5554,12 @@ private fun collection_fold_method_type(call: CompiledMethodCallExpression, env:
 /// Checks whether a call has the seq first call shape.
 private fun seq_first_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "first" & call.arguments.is_empty()
+    then seq_type_name(expression_type(call.receiver, env, module, allModules).name)
+    else false
+
+/// Checks whether a call selects the tail of a sequence node.
+private fun seq_rest_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "rest" & call.arguments.is_empty()
     then seq_type_name(expression_type(call.receiver, env, module, allModules).name)
     else false
 
@@ -6104,20 +6155,30 @@ private fun extension_method_call_code(function: CompiledFunction, call: Compile
 private fun extension_method_call_code_with_receiver_type(function: CompiledFunction, call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let effectiveReceiverType = extension_method_receiver_type(function, receiverType, module, allModules)
     let parameters = bound_extension_method_parameters(function, effectiveReceiverType)
-    extension_method_call_name(function, receiverType, call.name, module, allModules)
+    extension_method_call_name(function, receiverType, call.name, env, module, allModules)
         + "("
         + expression_code(call.receiver, env, effectiveReceiverType, module, allModules)
         + extension_method_call_argument_tail(function.parameters, parameters, call.arguments, env, module, allModules)
         + ")"
 
 /// Computes the declaring-module-qualified Java name for an extension method call.
-private fun extension_method_call_name(function: CompiledFunction, receiverType: CompiledTypeReference, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun extension_method_call_name(function: CompiledFunction, receiverType: CompiledTypeReference, methodName: String, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_selected_extension_method_binding_in_scope(function, receiverType.name, methodName, module, allModules) with
     case Some { binding } ->
         if binding.moduleName == module.name & binding.modulePath == module.path
         then java_function_name(binding.function)
-        else java_function_binding_class_name(binding) + "." + java_function_name(binding.function)
+        else
+            let className = java_function_binding_class_name(binding)
+            if java_class_root_shadowed(className, env)
+            then java_function_name(binding.function)
+            else className + "." + java_function_name(binding.function)
     case None -> java_function_name(function)
+
+/// Checks whether a local binding hides the first package component of a Java class name.
+private fun java_class_root_shadowed(className: String, env: List[JavaBinding]): bool =
+    let separator = first_index_of(className, ".", 0)
+    let root = if separator < 0 then className else className[0, separator]
+    binding_exists(root, env)
 
 /// Finds the origin-preserving binding for an extension overload already selected by argument types.
 private fun find_selected_extension_method_binding_in_scope(function: CompiledFunction, ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
@@ -6964,8 +7025,11 @@ private fun expression_list_tail(expressions: List[CompiledExpression], env: Lis
 
 /// Emits generated code for list literal.
 private fun list_literal_code(literal: CompiledListLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let elementType = if expectedType.name == "List" then first_type_argument(expectedType) else object_type()
-    "java.util.List.of(" + list_expression_list_code(literal.values, elementType, env, module, allModules) + ")"
+    let elementType = if expectedType.name == "List" | seq_type_name(expectedType.name) then first_type_argument(expectedType) else object_type()
+    let listCode = "java.util.List.of(" + list_expression_list_code(literal.values, elementType, env, module, allModules) + ")"
+    if seq_type_name(expectedType.name)
+    then "capy.collection.Seq.toSeq(" + listCode + ")"
+    else listCode
 
 /// Emits generated code for list expression list.
 private fun list_expression_list_code(expressions: List[CompiledExpression], elementType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7047,6 +7111,8 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
     then stdlib_date_time_data_literal_code(literal, env, module, allModules)
     else if option_constructor_type(literal.typeName)
     then option_data_literal_code(literal, env, expectedType, module, allModules)
+    else if result_success_constructor(literal.typeName)
+    then result_success_data_literal_code(literal, env, expectedType, module, allModules)
     else if result_error_constructor(literal.typeName)
     then result_error_data_literal_code(literal, env, expectedType, module, allModules)
     else if program_success_literal(literal.typeName, module.imports)
@@ -7307,6 +7373,14 @@ private fun result_error_data_literal_code(literal: CompiledDataLiteral, env: Li
     then "__capy_error(" + expression_code(data_field_value(literal.fields, "message"), env, string_type(), module, allModules) + ")"
     else "__capy_error(" + expression_code(first_data_field_value(literal.fields), env, string_type(), module, allModules) + ")"
 
+/// Emits Success while applying an available Result payload context without requiring linked stdlib schemas.
+private fun result_success_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match literal.fields[0] with
+    case Some { field } ->
+        let valueType = if result_type_name(expectedType.name) then first_type_argument(expectedType) else expression_type(field.value, env, module, allModules)
+        "__capy_data(\"Success\", __capy_value_fields(" + expression_code(field.value, env, valueType, module, allModules) + "))"
+    case None -> "__capy_data(\"Success\", __capy_value_fields(null))"
+
 private fun data_fields_have_all_structured_error_fields(fields: List[CompiledDataField]): bool =
     data_fields_have_name(fields, "kind")
         & data_fields_have_name(fields, "message")
@@ -7511,6 +7585,17 @@ private fun field_access_code(access: CompiledFieldAccessExpression, env: List[J
     then expression_code(access.receiver, env, expectedType, module, allModules)
     else if access.name == "value" & stdlib_byte_count_type(expression_type(access.receiver, env, module, allModules))
     then stdlib_byte_count_value_code(access, env, expectedType, module, allModules)
+    else if access.name == "value" & seq_type_name(expression_type(access.receiver, env, module, allModules).name)
+    then
+        let receiverType = expression_type(access.receiver, env, module, allModules)
+        let valueType = first_type_argument(receiverType)
+        value_conversion_code(
+            seq_receiver_code(access.receiver, receiverType, env, module, allModules) + ".first().orElse(null)",
+            valueType,
+            expectedType,
+            module,
+            allModules
+        )
     else match primitive_backed_backing_type(expression_type(access.receiver, env, module, allModules).name, module, allModules) with
         case Some { backingType } ->
             if access.name == "value"
@@ -7796,6 +7881,8 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then option_match_condition_code(matchCase, valueCode)
     else if result_match_case(matchCase, valueType)
     then result_match_condition_code(matchCase, valueCode)
+    else if seq_match_case(matchCase, valueType)
+    then seq_match_condition_code(matchCase.typeName, valueCode)
     else if matchCase.typeName == "data"
     then "__capy_data_is_any(" + valueCode + ")"
     else if matchCase.typeName == "enum"
@@ -7805,6 +7892,15 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     else if primitive_match_type(matchCase.typeName)
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
+
+/// Checks whether a case selects a non-empty or empty sequence constructor.
+private fun seq_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
+    seq_type_name(valueType.name) & (matchCase.typeName == "Cons" | matchCase.typeName == "End")
+
+/// Emits a sequence constructor condition against the Java sequence runtime.
+private fun seq_match_condition_code(typeName: String, valueCode: String): String =
+    let empty = "((capy.collection.Seq<?>) " + valueCode + ").asList().isEmpty()"
+    if typeName == "Cons" then "!" + empty else empty
 
 /// Checks whether the current value satisfies the option match case rule for compiler processing.
 private fun option_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
@@ -7974,6 +8070,10 @@ private fun match_binding_whole_value_type(matchCase: CompiledMatchCase, valueTy
     then valueType
     else if result_match_case(matchCase, valueType)
     then result_match_whole_value_type(matchCase, valueType)
+    else if option_match_case(matchCase, valueType)
+    then valueType
+    else if seq_match_case(matchCase, valueType)
+    then valueType
     else if collection_match_type(matchCase.typeName)
     then collection_match_binding_type(matchCase.typeName)
     else CompiledTypeReference { name: matchCase.typeName, arguments: [] }
@@ -8294,6 +8394,8 @@ private fun field_access_type(access: CompiledFieldAccessExpression, env: List[J
         then receiverType
         else if access.name == "value" & stdlib_byte_count_type(receiverType)
         then long_type()
+        else if access.name == "value" & seq_type_name(receiverType.name)
+        then first_type_argument(receiverType)
         else match primitive_backed_backing_type(receiverType.name, module, allModules) with
             case Some { backingType } -> if access.name == "value" then backingType else data_field_type(access.name, receiverType, object_type(), module, allModules)
             case None ->
@@ -9478,6 +9580,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then list_type(collection_value_type(receiverType))
     else if call.name == "first" & call.arguments.is_empty() & seq_type_name(receiverType.name)
     then option_type(collection_value_type(receiverType))
+    else if call.name == "rest" & call.arguments.is_empty() & seq_type_name(receiverType.name)
+    then receiverType
     else if (call.name == "reduce" | call.name == "reduce_left") & result_reduce_method_arguments(call.arguments) & result_type_name(receiverType.name)
     then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if (call.name == "map" | call.name == "flat_map") & result_map_method_argument(call.arguments) & result_type_name(receiverType.name)
@@ -11703,6 +11807,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
     else if seq_first_call(call, env, module, allModules)
     then call.arguments.is_empty() & expression_emittable(call.receiver, env, module, allModules)
+    else if seq_rest_call(call, env, module, allModules)
+    then expression_emittable(call.receiver, env, module, allModules)
     else if effect_start_method_call(call, env, module, allModules)
     then expression_emittable(call.receiver, env, module, allModules)
     else if async_join_method_call(call, env, module, allModules)
@@ -12477,7 +12583,7 @@ private fun function_parameters_assignable(targetParameters: List[CompiledTypeRe
 /// Checks whether empty collection literal is assignable under the generator type rules.
 private fun empty_collection_literal_assignable(target: CompiledTypeReference, argument: CompiledExpression): bool =
     match argument with
-    case CompiledListLiteral literal -> literal.values.is_empty() & target.name == "List"
+    case CompiledListLiteral literal -> literal.values.is_empty() & (target.name == "List" | seq_type_name(target.name))
     case CompiledSetLiteral literal -> literal.values.is_empty() & target.name == "Set"
     case CompiledDictLiteral literal -> literal.entries.is_empty() & target.name == "Dict"
     case _ -> false
@@ -12679,6 +12785,7 @@ private fun boxed_java_type(type: CompiledTypeReference): String =
     else if type.name == "array" then java_type(first_type_argument(type)) + "[]"
     else if java_object_type(type) then java_object_type_java_name(type)
     else if !primitive_type.is_empty() then primitive_type
+    else if seq_type_name(type.name) then java_seq_type(type)
     else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, boxed_java_type(first_type_argument(type)))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + generic_argument_java_type(first_type_argument(type)) + ">"
@@ -12701,6 +12808,7 @@ private fun top_level_boxed_java_type(type: CompiledTypeReference, module: Compi
     else if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
     else if java_object_type(type) then java_object_type_java_name(type)
     else if !primitive_type.is_empty() then primitive_type
+    else if seq_type_name(type.name) then "capy.collection.Seq<" + top_level_boxed_java_type(first_type_argument(type), module, allModules) + ">"
     else if boxed_container_java_type_name(type.name) then boxed_container_java_type(type.name, top_level_boxed_java_type(first_type_argument(type), module, allModules))
     else if type.name == "Tuple" then "java.util.List<?>"
     else if type.name == "Effect" then "capy.lang.Effect<" + top_level_generic_argument_java_type(first_type_argument(type), module, allModules) + ">"
@@ -13384,7 +13492,13 @@ private fun module_source_file(module: CompiledModule): String =
 private fun java_helpers(module: CompiledModule): String =
     if module.functions.is_empty()
     then ""
-    else java_base_helpers() + java_collection_helpers() + java_truthy_helper()
+    else java_base_helpers() + java_seq_helpers() + java_collection_helpers() + java_truthy_helper()
+
+/// Emits Java runtime helpers for sequence operations absent from the shipped Seq interface.
+private fun java_seq_helpers(): String =
+    "    private static <T> capy.collection.Seq<T> __capy_seq_rest(capy.collection.Seq<T> sequence) {\n        java.util.List<T> values = sequence.asList();\n        return capy.collection.Seq.toSeq(values.subList(java.lang.Math.min(1, values.size()), values.size()));\n    }\n\n"
+        + "    private static <T> capy.collection.Seq<T> __capy_seq_append(capy.collection.Seq<T> sequence, T value) {\n        java.util.List<T> values = new java.util.ArrayList<>(sequence.asList());\n        values.add(value);\n        return capy.collection.Seq.toSeq(values);\n    }\n\n"
+        + "    private static <T> capy.collection.Seq<T> __capy_seq_concat(capy.collection.Seq<T> left, capy.collection.Seq<T> right) {\n        java.util.List<T> values = new java.util.ArrayList<>(left.asList());\n        values.addAll(right.asList());\n        return capy.collection.Seq.toSeq(values);\n    }\n\n"
 
 /// Emits Java runtime helper source for base helpers.
 private fun java_base_helpers(): String =

@@ -53,4 +53,4 @@ fun Option[T].or_else(v: T): T =
 fun Option[T].or(option: Option[T]): Option[T] =
     match this with
     case None -> option
-    case Some _ -> this
+    case Some some -> some

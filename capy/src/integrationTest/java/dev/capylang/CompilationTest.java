@@ -193,6 +193,128 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreserveWholeOptionMatchBindingType() {
+        var source = """
+                data Some[T] { value: T }
+                data None {}
+                union Option[T] = Some[T] | None
+
+                fun keep(value: Option[String]): Option[String] =
+                    match value with
+                    case None -> None {}
+                    case Some some -> some
+                """;
+        var program = compileProgram(List.of(rawModule("OptionMatch", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/OptionMatch.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("java.util.Optional<java.lang.String> some__match_")
+                .contains("return some__match_")
+                .doesNotContain("java.lang.Object some__match_");
+    }
+
+    @Test
+    void shouldLowerStringCharacterParsingAndSequencePatternsAcrossBackends() {
+        var source = """
+                import /capy/collection/Seq
+                import /capy/lang/String
+                from /capy/lang/Primitives import { to_int }
+                from /capy/lang/Result import { Result, Success }
+
+                fun parse(value: String): Seq[Result[int]] =
+                    value | char => char.to_int()
+
+                fun second(values: Seq[int]): int =
+                    match values with
+                    case Cons first ->
+                        match first.rest() with
+                        case Cons second -> second.value
+                        case End -> 0
+                    case End -> 0
+
+                fun collect(values: Seq[int]): Result[Seq[int]] =
+                    values
+                    |> Success { [] }, (acc, value) => acc.map(items => items + value)
+
+                fun from_list(values: List[int]): Seq[int] = values
+
+                fun list_value(value: int): List[int] = [value]
+
+                fun map_list(values: Seq[Result[int]]): Seq[Result[Seq[int]]] =
+                    values | result => result.map(value => list_value(value))
+                """;
+        var program = compileProgram(List.of(rawModule("SequencePatterns", "/sample/app", source, SourceKind.FUNCTIONAL)));
+        var javaCode = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/SequencePatterns.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/SequencePatterns.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/SequencePatterns.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(javaCode)
+                .contains("__capy_parse_int(_char)")
+                .contains("__capy_seq_rest(")
+                .contains("private static <T> capy.collection.Seq<T> __capy_seq_rest")
+                .contains("capy.collection.Seq.toSeq(java.util.List.of())")
+                .contains("capy.collection.Seq<java.lang.Integer> items")
+                .contains("__capy_seq_append(items, value)")
+                .contains("private static <T> capy.collection.Seq<T> __capy_seq_append")
+                .contains("capy.collection.Seq.toSeq(values)")
+                .contains("capy.collection.Seq.toSeq(list_value__")
+                .contains(".first().orElse(null)");
+        assertThat(pythonCode)
+                .contains("__capy_parse_int(char)")
+                .contains("__capy_seq_rest(first)")
+                .contains("__capy_seq_first_value(second)");
+        assertThat(javaScriptCode)
+                .contains("__capy_parse_int(char)")
+                .contains("__capy_seq_rest(first)")
+                .contains("__capy_seq_first_value(second)");
+    }
+
+    @Test
+    void shouldUseStaticImportWhenLambdaParameterShadowsPackageName() {
+        var modelSource = """
+                data Widget {}
+                fun Widget.render(): String = "widget"
+                """;
+        var appSource = """
+                from /sample/model/Widget import { Widget }
+
+                fun render_all(values: Seq[Widget]): Seq[String] =
+                    values.map(sample => sample.render())
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Widget", "/sample/model", modelSource, SourceKind.FUNCTIONAL),
+                rawModule("App", "/sample/app", appSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/App.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("(sample) -> Widget_render__2_0(sample)")
+                .doesNotContain("sample.model.Widget.Widget_render__2_0(sample)");
+    }
+
+    @Test
     void shouldUseDeclaredFunctionalLambdaParameterTypes() {
         var source = """
                 fun typed_map(values: List[String]): Seq[String] =
@@ -378,6 +500,29 @@ class CompilationTest {
                         "if (__capybaraProgram instanceof capy.lang.Program.Failed __capybaraFailed)",
                         "java.lang.System.exit(__capybaraFailed.exit_code());"
                 );
+    }
+
+    @Test
+    void shouldGenerateJavaProgramMainEntrypointForSeqArguments() {
+        var source = """
+                import /capy/collection/Seq
+                from /capy/lang/Effect import { Effect, pure }
+                from /capy/lang/Program import { Program, Success }
+
+                fun main(args: Seq[String]): Effect[Program] =
+                    pure(Success {})
+                """;
+        var program = compileProgram(List.of(rawModule("Main", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("public static final void main(java.lang.String... args)")
+                .contains("main(capy.collection.Seq.<java.lang.String>toSeq(__capybaraArgsList)).unsafeRun()");
     }
 
     @Test
