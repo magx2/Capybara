@@ -10,6 +10,7 @@ import time
 import traceback
 
 SUPPORTED_REPORT_TYPES = ("JUNIT", "CTRF", "JEST", "ADOC")
+SUPPORTED_LOG_TYPES = ("NONE", "LOG", "TC", "TEAM_CITY")
 
 
 def parse_args(argv):
@@ -17,7 +18,7 @@ def parse_args(argv):
     parser.add_argument("--generated-dir", required=True)
     parser.add_argument("--output-dir")
     parser.add_argument("--report-type", default="JUNIT", type=str.upper, choices=SUPPORTED_REPORT_TYPES)
-    parser.add_argument("--log", default="NONE")
+    parser.add_argument("--log", default="NONE", type=str.upper, choices=SUPPORTED_LOG_TYPES)
     parser.add_argument("--tests", action="append", default=[])
     parser.add_argument("--available-tests", action="store_true")
     args = parser.parse_args(argv)
@@ -503,6 +504,19 @@ def teamcity_escape(value):
 
 
 def log_teamcity(log_type, event, **attrs):
+    if log_type == "LOG":
+        name = attrs.get("name", "")
+        labels = {
+            "testSuiteStarted": "Test suite started",
+            "testSuiteFinished": "Test suite finished",
+            "testStarted": "Test started",
+            "testFinished": "Test finished",
+            "testFailed": "Test failed",
+        }
+        print(f"{labels[event]}: {name}")
+        if event == "testFailed":
+            print(attrs.get("message", ""))
+        return
     if log_type not in ("TC", "TEAM_CITY"):
         return
     payload = " ".join(f"{key}='{teamcity_escape(value)}'" for key, value in attrs.items())
@@ -717,7 +731,7 @@ def main(argv):
             if result["failed"]:
                 failed = True
                 log_teamcity(args.log, "testFailed", name=case_name, message=result["failed"]["message"])
-            log_teamcity(args.log, "testFinished", name=case_name)
+            log_teamcity(args.log, "testFinished", name=case_name, duration=result["durationMs"])
             results.append(result)
         log_teamcity(args.log, "testSuiteFinished", name=file_name)
         suites.append({"testFile": test_file, "fileName": file_name, "results": results})

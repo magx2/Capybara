@@ -126,7 +126,7 @@ private fun execute_test_case(log_type: LogType, test_case: TestCase): Effect[Te
         assert_supplier: test_case.assert_supplier
     }
     let failed <- print_test_failed(log_type, executed_test_case)
-    let finished <- print_test_finished(log_type, test_case.name)
+    let finished <- print_test_finished(log_type, executed_test_case)
     executed_test_case
 
 private fun execute(assertions: List[() => Assertion]): TestResult =
@@ -419,11 +419,11 @@ private fun print_test_failed(log_type: LogType, test_case: TestCase): Effect[St
         case TEAM_CITY ->
             println("##teamcity[testFailed name='{team_city_escape(test_case.name)}' message='assertion failed' details='{team_city_escape(normalize_failure_message(message))}']")
 
-private fun print_test_finished(log_type: LogType, test_name: String): Effect[String] =
+private fun print_test_finished(log_type: LogType, test_case: TestCase): Effect[String] =
     match log_type with
-    case NONE -> pure(test_name)
-    case LOG -> println("Test finished: {test_name}")
-    case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_name)}']")
+    case NONE -> pure(test_case.name)
+    case LOG -> println("Test finished: {test_case.name}")
+    case TEAM_CITY -> println("##teamcity[testFinished name='{team_city_escape(test_case.name)}' duration='{ctrf_duration_millis(test_case)}']")
 
 /// Builds console log lines for the supplied test files and their test cases.
 fun test_log_lines(test_files: List[TestFile]): List[String] =
@@ -466,7 +466,7 @@ private fun team_city_messages_file(test_file: TestFile): List[String] =
 private fun team_city_messages_case(test_case: TestCase): List[String] =
     let test_name = team_city_escape(test_case.name)
     let started = "##teamcity[testStarted name='{test_name}']"
-    let finished = "##teamcity[testFinished name='{test_name}']"
+    let finished = "##teamcity[testFinished name='{test_name}' duration='{ctrf_duration_millis(test_case)}']"
     match test_case.result with
     case Passed -> [started, finished]
     case Failed { message, type } -> [

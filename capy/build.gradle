@@ -429,8 +429,8 @@ def intellijE2eTestSourceDirs = files(
         'src/e2e-coo-js-native',
         'src/e2e-coo-py-native'
 )
-def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/js/run-capybara-tests.js')
-def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/test/py/run-capybara-tests.py')
+def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/js/run-capybara-tests.js')
+def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/python/run-capybara-tests.py')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier ->
         !(componentIdentifier instanceof ProjectComponentIdentifier) &&
@@ -825,10 +825,13 @@ processResources {
     from(capybaraStdlibLinkedDir) {
         into 'capy'
     }
+    from(project(':lib:capybara-lib').layout.projectDirectory.dir('src/main/resources/test-runner')) {
+        into 'test-runner'
+    }
 }
 
 application {
-    mainClass = 'dev.capylang.cli.Capy'
+    mainClass = 'dev.capylang.cli.CapyLauncher'
 }
 
 def integrationTests = tasks.register('integrationTest', Test) {
