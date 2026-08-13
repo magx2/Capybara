@@ -47,6 +47,7 @@ def main():
             raw_module(
                 "ImportedFunctional",
                 "dev/capylang/smoke",
+                'from /RootSupport import { support }\n'
                 'from /capy/lang/String import { String }\n'
                 'data User { name: String }\n'
                 'fun greet(user: User): String = "hello {user.name}"\n'
@@ -70,7 +71,8 @@ def main():
 
     assert_equal(parsed["__type"], "ParsedProgram", "parsed type")
     assert_equal(len(parsed["modules"]), 2, "parsed module count")
-    assert_equal(parsed["modules"][0]["imports"][0]["modulePath"], "/capy/lang/String", "import module")
+    assert_equal(parsed["modules"][0]["imports"][0]["modulePath"], "/RootSupport", "root import module")
+    assert_equal(parsed["modules"][0]["imports"][1]["modulePath"], "/capy/lang/String", "import module")
     assert_equal(parsed["modules"][0]["definitions"][0]["__type"], "DataDeclaration", "first functional definition")
     assert_equal(parsed["modules"][0]["definitions"][2]["function"]["body"]["right"]["parameters"][0], "__capy_typed_lambda|value|String", "typed lambda parameter")
     assert_equal(parsed["modules"][1]["objectOriented"]["interfaces"][0]["name"], "Clock", "object interface")

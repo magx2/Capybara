@@ -456,5 +456,8 @@ DOC_COMMENT : '///' ~[\r\n]*;
 LINE_COMMENT : '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT : '/*' .*? '*/' { if (containsNewline(getText())) lineStart = true; } -> skip;
 BACKTICKED_INFIX_METHOD_LITERAL: '`' ('|l>' | [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]+) '`';
-INFIX_METHOD_LITERAL: '|l>' | [\\$#@∈∉≠⊆⊂⊇⊃∪∩△×℘∅] [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]*;
+INFIX_METHOD_LITERAL
+    : { !(_input.LA(1) == '@' && _input.LA(2) == '/') }?
+      ('|l>' | [\\$#@∈∉≠⊆⊂⊇⊃∪∩△×℘∅] [+\-*/\\^%$#@~!:<>|?=∈∉≠⊆⊂⊇⊃∪∩△×℘∅]*)
+    ;
 WS : [ \t\r\n]+ { if (containsNewline(getText())) lineStart = true; } -> skip;

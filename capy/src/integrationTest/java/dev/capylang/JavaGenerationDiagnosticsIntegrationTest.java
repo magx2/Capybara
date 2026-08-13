@@ -11,6 +11,8 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import javax.tools.ToolProvider;
 
@@ -20,6 +22,71 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JavaGenerationDiagnosticsIntegrationTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void compilesJavaForRootModulesWithAbsoluteImports() throws Exception {
+        var support = writeSource("Support.cfun", """
+                from /capy/collection/Seq import { Seq, Cons, End }
+
+                data Counter { value: int }
+
+                fun increment(value: int): int = value + 1
+
+                fun Counter.doubled(): int = this.value * 2
+
+                fun countdown(value: int): Cons[int] =
+                    @/capy/meta_prog/Recursive
+                    fun rest(value: int): Seq[int] =
+                        if value <= 0
+                        then End {}
+                        else Cons { value: value, rest: () => rest(value - 1) }
+                    ---
+                    Cons { value: value, rest: () => rest(value - 1) }
+                """);
+        var main = writeSource("main.cfun", """
+                from /capy/collection/Seq import { Seq }
+                from /Support import { Counter, increment, countdown }
+
+                fun answer(): int = increment(41)
+
+                fun doubled(counter: Counter): int = counter.doubled()
+
+                fun values(): Seq[int] = countdown(3)
+
+                fun render(counter: Counter): String = render(counter.value)
+
+                fun render(value: int): String = "value"
+                """);
+
+        compileGenerate();
+
+        assertThat(generatedPath(main))
+                .content()
+                .doesNotContain("import static Support.")
+                .contains("Support.increment")
+                .contains("Support.Counter_doubled")
+                .doesNotContain("__capy_tail_counter");
+        var seqRuntime = tempDir.resolve("java-runtime/capy/collection/Seq.java");
+        Files.createDirectories(seqRuntime.getParent());
+        Files.writeString(seqRuntime, """
+                package capy.collection;
+
+                import java.util.List;
+                import java.util.function.Supplier;
+
+                public interface Seq<T> {
+                    record Cons<T>(T value, Supplier<Seq<T>> rest) implements Seq<T> {}
+                    enum End implements Seq<Object> { INSTANCE }
+                    static <T> Seq<T> toSeq(Object value) { return (Seq<T>) End.INSTANCE; }
+                    default List<T> asList() { return List.of(); }
+                }
+                """);
+        assertJavaCompiles(
+                seqRuntime,
+                generatedPath(support),
+                generatedPath(main)
+        );
+    }
 
     @Test
     void generatesQualifiedStandardLibraryCallsThroughCompileGenerate() throws Exception {
@@ -423,6 +490,112 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsNestedLambdaArgumentTypeDuringCompilation() throws Exception {
+        var source = writeSource("sample/NestedLambdaTypeFailure.cfun", """
+                from /capy/lang/Result import { Result }
+
+                fun render(result: Result[List[int]]): String = ""
+
+                fun broken(result: Result[List[int]]): String =
+                    render(result.map(value => item => item))
+                """);
+
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/NestedLambdaTypeFailure.cfun:6:4: Argument 1 of function `render` has type `Result[function]`, but `Result[List[int]]` is required.
+                """);
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void reportsResultFlatMapReturningPlainValueDuringCompilationForEveryBackend() throws Exception {
+        writeSource("sample/Values.cfun", """
+                fun find_values(value: int): List[int] = [value]
+                """);
+        var source = writeSource("sample/ResultFlatMapTypeFailure.cfun", """
+                from /capy/lang/Result import { Result }
+                from /sample/Values import { find_values }
+
+                fun broken(result: Result[int]): Result[List[int]] =
+                    result.flat_map(value => find_values(value))
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 1 error(s):
+                    /sample/ResultFlatMapTypeFailure.cfun:5:4: Result.flat_map mapper must return `Result`, but it returns `List[int]`.
+                    """);
+        }
+
+        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source, ".js")).doesNotExist();
+        assertThat(generatedPath(source, ".py")).doesNotExist();
+    }
+
+    @Test
+    void rejectsImplicitConversionsBetweenSeqAndListForEveryBackend() throws Exception {
+        var source = writeSource("sample/DistinctCollections.cfun", """
+                fun list_as_seq(values: List[int]): Seq[int] = values
+
+                fun seq_as_list(values: Seq[int]): List[int] = values
+
+                fun consume_list(values: List[int]): String = "done"
+
+                fun wrong_argument(values: Seq[int]): String = consume_list(values)
+
+                fun wrong_binding(values: Seq[int]): List[int] =
+                    let copied: List[int] = values
+                    copied
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 4 error(s):
+                    /sample/DistinctCollections.cfun:1:0: Function `list_as_seq` returns `List[int]`, but declares `Seq[int]`; use an explicit `to_seq` or `as_list` conversion.
+                    /sample/DistinctCollections.cfun:3:0: Function `seq_as_list` returns `Seq[int]`, but declares `List[int]`; use an explicit `to_seq` or `as_list` conversion.
+                    /sample/DistinctCollections.cfun:7:47: Argument 1 of function `consume_list` has type `Seq[int]`, but `List[int]` is required; use an explicit `to_seq` or `as_list` conversion.
+                    /sample/DistinctCollections.cfun:10:4: Binding `copied` has type `Seq[int]`, but declares `List[int]`; use an explicit `to_seq` or `as_list` conversion.
+                    """);
+        }
+
+        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source, ".js")).doesNotExist();
+        assertThat(generatedPath(source, ".py")).doesNotExist();
+    }
+
+    @Test
+    void compilesExplicitSeqToListConversionInsideAsyncEffect() throws Exception {
+        var source = writeSource("sample/AsyncEffectBind.cfun", """
+                import /capy/collection/Seq
+                import /capy/lang/Async
+                import /capy/lang/Effect
+                from /capy/lang/Result import { Result }
+
+                data Item { value: int }
+
+                fun find_items(items: Seq[Item]): List[Item] = items.as_list()
+
+                fun compute_items(result: Result[Seq[Item]]): Async[String] =
+                    Async.compute(() => {
+                        let mapped: Result[List[Item]] = result.map(items => find_items(items))
+                        "done"
+                    })
+
+                fun collect(tasks: Seq[Async[String]]): Effect[String] =
+                    Async.all(tasks).map(_ => "done")
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+        assertThat(generatedPath(source))
+                .content()
+                .contains("java.lang.Object items = __capy_result_success_value(")
+                .contains("capy.lang.Async.all(")
+                .contains("tasks).asList())");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesSupportedListMethodWithoutFreeFunctionSymbol() throws Exception {
         var source = writeSource("sample/ListSize.cfun", """
                 fun count(values: List[int]): int =
@@ -595,18 +768,24 @@ class JavaGenerationDiagnosticsIntegrationTest {
         return tempDir.resolve("test-output");
     }
 
-    private void assertJavaCompiles(Path source) throws IOException {
+    private void assertJavaCompiles(Path... sources) throws IOException {
         var compiler = ToolProvider.getSystemJavaCompiler();
         assertThat(compiler).as("system Java compiler").isNotNull();
         var classes = Files.createDirectories(tempDir.resolve("compiled-java"));
         var diagnostics = new ByteArrayOutputStream();
+        var arguments = new ArrayList<String>();
+        arguments.add("-classpath");
+        arguments.add(System.getProperty("java.class.path"));
+        arguments.add("-d");
+        arguments.add(classes.toString());
+        for (var source : sources) {
+            arguments.add(source.toString());
+        }
         var exitCode = compiler.run(
                 null,
                 diagnostics,
                 diagnostics,
-                "-classpath", System.getProperty("java.class.path"),
-                "-d", classes.toString(),
-                source.toString()
+                arguments.toArray(String[]::new)
         );
         assertThat(exitCode)
                 .as(diagnostics.toString(StandardCharsets.UTF_8))

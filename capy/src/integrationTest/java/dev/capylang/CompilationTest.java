@@ -26,6 +26,99 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
 class CompilationTest {
+    @Test
+    void shouldCompileAndGenerateRootModulesWithAbsoluteImports() {
+        var program = compileProgram(List.of(
+                rawModule("Support", "", "fun increment(value: int): int = value + 1"),
+                rawModule("main", "", """
+                        from /Support import { increment }
+
+                        fun answer(): int = increment(41)
+                        """)
+        ));
+
+        var javaModules = JavaGenerator.javaGenerator(program).modules();
+        assertThat(javaModules)
+                .extracting(module -> module.relativePath())
+                .contains("Support.java", "main.java");
+        assertThat(javaModules.stream()
+                .filter(module -> module.relativePath().equals("main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .doesNotContain("package ;")
+                .contains("Support.increment");
+
+        var javaScriptModules = JavaScriptGenerator.javaScriptGenerator(program).modules();
+        assertThat(javaScriptModules)
+                .extracting(module -> module.relativePath())
+                .contains("Support.js", "main.js");
+        assertThat(javaScriptModules.stream()
+                .filter(module -> module.relativePath().equals("main.js"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("require(\"./Support\")");
+
+        var pythonModules = PythonGenerator.pythonGenerator(program).modules();
+        assertThat(pythonModules)
+                .extracting(module -> module.relativePath())
+                .contains("Support.py", "main.py");
+        assertThat(pythonModules.stream()
+                .filter(module -> module.relativePath().equals("main.py"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("__import__(\"Support\"");
+    }
+
+    @Test
+    void shouldRejectAbsoluteImportWithoutRootModuleName() {
+        assertThatThrownBy(() -> CapybaraCompiler.compile(
+                List.of(rawModule("main", "", """
+                        from / import { increment }
+
+                        fun answer(): int = increment(41)
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("main.cfun:1:0: ParserError");
+    }
+
+    @Test
+    void shouldRejectNestedGenericMismatchInEffectBinding() {
+        var asyncSource = """
+                data Async[T] { <native> }
+
+                fun all(tasks: Seq[Async[T]]): Effect[List[Result[T]]] = <native>
+                """;
+        var mainSource = """
+                from /capy/lang/Async import { Async, all }
+
+                fun broken(tasks: Seq[Async[String]]): Effect[List[String]] =
+                    let strings: List[String] <- all(tasks)
+                    Effect.pure(strings)
+                """;
+
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Async", "/capy/lang", asyncSource),
+                        rawModule("main", "", mainSource)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString())
+                .contains("Binding `strings` has type `List[Result[T]]`, but declares `List[String]`.");
+    }
+
     @ParameterizedTest(name = "{index}: should {0}")
     @MethodSource
     void test(String code) {
@@ -239,14 +332,23 @@ class CompilationTest {
 
                 fun collect(values: Seq[int]): Result[Seq[int]] =
                     values
-                    |> Success { [] }, (acc, value) => acc.map(items => items + value)
+                    |> Success { Seq.to_seq([]) }, (acc, value) => acc.map(items => items + value)
 
-                fun from_list(values: List[int]): Seq[int] = values
+                fun from_list(values: List[int]): Seq[int] = Seq.to_seq(values)
 
                 fun list_value(value: int): List[int] = [value]
 
                 fun map_list(values: Seq[Result[int]]): Seq[Result[Seq[int]]] =
-                    values | result => result.map(value => list_value(value))
+                    values | result => result.map(value => Seq.to_seq(list_value(value)))
+
+                data Item { label: String }
+
+                fun Item.render(): String = this.label
+
+                fun render_first(values: Seq[Item]): String =
+                    match values with
+                    case Cons cons -> cons.value.render()
+                    case End -> ""
                 """;
         var program = compileProgram(List.of(rawModule("SequencePatterns", "/sample/app", source, SourceKind.FUNCTIONAL)));
         var javaCode = JavaGenerator.javaGenerator(program).modules().stream()
@@ -270,8 +372,8 @@ class CompilationTest {
                 .contains("__capy_seq_rest(")
                 .contains("private static <T> capy.collection.Seq<T> __capy_seq_rest")
                 .contains("capy.collection.Seq.toSeq(java.util.List.of())")
-                .contains("capy.collection.Seq<java.lang.Integer> items")
-                .contains("__capy_seq_append(items, value)")
+                .contains("java.lang.Object items")
+                .contains("__capy_seq_append(((capy.collection.Seq<java.lang.Object>) items), value)")
                 .contains("private static <T> capy.collection.Seq<T> __capy_seq_append")
                 .contains("capy.collection.Seq.toSeq(values)")
                 .contains("capy.collection.Seq.toSeq(list_value__")
@@ -279,11 +381,50 @@ class CompilationTest {
         assertThat(pythonCode)
                 .contains("__capy_parse_int(char)")
                 .contains("__capy_seq_rest(first)")
-                .contains("__capy_seq_first_value(second)");
+                .contains("__capy_seq_first_value(second)")
+                .contains("Item_render__")
+                .doesNotContain("__capy_seq_first_value(cons).render()");
         assertThat(javaScriptCode)
                 .contains("__capy_parse_int(char)")
                 .contains("__capy_seq_rest(first)")
-                .contains("__capy_seq_first_value(second)");
+                .contains("__capy_seq_first_value(second)")
+                .contains("Item_render__")
+                .doesNotContain("__capy_seq_first_value(cons).render()");
+    }
+
+    @Test
+    void shouldResolvePythonOverloadUsingGenericMatchPayloadType() {
+        var source = """
+                from /capy/collection/Seq import { Cons }
+                from /capy/lang/Result import { Result, Success, Error }
+
+                fun render(result: Result[Cons[int]]): String =
+                    match result with
+                    case Success { value } -> render(value)
+                    case Error { kind, message } -> message
+
+                fun render(result: Cons[int]): String = "values"
+                """;
+        var program = compileProgram(List.of(rawModule("GenericOverload", "/sample/app", source, SourceKind.FUNCTIONAL)));
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/GenericOverload.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/GenericOverload.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(pythonCode)
+                .contains("def render__4_0(result):")
+                .contains("lambda value: render__9_0(value)")
+                .doesNotContain("lambda value: render__4_0(value)");
+        assertThat(javaScriptCode)
+                .contains("function render__4_0(result)")
+                .contains("((value) => render__9_0(value))")
+                .doesNotContain("((value) => render(value))");
     }
 
     @Test
@@ -533,10 +674,9 @@ class CompilationTest {
                 import /capy/lang/Primitives
                 from /capy/lang/Option import { Some, None }
                 import /capy/lang/Async
-                from /capy/lang/Async import { Async }
                 import /capy/lang/System
                 import /capy/lang/Result
-                from /capy/lang/Result import { Error }
+                from /capy/lang/Result import { Error, Success }
                 import /capy/lang/Math
                 import /capy/io/Path
                 import /capy/io/IO
@@ -558,7 +698,22 @@ class CompilationTest {
                     Primitives.to_int(value)
 
                 fun qualified_compute(value: int): Async[int] =
-                    Async.compute(() => value + 1)
+                    Async.compute(() => {
+                        let computed: int = value + 1
+                        computed
+                    })
+
+                private fun render_result(result: Result[List[int]]): String = "done"
+
+                fun qualified_compute_result(result: Result[Seq[int]]): Async[String] =
+                    Async.compute(() => {
+                        let r2: Result[List[int]] = result.flat_map(values => Success { values.as_list() })
+                        render_result(r2)
+                    })
+
+                fun qualified_all(tasks: Seq[Async[int]]): Effect[List[Result[int]]] =
+                    let results: List[Result[int]] <- Async.all(tasks)
+                    Effect.pure(results)
 
                 fun qualified_millis(): Effect[long] =
                     System.current_millis()
@@ -600,6 +755,8 @@ class CompilationTest {
                 .contains("dev.capylang.ConsoleUtil.println")
                 .contains("return __capy_parse_int(value);")
                 .contains("return capy.lang.Async.start(capy.lang.Effect.delay(")
+                .contains("capy.lang.Async.all(")
+                .contains(").asList()).<java.util.List<java.lang.Object>>flatMap(")
                 .contains("return capy.lang.System.currentMillis();")
                 .contains("return capy.lang.System.systemProperty(\"java.version\");")
                 .contains("java.lang.Integer.toString(value)")
@@ -608,6 +765,28 @@ class CompilationTest {
                 .contains("return capy.io.IO.exists(")
                 .contains("return capy.collection.Seq.toSeq(values);")
                 .doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/QualifiedEffect.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(javaScriptCode)
+                .contains("__capy_async_start(delay(() =>")
+                .contains("__capy_async_all(tasks)")
+                .doesNotContain("return compute(")
+                .doesNotContain("return all(tasks)");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/QualifiedEffect.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonCode)
+                .contains("__capy_async_start(delay(lambda :")
+                .contains("__capy_async_all(tasks)")
+                .doesNotContain("return compute(")
+                .doesNotContain("return all(tasks)");
     }
 
     @Test

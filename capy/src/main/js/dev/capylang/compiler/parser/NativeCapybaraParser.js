@@ -8,7 +8,7 @@ const ObjectOrientedLexer = require('ObjectOrientedLexer');
 const ObjectOrientedParser = require('ObjectOrientedParser');
 const os = require('os');
 
-const MODULE_NAME_PATTERN = '[A-Za-z_][A-Za-z0-9_]*|\/[A-Za-z_][a-zA-Z0-9_]*(?:\/[A-Za-z_][a-zA-Z0-9_]*)+';
+const MODULE_NAME_PATTERN = '[A-Za-z_][A-Za-z0-9_]*|\/[A-Za-z_][a-zA-Z0-9_]*(?:\/[A-Za-z_][a-zA-Z0-9_]*)*';
 const FROM_IMPORT_PATTERN = new RegExp(
     '^\\s*from\\s+(' + MODULE_NAME_PATTERN + ')\\s+import\\s*\\{\\s*([^}]*)\\s*\\}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*\\})?\\s*$'
 );

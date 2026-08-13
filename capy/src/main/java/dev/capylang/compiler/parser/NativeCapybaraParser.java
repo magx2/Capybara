@@ -27,7 +27,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     private final NativeCompilerValidator validator = new NativeCompilerValidator();
 
     private static final String MODULE_NAME_PATTERN =
-            "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][a-zA-Z0-9_]*(?:/[A-Za-z_][a-zA-Z0-9_]*)+";
+            "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][a-zA-Z0-9_]*(?:/[A-Za-z_][a-zA-Z0-9_]*)*";
     private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
             "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
@@ -1165,7 +1165,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext ctx
     ) {
         return new Definition.AnnotationApplication(
-                ctx.annotationName().getText(),
+                annotationName(ctx.annotationName().getText()),
                 definitionAnnotationArguments(ctx.annotationArgumentList()),
                 location(ctx)
         );
@@ -1234,7 +1234,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.ObjectOrientedParser.AnnotationBlockContext ctx
     ) {
         return new FunctionAnnotationApplication(
-                ctx.annotationName().getText(),
+                annotationName(ctx.annotationName().getText()),
                 objectAnnotationArguments(ctx.annotationArgumentList()),
                 location(ctx)
         );
@@ -1303,10 +1303,20 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.FunctionalParser.AnnotationBlockContext ctx
     ) {
         return new FunctionAnnotationApplication(
-                ctx.annotationName().getText(),
+                annotationName(ctx.annotationName().getText()),
                 annotationArguments(ctx.annotationArgumentList()),
                 location(ctx)
         );
+    }
+
+    private static String annotationName(String source) {
+        if (!source.startsWith("/")) {
+            return source;
+        }
+        if (source.lastIndexOf('.') > source.lastIndexOf('/')) {
+            return source;
+        }
+        return source + "." + source.substring(source.lastIndexOf('/') + 1);
     }
 
     private static List<FunctionAnnotationArgument> annotationArguments(

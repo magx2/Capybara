@@ -207,6 +207,14 @@ public final class NativeCompilerValidator {
         }
         validateFunctionAnnotations(context, module, function, errors, nativeProviderKeys);
         validateExpression(context, module, function.body(), errors);
+        validateDistinctCollectionReturnType(context, module, function, errors);
+        validateNestedLambdaFunctionArguments(
+                context,
+                module,
+                function.body(),
+                parameterTypes(function),
+                errors
+        );
         if (javaBackendSelected()) {
             validateJavaBackendVariables(
                     context,
@@ -404,6 +412,508 @@ public final class NativeCompilerValidator {
         return types;
     }
 
+    private void validateNestedLambdaFunctionArguments(
+            Context context,
+            ParsedModule module,
+            Expression expression,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        switch (expression) {
+            case BinaryExpression binary -> {
+                validateNestedLambdaFunctionArguments(context, module, binary.left(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, binary.right(), types, errors);
+            }
+            case BlockExpression block -> {
+                var blockTypes = new LinkedHashMap<>(types);
+                for (var binding : block.bindings()) {
+                    validateDistinctCollectionBinding(context, module, binding, blockTypes, errors);
+                    validateNestedLambdaFunctionArguments(context, module, binding.value(), blockTypes, errors);
+                    if (!binding.typeReference().name().isBlank()) {
+                        blockTypes.put(binding.name(), binding.typeReference());
+                    }
+                }
+                validateNestedLambdaFunctionArguments(context, module, block.result(), blockTypes, errors);
+            }
+            case DataLiteral literal -> literal.fields().forEach(field ->
+                    validateNestedLambdaFunctionArguments(context, module, field.value(), types, errors));
+            case DictLiteral literal -> literal.entries().forEach(entry -> {
+                validateNestedLambdaFunctionArguments(context, module, entry.key(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, entry.value(), types, errors);
+            });
+            case FieldAccessExpression access ->
+                    validateNestedLambdaFunctionArguments(context, module, access.receiver(), types, errors);
+            case FunctionCallExpression call -> {
+                validateNestedLambdaCall(context, module, call, types, errors);
+                call.arguments().forEach(argument ->
+                        validateNestedLambdaFunctionArguments(context, module, argument, types, errors));
+            }
+            case IfExpression ifExpression -> {
+                validateNestedLambdaFunctionArguments(context, module, ifExpression.condition(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, ifExpression.thenBranch(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, ifExpression.elseBranch(), types, errors);
+            }
+            case IndexExpression index -> {
+                validateNestedLambdaFunctionArguments(context, module, index.receiver(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, index.index(), types, errors);
+                if (index.hasEndIndex()) {
+                    validateNestedLambdaFunctionArguments(context, module, index.endIndex(), types, errors);
+                }
+            }
+            case LambdaExpression lambda ->
+                    validateNestedLambdaFunctionArguments(context, module, lambda.body(), types, errors);
+            case ListLiteral literal -> literal.values().forEach(value ->
+                    validateNestedLambdaFunctionArguments(context, module, value, types, errors));
+            case MatchExpression match -> {
+                validateNestedLambdaFunctionArguments(context, module, match.value(), types, errors);
+                for (var matchCase : match.cases()) {
+                    if (matchCase.hasLiteral()) {
+                        validateNestedLambdaFunctionArguments(context, module, matchCase.literal(), types, errors);
+                    }
+                    if (matchCase.hasGuard()) {
+                        validateNestedLambdaFunctionArguments(context, module, matchCase.guard(), types, errors);
+                    }
+                    validateNestedLambdaFunctionArguments(context, module, matchCase.body(), types, errors);
+                }
+            }
+            case MethodCallExpression call -> {
+                validateResultFlatMapMapper(context, module, call, types, errors);
+                validateNestedLambdaFunctionArguments(context, module, call.receiver(), types, errors);
+                call.arguments().forEach(argument ->
+                        validateNestedLambdaFunctionArguments(context, module, argument, types, errors));
+            }
+            case ReduceExpression reduce -> {
+                validateNestedLambdaFunctionArguments(context, module, reduce.receiver(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, reduce.initial(), types, errors);
+                validateNestedLambdaFunctionArguments(context, module, reduce.body(), types, errors);
+            }
+            case SetLiteral literal -> literal.values().forEach(value ->
+                    validateNestedLambdaFunctionArguments(context, module, value, types, errors));
+            case ThrowExpression throwExpression ->
+                    validateNestedLambdaFunctionArguments(context, module, throwExpression.value(), types, errors);
+            case TryCatchExpression tryCatch -> {
+                validateNestedLambdaFunctionArguments(context, module, tryCatch.body(), types, errors);
+                tryCatch.branches().forEach(branch ->
+                        validateNestedLambdaFunctionArguments(context, module, branch.catchBody(), types, errors));
+            }
+            case TupleLiteral literal -> literal.values().forEach(value ->
+                    validateNestedLambdaFunctionArguments(context, module, value, types, errors));
+            case UnaryExpression unary ->
+                    validateNestedLambdaFunctionArguments(context, module, unary.expression(), types, errors);
+            case WithExpression with -> {
+                validateNestedLambdaFunctionArguments(context, module, with.receiver(), types, errors);
+                with.fields().forEach(field ->
+                        validateNestedLambdaFunctionArguments(context, module, field.value(), types, errors));
+            }
+            default -> {
+            }
+        }
+    }
+
+    private void validateDistinctCollectionReturnType(
+            Context context,
+            ParsedModule module,
+            FunctionDeclaration function,
+            List<CompilerError> errors
+    ) {
+        var actual = validationExpressionType(context, module, function.body(), parameterTypes(function));
+        if (actual == null || !distinctSequenceListMismatch(function.returnType(), actual)) {
+            return;
+        }
+        errors.add(error(
+                module,
+                function.location(),
+                "Function `" + function.name() + "` returns `" + displayType(actual)
+                        + "`, but declares `" + displayType(function.returnType())
+                        + "`; use an explicit `to_seq` or `as_list` conversion."
+        ));
+    }
+
+    private void validateDistinctCollectionBinding(
+            Context context,
+            ParsedModule module,
+            LetBinding binding,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (binding.typeReference().name().isBlank()) {
+            return;
+        }
+        var actual = validationExpressionType(context, module, binding.value(), types);
+        if (actual == null) {
+            return;
+        }
+        if (binding.operator().equals("<-") && actual.arguments().size() == 1) {
+            actual = actual.arguments().getFirst();
+        }
+        if (!distinctSequenceListMismatch(binding.typeReference(), actual)) {
+            if (!definiteNestedTypeMismatch(binding.typeReference(), actual)) {
+                return;
+            }
+            errors.add(error(
+                    module,
+                    binding.location(),
+                    "Binding `" + binding.name() + "` has type `" + displayType(actual)
+                            + "`, but declares `" + displayType(binding.typeReference()) + "`."
+            ));
+            return;
+        }
+        errors.add(error(
+                module,
+                binding.location(),
+                "Binding `" + binding.name() + "` has type `" + displayType(actual)
+                        + "`, but declares `" + displayType(binding.typeReference())
+                        + "`; use an explicit `to_seq` or `as_list` conversion."
+        ));
+    }
+
+    private boolean distinctSequenceListMismatch(TypeReference expected, TypeReference actual) {
+        var expectedName = unqualified(expected.name());
+        var actualName = unqualified(actual.name());
+        if ((expectedName.equals("Seq") && actualName.equals("List"))
+                || (expectedName.equals("List") && actualName.equals("Seq"))) {
+            return true;
+        }
+        if (!expectedName.equals(actualName) || expected.arguments().size() != actual.arguments().size()) {
+            return false;
+        }
+        for (var index = 0; index < expected.arguments().size(); index++) {
+            if (distinctSequenceListMismatch(expected.arguments().get(index), actual.arguments().get(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean definiteNestedTypeMismatch(TypeReference expected, TypeReference actual) {
+        var expectedName = unqualified(expected.name());
+        var actualName = unqualified(actual.name());
+        if (!expectedName.equals(actualName)
+                || expected.arguments().size() != actual.arguments().size()) {
+            return false;
+        }
+        for (var index = 0; index < expected.arguments().size(); index++) {
+            if (definiteTypeArgumentMismatch(expected.arguments().get(index), actual.arguments().get(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean definiteTypeArgumentMismatch(TypeReference expected, TypeReference actual) {
+        var expectedName = unqualified(expected.name());
+        var actualName = unqualified(actual.name());
+        if (expectedName.isBlank() || actualName.isBlank()
+                || expectedName.equals("any") || actualName.equals("any")
+                || isSingleLetterGeneric(expectedName) || isSingleLetterGeneric(actualName)) {
+            return false;
+        }
+        if (!expectedName.equals(actualName)) {
+            return true;
+        }
+        if (expected.arguments().size() != actual.arguments().size()) {
+            return false;
+        }
+        for (var index = 0; index < expected.arguments().size(); index++) {
+            if (definiteTypeArgumentMismatch(expected.arguments().get(index), actual.arguments().get(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void validateResultFlatMapMapper(
+            Context context,
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!call.name().equals("flat_map")
+                || call.arguments().size() != 1
+                || !(call.arguments().getFirst() instanceof LambdaExpression mapper)) {
+            return;
+        }
+        var receiverType = validationExpressionType(context, module, call.receiver(), types);
+        if (receiverType == null || !"Result".equals(unqualified(receiverType.name()))) {
+            return;
+        }
+        var mapperTypes = new LinkedHashMap<>(types);
+        if (receiverType.arguments().size() == 1 && mapper.parameters().size() == 1) {
+            mapperTypes.put(decodedLambdaParameterName(mapper.parameters().getFirst()), receiverType.arguments().getFirst());
+        }
+        var mapperReturnType = validationExpressionType(context, module, mapper.body(), mapperTypes);
+        if (mapperReturnType == null || resultCompatibleType(mapperReturnType)) {
+            return;
+        }
+        errors.add(error(
+                module,
+                call.location(),
+                "Result.flat_map mapper must return `Result`, but it returns `"
+                        + displayType(mapperReturnType) + "`."
+        ));
+    }
+
+    private boolean resultCompatibleType(TypeReference type) {
+        return switch (unqualified(type.name())) {
+            case "Result", "Success", "Error" -> true;
+            default -> false;
+        };
+    }
+
+    private TypeReference validationExpressionType(
+            Context context,
+            ParsedModule module,
+            Expression expression,
+            Map<String, TypeReference> types
+    ) {
+        return switch (expression) {
+            case VariableExpression variable -> types.get(variable.name());
+            case FunctionCallExpression call -> {
+                var function = context.functionDeclaration(module, call.name(), call.arguments().size());
+                if (function != null) {
+                    yield function.returnType();
+                }
+                yield validationStandardFunctionType(context, module, call, types);
+            }
+            case BinaryExpression binary -> validationBinaryType(context, module, binary, types);
+            case DataLiteral literal -> validationDataLiteralType(context, module, literal, types);
+            case ListLiteral literal -> validationListLiteralType(context, module, literal, types);
+            case BlockExpression block -> validationBlockType(context, module, block, types);
+            case MethodCallExpression call -> validationMethodCallType(context, module, call, types);
+            default -> null;
+        };
+    }
+
+    private TypeReference validationStandardFunctionType(
+            Context context,
+            ParsedModule module,
+            FunctionCallExpression call,
+            Map<String, TypeReference> types
+    ) {
+        if (!unqualified(call.name()).equals("to_seq") || call.arguments().size() != 1) {
+            return null;
+        }
+        var argumentType = validationExpressionType(context, module, call.arguments().getFirst(), types);
+        if (argumentType == null || !unqualified(argumentType.name()).equals("List")) {
+            return null;
+        }
+        return new TypeReference("Seq", argumentType.arguments());
+    }
+
+    private TypeReference validationDataLiteralType(
+            Context context,
+            ParsedModule module,
+            DataLiteral literal,
+            Map<String, TypeReference> types
+    ) {
+        if (unqualified(literal.typeName()).equals("Success") && !literal.fields().isEmpty()) {
+            var payload = validationExpressionType(context, module, literal.fields().getFirst().value(), types);
+            if (payload != null) {
+                return new TypeReference("Result", List.of(payload));
+            }
+        }
+        return new TypeReference(literal.typeName(), List.of());
+    }
+
+    private TypeReference validationListLiteralType(
+            Context context,
+            ParsedModule module,
+            ListLiteral literal,
+            Map<String, TypeReference> types
+    ) {
+        if (literal.values().isEmpty()) {
+            return new TypeReference("List", List.of(new TypeReference("any", List.of())));
+        }
+        var valueType = validationExpressionType(context, module, literal.values().getFirst(), types);
+        return new TypeReference("List", List.of(valueType == null
+                ? new TypeReference("any", List.of())
+                : valueType));
+    }
+
+    private TypeReference validationBinaryType(
+            Context context,
+            ParsedModule module,
+            BinaryExpression binary,
+            Map<String, TypeReference> types
+    ) {
+        if (!binary.operator().equals("|") || !(binary.right() instanceof LambdaExpression mapper)) {
+            return null;
+        }
+        var receiverType = validationExpressionType(context, module, binary.left(), types);
+        if (receiverType == null
+                || !(unqualified(receiverType.name()).equals("List")
+                || unqualified(receiverType.name()).equals("Seq"))
+                || receiverType.arguments().size() != 1) {
+            return null;
+        }
+        var mapperTypes = validationLambdaTypes(mapper, receiverType.arguments().getFirst(), types);
+        var mappedType = validationExpressionType(context, module, mapper.body(), mapperTypes);
+        return mappedType == null ? null : new TypeReference("Seq", List.of(mappedType));
+    }
+
+    private TypeReference validationBlockType(
+            Context context,
+            ParsedModule module,
+            BlockExpression block,
+            Map<String, TypeReference> types
+    ) {
+        var blockTypes = new LinkedHashMap<>(types);
+        for (var binding : block.bindings()) {
+            var bindingType = binding.typeReference().name().isBlank()
+                    ? validationExpressionType(context, module, binding.value(), blockTypes)
+                    : binding.typeReference();
+            if (bindingType != null) {
+                blockTypes.put(binding.name(), bindingType);
+            }
+        }
+        return validationExpressionType(context, module, block.result(), blockTypes);
+    }
+
+    private TypeReference validationMethodCallType(
+            Context context,
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types
+    ) {
+        var receiverType = validationExpressionType(context, module, call.receiver(), types);
+        if (receiverType == null) {
+            return null;
+        }
+        var receiverName = unqualified(receiverType.name());
+        if (receiverName.equals("Seq") && call.name().equals("as_list") && call.arguments().isEmpty()) {
+            return new TypeReference("List", receiverType.arguments());
+        }
+        if (call.arguments().size() != 1
+                || !(call.arguments().getFirst() instanceof LambdaExpression mapper)
+                || receiverType.arguments().size() != 1) {
+            return null;
+        }
+        var mapperTypes = validationLambdaTypes(mapper, receiverType.arguments().getFirst(), types);
+        var mapperReturnType = validationExpressionType(context, module, mapper.body(), mapperTypes);
+        if (mapperReturnType == null) {
+            return null;
+        }
+        if (receiverName.equals("Result")) {
+            return switch (call.name()) {
+                case "map" -> new TypeReference(receiverType.name(), List.of(mapperReturnType));
+                case "flat_map" -> mapperReturnType;
+                default -> null;
+            };
+        }
+        if ((receiverName.equals("List") || receiverName.equals("Seq")) && call.name().equals("map")) {
+            return new TypeReference("Seq", List.of(mapperReturnType));
+        }
+        return null;
+    }
+
+    private Map<String, TypeReference> validationLambdaTypes(
+            LambdaExpression lambda,
+            TypeReference valueType,
+            Map<String, TypeReference> types
+    ) {
+        var mapperTypes = new LinkedHashMap<>(types);
+        if (lambda.parameters().size() == 1) {
+            mapperTypes.put(decodedLambdaParameterName(lambda.parameters().getFirst()), valueType);
+        }
+        return mapperTypes;
+    }
+
+    private void validateNestedLambdaCall(
+            Context context,
+            ParsedModule module,
+            FunctionCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var function = context.functionDeclaration(module, call.name(), call.arguments().size());
+        if (function == null) {
+            return;
+        }
+        for (var index = 0; index < call.arguments().size(); index++) {
+            var inferred = validationExpressionType(context, module, call.arguments().get(index), types);
+            var expected = function.parameters().get(index).typeReference();
+            if (inferred != null && distinctSequenceListMismatch(expected, inferred)) {
+                errors.add(error(
+                        module,
+                        call.location(),
+                        "Argument " + (index + 1) + " of function `" + call.name() + "` has type `"
+                                + displayType(inferred) + "`, but `" + displayType(expected)
+                                + "` is required; use an explicit `to_seq` or `as_list` conversion."
+                ));
+                continue;
+            }
+            var actual = nestedLambdaMappedType(call.arguments().get(index), types);
+            if (actual == null) {
+                continue;
+            }
+            if (sameType(actual, expected) || acceptsMappedFunction(expected)) {
+                continue;
+            }
+            errors.add(error(
+                    module,
+                    call.location(),
+                    "Argument " + (index + 1) + " of function `" + call.name() + "` has type `"
+                            + displayType(actual) + "`, but `" + displayType(expected) + "` is required."
+            ));
+        }
+    }
+
+    private boolean acceptsMappedFunction(TypeReference expected) {
+        if (expected.name().equals("any") || isSingleLetterGeneric(expected.name())) {
+            return true;
+        }
+        if (expected.arguments().size() != 1) {
+            return false;
+        }
+        var valueType = expected.arguments().getFirst().name();
+        return valueType.equals("any")
+                || isSingleLetterGeneric(valueType)
+                || functionTypeName(valueType);
+    }
+
+    private FunctionDeclaration localFunction(ParsedModule module, String name, int arity) {
+        FunctionDeclaration match = null;
+        for (var definition : module.definitions()) {
+            if (!(definition instanceof FunctionDefinition function)
+                    || !function.function().name().equals(name)
+                    || function.function().parameters().size() != arity) {
+                continue;
+            }
+            if (match != null) {
+                return null;
+            }
+            match = function.function();
+        }
+        return match;
+    }
+
+    private TypeReference nestedLambdaMappedType(Expression expression, Map<String, TypeReference> types) {
+        if (!(expression instanceof MethodCallExpression call)
+                || !call.name().equals("map")
+                || call.arguments().size() != 1
+                || !(call.arguments().getFirst() instanceof LambdaExpression mapper)
+                || !(mapper.body() instanceof LambdaExpression)
+                || !(call.receiver() instanceof VariableExpression receiver)) {
+            return null;
+        }
+        var receiverType = types.get(receiver.name());
+        if (receiverType == null || receiverType.arguments().isEmpty()) {
+            return null;
+        }
+        return new TypeReference(receiverType.name(), List.of(new TypeReference("function", List.of())));
+    }
+
+    private String displayType(TypeReference type) {
+        if (type.arguments().isEmpty()) {
+            return type.name();
+        }
+        return type.name() + "[" + type.arguments().stream()
+                .map(this::displayType)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("") + "]";
+    }
+
     private void validateJavaBackendExpression(
             ParsedModule module,
             Expression expression,
@@ -532,7 +1042,6 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors,
             Set<String> nativeProviderKeys
     ) {
-        var availableAnnotations = context.availableAnnotations(module);
         for (var annotation : function.annotations()) {
             if (isStandardNativeProvider(annotation, module)) {
                 validateNativeProvider(module, function, annotation, errors, nativeProviderKeys);
@@ -542,7 +1051,7 @@ public final class NativeCompilerValidator {
                 validateStandardRecursive(module, annotation, errors);
                 continue;
             }
-            var declaration = availableAnnotations.get(unqualified(annotation.name()));
+            var declaration = context.annotationDeclaration(module, annotation.name());
             if (declaration == null) {
                 if ("NativeProvider".equals(unqualified(annotation.name())) && !standardNativeProviderImported(module)) {
                     errors.add(error(module, annotation.location(), "Unknown annotation " + annotation.name() + "."));
@@ -999,7 +1508,9 @@ public final class NativeCompilerValidator {
     }
 
     private boolean isStandardNativeProvider(FunctionAnnotationApplication annotation, ParsedModule module) {
-        return "NativeProvider".equals(unqualified(annotation.name())) && standardNativeProviderImported(module);
+        return "NativeProvider".equals(unqualified(annotation.name()))
+                && (standardNativeProviderImported(module)
+                || explicitAnnotationPath(annotation.name(), "/capy/meta_prog/NativeProvider", "NativeProvider"));
     }
 
     private boolean standardNativeProviderImported(ParsedModule module) {
@@ -1009,13 +1520,19 @@ public final class NativeCompilerValidator {
     }
 
     private boolean isStandardRecursive(FunctionAnnotationApplication annotation, ParsedModule module) {
-        return "Recursive".equals(unqualified(annotation.name())) && standardRecursiveImported(module);
+        return "Recursive".equals(unqualified(annotation.name()))
+                && (standardRecursiveImported(module)
+                || explicitAnnotationPath(annotation.name(), "/capy/meta_prog/Recursive", "Recursive"));
     }
 
     private boolean standardRecursiveImported(ParsedModule module) {
         return importsName(module.imports(), "/capy/meta_prog/Recursive", "Recursive")
                 || importsName(module.imports(), "capy/meta_prog/Recursive", "Recursive")
                 || importsName(module.imports(), "Recursive", "Recursive");
+    }
+
+    private boolean explicitAnnotationPath(String annotationName, String modulePath, String name) {
+        return normalizeModulePath(annotationName).equals(normalizeModulePath(modulePath) + "." + name);
     }
 
     private void validateStandardRecursive(
@@ -1209,6 +1726,10 @@ public final class NativeCompilerValidator {
         private boolean importedTypeExists(ParsedModule module, String name) {
             for (var declaration : module.imports()) {
                 if (declaration.qualified()) {
+                    if (unqualified(declaration.modulePath()).equals(name)
+                            && symbolExists(declaration.modulePath(), name)) {
+                        return true;
+                    }
                     continue;
                 }
                 if (declaration.wildcard()) {
@@ -1243,6 +1764,34 @@ public final class NativeCompilerValidator {
             return false;
         }
 
+        private FunctionDeclaration functionDeclaration(ParsedModule module, String name, int arity) {
+            var local = localFunction(module, name, arity);
+            if (local != null) {
+                return local;
+            }
+            FunctionDeclaration match = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(name))
+                        || declaration.excludedNames().contains(name)) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule == null) {
+                    continue;
+                }
+                var imported = localFunction(importedModule, name, arity);
+                if (imported == null) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = imported;
+            }
+            return match;
+        }
+
         private Map<String, AnnotationDeclaration> availableAnnotations(ParsedModule module) {
             var annotations = new LinkedHashMap<>(annotationsByModule.get(module));
             for (var declaration : module.imports()) {
@@ -1270,6 +1819,21 @@ public final class NativeCompilerValidator {
                 }
             }
             return annotations;
+        }
+
+        private AnnotationDeclaration annotationDeclaration(ParsedModule module, String name) {
+            if (!name.startsWith("/")) {
+                return availableAnnotations(module).get(unqualified(name));
+            }
+            var separator = name.lastIndexOf('.');
+            if (separator < 0) {
+                return null;
+            }
+            var declaringModule = parsedModule(name.substring(0, separator));
+            if (declaringModule == null) {
+                return null;
+            }
+            return annotationsByModule.get(declaringModule).get(name.substring(separator + 1));
         }
 
         private ParsedModule parsedModule(String path) {

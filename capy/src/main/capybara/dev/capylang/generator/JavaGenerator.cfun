@@ -1407,7 +1407,9 @@ private fun static_imports(imports: List[CompiledImportDeclaration], module: Com
 
 /// Emits import source for static import declaration.
 private fun static_import_declaration(declaration: CompiledImportDeclaration, className: String, functions: List[CompiledFunction]): String =
-    if !declaration.wildcard & java_special_runtime_module_class(className)
+    if java_default_package_class(className)
+    then ""
+    else if !declaration.wildcard & java_special_runtime_module_class(className)
     then ""
     else if declaration.wildcard & declaration.excludedNames.is_empty()
     then "import static " + className + ".*;" + newline()
@@ -1419,6 +1421,10 @@ private fun java_special_runtime_module_class(className: String): bool =
         | className == "capy.lang.Async"
         | className == "capy.collection.Seq"
         | className == "capy.lang.System"
+
+/// Checks whether a generated Java class belongs to the unnamed package, which Java cannot import.
+private fun java_default_package_class(className: String): bool =
+    !(className ? ".")
 
 /// Emits import statements for explicit static.
 private fun explicit_static_imports(functions: List[CompiledFunction], declaration: CompiledImportDeclaration, className: String): String =
@@ -2000,11 +2006,28 @@ private fun effect_block_emittable(bindings: List[CompiledLetBinding], result: C
 
 /// Checks whether a function matches the tail recursive function metadata.
 private fun tail_recursive_function(function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if !expression_references_function(function.body, function.name)
+    if overloaded_function_signature(function, module.functions)
+    then false
+    else if !expression_references_function(function.body, function.name)
     then false
     else if !tail_recursive_expression(function.body, function)
     then false
     else tail_recursive_body_emittable(function.body, function, env, module, allModules)
+
+/// Checks whether name-and-arity based tail-call detection would be ambiguous between overloads.
+private fun overloaded_function_signature(function: CompiledFunction, functions: List[CompiledFunction]): bool =
+    overloaded_function_signature_count(function, functions, 0) > 1
+
+/// Counts functions sharing the same source name and arity.
+private fun overloaded_function_signature_count(function: CompiledFunction, functions: List[CompiledFunction], count: int): int =
+    match functions[0] with
+    case None -> count
+    case Some { candidate } ->
+        let next =
+            if candidate.name == function.name & candidate.parameters.size() == function.parameters.size()
+            then count + 1
+            else count
+        overloaded_function_signature_count(function, functions[1:], next)
 
 /// Checks whether tail recursive body can be emitted by the target backend.
 private fun tail_recursive_body_emittable(expression: CompiledExpression, function: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -2326,7 +2349,11 @@ private fun expression_code(
 /// Emits generated code for variable expression.
 private fun variable_expression_code(variable: CompiledVariableExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if binding_exists(variable.name, env)
-    then value_conversion_code(lookup_binding_java_name(variable.name, env), lookup_binding(variable.name, env), expectedType, module, allModules)
+    then
+        let javaName = lookup_binding_java_name(variable.name, env)
+        if dynamic_java_binding(javaName)
+        then value_conversion_code(dynamic_java_binding_value_name(javaName), object_type(), expectedType, module, allModules)
+        else value_conversion_code(javaName, lookup_binding(variable.name, env), expectedType, module, allModules)
     else match enum_value_binding(variable.name, module, allModules) with
         case Some { enumValue } -> value_conversion_code(enum_value_binding_code(variable.name, enumValue), data_type_reference(enumValue.typeName), expectedType, module, allModules)
         case None ->
@@ -2997,7 +3024,7 @@ private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: Com
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
         + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
-        + "                return __capy_data(\"Success\", __capy_value_fields(" + expression_code(lambda.body, declared_lambda_value_env(lambda, valueType, env), bodyExpectedType, module, allModules) + "));" + newline()
+        + "                return __capy_data(\"Success\", __capy_value_fields(" + expression_code(lambda.body, result_pipe_lambda_env(lambda, valueType, env), bodyExpectedType, module, allModules) + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -3026,7 +3053,7 @@ private fun result_flat_pipe_code(binary: CompiledBinaryExpression, leftType: Co
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
         + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
-        + "                java.lang.Object " + mappedName + " = " + expression_code(lambda.body, declared_lambda_value_env(lambda, valueType, env), bodyExpectedType, module, allModules) + ";" + newline()
+        + "                java.lang.Object " + mappedName + " = " + expression_code(lambda.body, result_pipe_lambda_env(lambda, valueType, env), bodyExpectedType, module, allModules) + ";" + newline()
         + "                return ((" + boxed_java_type(resultType) + ") __capy_result_value(" + mappedName + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
@@ -3069,7 +3096,29 @@ private fun result_pipe_binding_statement(parameters: List[String], valueType: C
         let name = decoded_lambda_parameter_name(parameter)
         if name == "_"
         then ""
+        else if decoded_lambda_parameter_type(parameter).name.is_empty()
+        then indent + "java.lang.Object " + java_identifier(name) + " = __capy_result_success_value(" + resultName + ");" + newline()
         else indent + java_type(valueType) + " " + java_identifier(name) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+
+/// Collects Result lambda bindings whose untyped values are cast only at their use sites.
+private fun result_pipe_lambda_env(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding]): List[JavaBinding] =
+    match lambda.parameters[0] with
+    case None -> env
+    case Some { parameter } ->
+        let name = decoded_lambda_parameter_name(parameter)
+        if name == "_"
+        then env
+        else if decoded_lambda_parameter_type(parameter).name.is_empty()
+        then [java_binding_with_java_name(name, valueType, "__capy_dynamic_binding|" + java_identifier(name))] + env
+        else declared_lambda_value_env(lambda, valueType, env)
+
+/// Checks whether a Java binding stores an erased runtime value.
+private fun dynamic_java_binding(javaName: String): bool =
+    java_generator_string_has_prefix(javaName, "__capy_dynamic_binding|")
+
+/// Extracts the Java local name from an erased runtime binding marker.
+private fun dynamic_java_binding_value_name(javaName: String): String =
+    javaName.replace("__capy_dynamic_binding|", "")
 
 /// Computes the name for result pipe value.
 private fun result_pipe_value_name(binary: CompiledBinaryExpression): String =
@@ -3613,11 +3662,7 @@ private fun numeric_widening_code(code: String, sourceType: CompiledTypeReferenc
 
 /// Emits generated code for value conversion.
 private fun value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if seq_type_name(expectedType.name) & sourceType.name == "List"
-    then "((" + java_seq_type(expectedType) + ") (capy.collection.Seq<?>) capy.collection.Seq.toSeq(" + code + "))"
-    else if expectedType.name == "List" & seq_type_name(sourceType.name)
-    then "((" + java_seq_type(sourceType) + ") (capy.collection.Seq<?>) " + code + ").asList()"
-    else if type_assignable(expectedType, sourceType) & type_assignable(sourceType, expectedType)
+    if type_assignable(expectedType, sourceType) & type_assignable(sourceType, expectedType)
     then code
     else match primitive_backed_backing_type(expectedType.name, module, allModules) with
         case Some { backingType } ->
@@ -4199,8 +4244,38 @@ private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, en
                 + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
     else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
         case Some { function } ->
-            java_function_name(function) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
+            ordinary_function_call_name(function, module, allModules) + "(" + parameter_expression_list_code(function.parameters, call.arguments, env, module, allModules) + ")"
         case None -> java_function_call_name(call.name, module, allModules) + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
+
+/// Formats an ordinary function target, qualifying imports from Java's unnamed package.
+private fun ordinary_function_call_name(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_selected_function_module_in_imports(function, module.imports, module, allModules) with
+    case Some { importedModule } ->
+        if importedModule.path.is_empty()
+        then module_fqcn(importedModule) + "." + java_function_name(function)
+        else java_function_name(function)
+    case None -> java_function_name(function)
+
+/// Finds the imported module that owns an already selected ordinary function overload.
+private fun find_selected_function_module_in_imports(function: CompiledFunction, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & import_includes_name(function.name, declaration)
+        then
+            match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } ->
+                if module_contains_selected_function(function, importedModule.functions)
+                then /capy/lang/Option.Some { importedModule }
+                else find_selected_function_module_in_imports(function, imports[1:], module, allModules)
+            case None -> find_selected_function_module_in_imports(function, imports[1:], module, allModules)
+        else find_selected_function_module_in_imports(function, imports[1:], module, allModules)
+
+/// Checks whether a module contains the selected ordinary function overload.
+private fun module_contains_selected_function(function: CompiledFunction, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { candidate } -> same_function(function, candidate) | module_contains_selected_function(function, functions[1:])
 
 /// Checks whether a call has the object constructor call shape.
 private fun object_constructor_call(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7025,11 +7100,8 @@ private fun expression_list_tail(expressions: List[CompiledExpression], env: Lis
 
 /// Emits generated code for list literal.
 private fun list_literal_code(literal: CompiledListLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let elementType = if expectedType.name == "List" | seq_type_name(expectedType.name) then first_type_argument(expectedType) else object_type()
-    let listCode = "java.util.List.of(" + list_expression_list_code(literal.values, elementType, env, module, allModules) + ")"
-    if seq_type_name(expectedType.name)
-    then "capy.collection.Seq.toSeq(" + listCode + ")"
-    else listCode
+    let elementType = if expectedType.name == "List" then first_type_argument(expectedType) else object_type()
+    "java.util.List.of(" + list_expression_list_code(literal.values, elementType, env, module, allModules) + ")"
 
 /// Emits generated code for list expression list.
 private fun list_expression_list_code(expressions: List[CompiledExpression], elementType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7107,6 +7179,8 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
 private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if primitive_char_constructor(literal, expectedType)
     then primitive_char_constructor_code(literal, env, module, allModules)
+    else if seq_data_literal(literal, expectedType)
+    then seq_data_literal_code(literal, env, expectedType, module, allModules)
     else if stdlib_date_time_data_literal(literal.typeName, module.imports)
     then stdlib_date_time_data_literal_code(literal, env, module, allModules)
     else if option_constructor_type(literal.typeName)
@@ -7131,6 +7205,22 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
             case Some { binding } -> data_constructor_call_code(binding, literal, env, module, allModules)
             case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
         else data_constructor_pipeline_code(parentConstructors + data_own_constructor_type_names(declaredType.name, module, allModules), literal, env, expectedType, module, allModules)
+
+/// Checks whether a standard sequence node literal should use the Java Seq runtime representation.
+private fun seq_data_literal(literal: CompiledDataLiteral, expectedType: CompiledTypeReference): bool =
+    seq_type_name(expectedType.name)
+        & (type_unqualified_name(literal.typeName) == "Cons" | type_unqualified_name(literal.typeName) == "End")
+
+/// Emits a standard sequence node using the Java Seq runtime representation.
+private fun seq_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let valueType = first_type_argument(expectedType)
+    if type_unqualified_name(literal.typeName) == "End"
+    then "((capy.collection.Seq<" + boxed_java_type(valueType) + ">) (capy.collection.Seq<?>) capy.collection.Seq.End.INSTANCE)"
+    else "new capy.collection.Seq.Cons<" + boxed_java_type(valueType) + "> ("
+        + expression_code(data_constructor_argument_value(literal.fields, "value", "$0"), env, valueType, module, allModules)
+        + ", "
+        + expression_code(data_constructor_argument_value(literal.fields, "rest", "$1"), env, supplier_type(seq_type(valueType)), module, allModules)
+        + ")"
 
 /// Emits generated code for raw data literal.
 private fun raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7672,7 +7762,7 @@ private fun enum_static_field_access_type_name(access: CompiledFieldAccessExpres
 
 /// Emits generated code for reduce expression.
 private fun reduce_expression_code(reduce: CompiledReduceExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let resultType = reduce_result_type(reduce.initial, env, expectedType, module, allModules)
+    let resultType = reduce_result_type(reduce, env, expectedType, module, allModules)
     let receiverType = expression_type(reduce.receiver, env, module, allModules)
     let valueType = reduce_value_type(receiverType)
     let accumulatorSnapshot = "__capy_" + java_identifier(reduce.accumulatorName) + "_snapshot"
@@ -7721,11 +7811,39 @@ private fun reduce_receiver_iterable_code(receiver: CompiledExpression, receiver
     else expression_code(receiver, env, receiverType, module, allModules)
 
 /// Computes the compiled type for reduce result.
-private fun reduce_result_type(initial: CompiledExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if empty_collection_literal_assignable(expectedType, initial)
-        | result_empty_collection_literal_assignable(expectedType, initial)
+private fun reduce_result_type(reduce: CompiledReduceExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    if empty_collection_literal_assignable(expectedType, reduce.initial)
+        | result_empty_collection_literal_assignable(expectedType, reduce.initial)
     then expectedType
-    else expression_type(initial, env, module, allModules)
+    else reduce_natural_result_type(reduce, env, module, allModules)
+
+/// Infers a reduce result type that can represent both the initial value and reducer body.
+private fun reduce_natural_result_type(reduce: CompiledReduceExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let initialType = expression_type(reduce.initial, env, module, allModules)
+    let receiverType = expression_type(reduce.receiver, env, module, allModules)
+    let valueType = reduce_value_type(receiverType)
+    let bodyEnv = reduce_env(reduce, initialType, valueType, java_identifier(reduce.accumulatorName), env)
+    let bodyType = expression_type(reduce.body, bodyEnv, module, allModules)
+    common_runtime_type(initialType, bodyType)
+
+/// Computes a Java-representable common type without discarding a shared generic wrapper.
+private fun common_runtime_type(first: CompiledTypeReference, second: CompiledTypeReference): CompiledTypeReference =
+    if type_assignable(first, second)
+    then first
+    else if type_assignable(second, first)
+    then second
+    else if type_reference_names_match(first.name, second.name)
+    then CompiledTypeReference { name: first.name, arguments: common_runtime_type_arguments(first.arguments, second.arguments) }
+    else object_type()
+
+/// Computes common type arguments for matching generic wrappers.
+private fun common_runtime_type_arguments(first: List[CompiledTypeReference], second: List[CompiledTypeReference]): List[CompiledTypeReference] =
+    match first[0] with
+    case None -> []
+    case Some { firstArgument } ->
+        match second[0] with
+        case None -> []
+        case Some { secondArgument } -> [common_runtime_type(firstArgument, secondArgument)] + common_runtime_type_arguments(first[1:], second[1:])
 
 /// Checks whether a Result context supplies the element type for an empty Success collection.
 private fun result_empty_collection_literal_assignable(expectedType: CompiledTypeReference, initial: CompiledExpression): bool =
@@ -7795,6 +7913,8 @@ private fun error_type_name(name: String): bool =
 /// Checks whether a type reference matches the seq type name rule.
 private fun seq_type_name(name: String): bool =
     stdlib_type_name(name, "Seq")
+        | type_unqualified_name(name) == "Cons"
+        | type_unqualified_name(name) == "End"
 
 /// Checks whether a type reference matches the async type name rule.
 private fun async_type_name(name: String): bool =
@@ -8170,7 +8290,7 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
     case CompiledIndexExpression index -> indexed_type(index, expression_type(index.receiver, env, module, allModules), env, module, allModules)
     case CompiledDataLiteral literal -> data_literal_expression_type(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> field_access_type(access, env, module, allModules)
-    case CompiledReduceExpression reduce -> expression_type(reduce.initial, env, module, allModules)
+    case CompiledReduceExpression reduce -> reduce_natural_result_type(reduce, env, module, allModules)
     case CompiledMatchExpression matchExpression -> match_expression_type(matchExpression.cases, env, module, allModules)
     case CompiledThrowExpression _ -> nothing_type()
     case CompiledTryCatchExpression tryCatch -> try_catch_expression_type(tryCatch, env, module, allModules)
@@ -9252,7 +9372,15 @@ private fun async_function_call_code(call: CompiledFunctionCallExpression, env: 
         "capy.lang.Async.start(capy.lang.Effect.delay("
             + expression_code(argumentExpression, env, supplier_type(valueType), module, allModules)
             + "))"
-    else "capy.lang.Async." + name + "(" + expression_code(argumentExpression, env, expression_type(argumentExpression, env, module, allModules), module, allModules) + ")"
+    else
+        let tasksType = expression_type(argumentExpression, env, module, allModules)
+        let valueType = async_tasks_value_type(tasksType)
+        let expectedTasksType = list_type(async_type(valueType))
+        let tasksCode =
+            if seq_type_name(tasksType.name)
+            then seq_receiver_code(argumentExpression, tasksType, env, module, allModules) + ".asList()"
+            else expression_code(argumentExpression, env, expectedTasksType, module, allModules)
+        "capy.lang.Async." + name + "(" + tasksCode + ")"
 
 /// Computes the type for Async standard-library functions.
 private fun async_function_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -9272,9 +9400,9 @@ private fun async_compute_value_type(expression: CompiledExpression, env: List[J
     case CompiledLambdaExpression lambda -> expression_type(lambda.body, declared_lambda_env(lambda, env), module, allModules)
     case _ -> object_type()
 
-/// Computes the Async value type from a List[Async[T]].
+/// Computes the Async value type from a List[Async[T]] or Seq[Async[T]].
 private fun async_tasks_value_type(tasksType: CompiledTypeReference): CompiledTypeReference =
-    if tasksType.name == "List"
+    if tasksType.name == "List" | seq_type_name(tasksType.name)
     then first_type_argument(first_type_argument(tasksType))
     else object_type()
 
@@ -12583,7 +12711,7 @@ private fun function_parameters_assignable(targetParameters: List[CompiledTypeRe
 /// Checks whether empty collection literal is assignable under the generator type rules.
 private fun empty_collection_literal_assignable(target: CompiledTypeReference, argument: CompiledExpression): bool =
     match argument with
-    case CompiledListLiteral literal -> literal.values.is_empty() & (target.name == "List" | seq_type_name(target.name))
+    case CompiledListLiteral literal -> literal.values.is_empty() & target.name == "List"
     case CompiledSetLiteral literal -> literal.values.is_empty() & target.name == "Set"
     case CompiledDictLiteral literal -> literal.entries.is_empty() & target.name == "Dict"
     case _ -> false
@@ -13157,11 +13285,19 @@ private fun console_print_call_code(call: CompiledFunctionCallExpression, env: L
     let argumentType = expression_type(argumentExpression, env, module, allModules)
     if argumentType.name == "Effect"
     then expression_code(argumentExpression, env, argumentType, module, allModules)
-        + ".map(__capy_console_value -> dev.capylang.ConsoleUtil." + console_util_method(stdlib_call_member_name(call.name)) + "(__capy_console_value))"
+        + ".map(__capy_console_value -> dev.capylang.ConsoleUtil." + console_util_method(stdlib_call_member_name(call.name)) + "("
+        + console_print_value_code("__capy_console_value", first_type_argument(argumentType)) + "))"
     else
         let valueCode = expression_code(argumentExpression, env, argumentType, module, allModules)
         "capy.lang.Effect.delay(() -> { var __capy_console_value = " + valueCode + "; "
-            + "return dev.capylang.ConsoleUtil." + console_util_method(stdlib_call_member_name(call.name)) + "(__capy_console_value); })"
+            + "return dev.capylang.ConsoleUtil." + console_util_method(stdlib_call_member_name(call.name)) + "("
+            + console_print_value_code("__capy_console_value", argumentType) + "); })"
+
+/// Converts a dynamically typed console value through the existing String overload.
+private fun console_print_value_code(valueCode: String, valueType: CompiledTypeReference): String =
+    if java_type(valueType) == "java.lang.Object"
+    then "java.lang.String.valueOf(" + valueCode + ")"
+    else valueCode
 
 /// Computes the compiled type for console print call.
 private fun console_print_call_type(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
