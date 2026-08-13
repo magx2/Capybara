@@ -563,8 +563,18 @@ def adoc_table_cell(value):
     return adoc_inline(value).replace("|", "\\|")
 
 
+def normalize_failure_message(value):
+    return (str(value)
+            .replace("\\r\\n", "\n")
+            .replace("\\n", "\n")
+            .replace("\\r", "\n")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\\t", "\t"))
+
+
 def adoc_listing(value):
-    escaped = str(value).replace("\r\n", "\n").replace("\r", "\n").replace("\n....", "\n\\....")
+    escaped = normalize_failure_message(value).replace("\n....", "\n\\....")
     return "\\" + escaped if escaped.startswith("....") else escaped
 
 
