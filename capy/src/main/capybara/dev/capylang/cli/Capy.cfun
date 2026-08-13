@@ -532,7 +532,7 @@ private fun help_text(): String =
     + "  capy generate <java|python|javascript|js> [-i|--input <dir>] -o|--output <dir> [--skip-java-lib] [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "  capy docs [-l|--libs <dir1,dir2,...>] [--native-wiring <file>] -i|--input <dir> -o|--output <dir> [--log <DEBUG|INFO|WARN|ERROR>]\n"
     + "  capy package (-ci|--compiled-input <dir> | -i|--input <dir>) -m|--module <capy.yml> [--capy.<field> <value>] [--log <DEBUG|INFO|WARN|ERROR>]\n"
-    + "  capy test <java|js|python> --generated-dir <dir> [--output-dir <dir> --report-type <JUNIT|CTRF|JEST>] [--log <NONE|LOG|TC|TEAM_CITY>] [--tests <selector>] [--available-tests]\n"
+    + "  capy test <java|js|python> --generated-dir <dir> [--output-dir <dir> --report-type <JUNIT|CTRF|JEST|ADOC>] [--log <NONE|LOG|TC|TEAM_CITY>] [--tests <selector>] [--available-tests]\n"
     + "\n"
     + "Notes:\n"
     + "  compile output directory may be reused; stale generated files are pruned automatically.\n"
