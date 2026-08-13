@@ -2,6 +2,11 @@
 
 == Functions
 
+=== fun adoc_report(test_file: xref:#type-TestFile[TestFile]): xref:../../capy/lang/String.adoc#type-String[String]
+
+Serializes one test file as a human-readable AsciiDoc report.
+
+
 === fun ctrf_report(test_files: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-TestFile[TestFile]&#93;): xref:../../capy/lang/String.adoc#type-String[String]
 
 Serializes test results as a Common Test Report Format JSON document.
@@ -144,6 +149,11 @@ Writes text only when the target file content is different.
 
 == Constants
 
+=== const ADOC_PREFIX: 
+
+Prefix used for generated AsciiDoc report files.
+
+
 === const CTRF_REPORT_FILE: 
 
 Default filename for the generated CTRF report.
@@ -172,6 +182,15 @@ File used to track test-run output artifacts for cleanup.
 
 
 == Types
+
+[[type-AdocReport]]
+=== data AdocReport
+
+AsciiDoc report payload.
+
+==== Fields
+
+* `report`: xref:../../capy/lang/String.adoc#type-String[String]
 
 [[type-CtrfReport]]
 === data CtrfReport
@@ -292,6 +311,7 @@ Generated test report value.
 
 ==== Variants
 
+* xref:#type-AdocReport[AdocReport]
 * xref:#type-CtrfReport[CtrfReport]
 * xref:#type-JUnitReport[JUnitReport]
 * xref:#type-JestReport[JestReport]
@@ -303,6 +323,7 @@ Report format emitted by the test runner.
 
 ==== Values
 
+* `ADOC`
 * `CTRF`
 * `JEST`
 * `JUNIT`
