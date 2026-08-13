@@ -245,6 +245,11 @@ class TestRunnerTest {
 
     @Test
     void shouldParseOptionalLogOutputType() {
+        var noneArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "JUNIT",
+                "--log", "NONE"
+        });
         var logArguments = TestRunner.parseArguments(new String[]{
                 "-o", tempDir.toString(),
                 "-rt", "JUNIT",
@@ -261,6 +266,7 @@ class TestRunnerTest {
                 "--log", "TEAM_CITY"
         });
 
+        assertEquals(CapyTest.LogType.NONE, noneArguments.logType());
         assertEquals(CapyTest.LogType.LOG, logArguments.logType());
         assertEquals(CapyTest.LogType.TEAM_CITY, teamCityArguments.logType());
         assertEquals(CapyTest.LogType.TEAM_CITY, longTeamCityArguments.logType());
@@ -504,10 +510,10 @@ class TestRunnerTest {
                 List.of(
                         "##teamcity[testSuiteStarted name='/capy/lang/StringTest.cfun']",
                         "##teamcity[testStarted name='starts_with should pass']",
-                        "##teamcity[testFinished name='starts_with should pass']",
+                        "##teamcity[testFinished name='starts_with should pass' duration='0']",
                         "##teamcity[testStarted name='starts_with should fail']",
                         "##teamcity[testFailed name='starts_with should fail' message='assertion failed' details='Expected string:|ncapybara|nto start with:|nbara']",
-                        "##teamcity[testFinished name='starts_with should fail']",
+                        "##teamcity[testFinished name='starts_with should fail' duration='0']",
                         "##teamcity[testSuiteFinished name='/capy/lang/StringTest.cfun']"
                 ),
                 messages
@@ -654,7 +660,7 @@ class TestRunnerTest {
         var testStarted = output.indexOf("##teamcity[testStarted name='starts_with should fail']");
         var assertionBody = output.indexOf("ASSERTION_BODY");
         var testFailed = output.indexOf("##teamcity[testFailed name='starts_with should fail' message='assertion failed' details='Expected string:|ncapybara|nto start with:|nbara']");
-        var testFinished = output.indexOf("##teamcity[testFinished name='starts_with should fail']");
+        var testFinished = output.indexOf("##teamcity[testFinished name='starts_with should fail' duration='");
         var suiteFinished = output.indexOf("##teamcity[testSuiteFinished name='/capy/lang/StringTest.cfun']");
 
         assertTrue(suiteStarted >= 0);

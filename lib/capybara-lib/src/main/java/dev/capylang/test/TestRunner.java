@@ -155,9 +155,10 @@ public class TestRunner {
 
     private static LogType parseLogType(String value) {
         return switch (value.toUpperCase(Locale.ROOT)) {
+            case "NONE" -> LogType.NONE;
             case "LOG" -> LogType.LOG;
             case "TC", "TEAM_CITY" -> LogType.TEAM_CITY;
-            default -> throw new IllegalArgumentException("Unknown log type `" + value + "`. Use LOG, TC, or TEAM_CITY.");
+            default -> throw new IllegalArgumentException("Unknown log type `" + value + "`. Use NONE, LOG, TC, or TEAM_CITY.");
         };
     }
 
