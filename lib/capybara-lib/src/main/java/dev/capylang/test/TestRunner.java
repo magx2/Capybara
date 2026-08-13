@@ -130,7 +130,8 @@ public class TestRunner {
     public enum ReportType {
         JUNIT,
         CTRF,
-        JEST
+        JEST,
+        ADOC
     }
 
     public enum LogType {
@@ -144,7 +145,7 @@ public class TestRunner {
                 Usage: java -jar test-runner.jar [options]
                 Options:
                   -o, --output-dir <dir>    Output directory for test reports (required)
-                  -rt, --report-type <type> Report type (required, JUNIT, CTRF, JEST)
+                  -rt, --report-type <type> Report type (required, JUNIT, CTRF, JEST, ADOC)
                   -l, --log <type>          Log output type (optional, LOG, TC, TEAM_CITY)
                   --tests <selector>        Run only tests matching selector; can be repeated
                   --available-tests         Print available test selectors and exit
