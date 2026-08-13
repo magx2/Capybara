@@ -452,6 +452,8 @@ def intellijE2eTestSourceDirs = files(
 )
 def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/js/run-capybara-tests.js')
 def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/python/run-capybara-tests.py')
+def capybaraJavaTestRunner = javaLibSourceDir.file('dev/capylang/test/TestRunner.java')
+def capybaraJavaTestSelection = javaLibSourceDir.file('dev/capylang/test/TestSelection.java')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier ->
         !(componentIdentifier instanceof ProjectComponentIdentifier) &&
@@ -947,6 +949,11 @@ processResources {
     }
 }
 
+compileJava {
+    source(capybaraJavaTestRunner)
+    source(capybaraJavaTestSelection)
+}
+
 application {
     mainClass = 'dev.capylang.cli.CapyLauncher'
 }
@@ -1246,5 +1253,17 @@ jar {
         configurations.runtimeClasspath
                 .findAll { it.exists() }
                 .collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude 'dev/capylang/test/TestRunner*.class'
+        exclude 'dev/capylang/test/TestSelection*.class'
+    }
+}
+
+def capyJarFile = tasks.named('jar').flatMap { it.archiveFile }
+integrationTests.configure {
+    dependsOn tasks.named('jar')
+    inputs.file(capyJarFile)
+    doFirst {
+        systemProperty 'capy.jar.path', capyJarFile.get().asFile.absolutePath
     }
 }
