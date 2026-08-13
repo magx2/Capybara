@@ -151,9 +151,9 @@ fun TestCase.failed(): bool =
     case Failed -> true
 
 /// Report format emitted by the test runner.
-enum ReportType { JUNIT, CTRF, JEST }
+enum ReportType { JUNIT, CTRF, JEST, ADOC }
 /// Generated test report value.
-union Report = JUnitReport | CtrfReport | JestReport
+union Report = JUnitReport | CtrfReport | JestReport | AdocReport
 
 /// See: [Complete JUnit XML example](https://github.com/testmoapp/junitxml/blob/main/examples/junit-complete.xml)
 data JUnitReport { suites: List[JUnitTestSuite] }
@@ -198,6 +198,8 @@ fun JUnitFailure.`+`(other_message: String): JUnitFailure =
 data CtrfReport { report: String }
 /// Jest JSON report payload.
 data JestReport { report: String }
+/// AsciiDoc report payload.
+data AdocReport { report: String }
 
 /// One generated test report output.
 data TestOutput { path: Path, content: String, failed: bool }
@@ -233,6 +235,7 @@ fun run_tests(rtype: ReportType, test_files: List[TestFile]): List[TestOutput] =
     case JUNIT -> junit_run_tests(test_files)
     case CTRF -> ctrf_run_tests(test_files)
     case JEST -> jest_run_tests(test_files)
+    case ADOC -> adoc_run_tests(test_files)
 
 /// Runs test files, writes reports under `output_dir`, and returns the written
 /// output summary.
@@ -668,6 +671,8 @@ const JUNIT_PREFIX = 'TEST-'
 const CTRF_REPORT_FILE = 'ctrf-report.json'
 /// Default filename for the generated Jest-compatible report.
 const JEST_REPORT_FILE = 'jest-report.json'
+/// Prefix used for generated AsciiDoc report files.
+const ADOC_PREFIX = 'TEST-'
 /// CTRF specification version emitted by this reporter.
 const CTRF_SPEC_VERSION = '0.0.0'
 
@@ -916,3 +921,86 @@ private fun jest_failed_count(test_file: TestFile): int =
 
 private fun jest_duration_millis(test_file: TestFile): long =
     test_file.test_cases |> 0L, (acc, test_case) => acc + ctrf_duration_millis(test_case)
+
+private fun adoc_run_tests(test_files: List[TestFile]): List[TestOutput] =
+    (test_files | :adoc_run_test).as_list()
+
+private fun adoc_run_test(test_file: TestFile): TestOutput =
+    TestOutput {
+        path: from_string(ADOC_PREFIX + adoc_file_name(test_file.file_name) + '.adoc'),
+        content: adoc_report(test_file),
+        failed: adoc_failed_count(test_file) > 0
+    }
+
+private fun adoc_file_name(file_name: String): String =
+    let without_root = if file_name.starts_with('/') then file_name[1, file_name.size()] else file_name
+    let flattened = without_root.replace('/', '.')
+    if flattened.end_with('.cfun')
+    then flattened[0, flattened.size().value - 5]
+    else if flattened.end_with('.coo')
+    then flattened[0, flattened.size().value - 4]
+    else flattened
+
+/// Serializes one test file as a human-readable AsciiDoc report.
+fun adoc_report(test_file: TestFile): String =
+    let tests = test_file.test_cases.size()
+    let failures = adoc_failed_count(test_file)
+    let passed = tests.value - failures
+    let rows = test_file.test_cases |> '', (acc, test_case) => acc + adoc_test_row(test_case)
+    '= Test results: ' + adoc_inline(test_file.file_name) + '\n\n'
+    + '[cols="3,1,1,1",options="header"]\n'
+    + '|===\n'
+    + '|Test |Status |Assertions |Time (seconds)\n\n'
+    + rows
+    + '|===\n\n'
+    + '*Tests:* ' + tests + ' +\n'
+    + '*Passed:* ' + passed + ' +\n'
+    + '*Failed:* ' + failures + '\n'
+    + adoc_failures(test_file.test_cases)
+
+private fun adoc_test_row(test_case: TestCase): String =
+    '|' + adoc_table_cell(test_case.name) + '\n'
+    + '|' + (if adoc_test_case_failed(test_case) then 'FAIL' else 'PASS') + '\n'
+    + '|' + test_case.assertions_count + '\n'
+    + '|' + test_case.execution_time + '\n\n'
+
+private fun adoc_failures(test_cases: List[TestCase]): String =
+    let content = test_cases |> '', (acc, test_case) => acc + adoc_failure(test_case)
+    if content.is_empty()
+    then ''
+    else '\n== Failures\n\n' + content
+
+private fun adoc_failure(test_case: TestCase): String =
+    match test_case.result with
+    case Passed -> ''
+    case Failed { message, type } ->
+        '=== ' + adoc_inline(test_case.name) + '\n\n'
+        + '*Type:* `' + adoc_inline(type) + '`\n\n'
+        + '[listing]\n....\n'
+        + adoc_listing(normalize_failure_message(message)) + '\n'
+        + '....\n\n'
+
+private fun adoc_inline(value: String): String =
+    value
+        .replace('\\', '\\\\')
+        .replace('\r\n', ' ')
+        .replace('\n', ' ')
+        .replace('\r', ' ')
+        .replace('{', '\\{')
+        .replace('}', '\\}')
+
+private fun adoc_table_cell(value: String): String =
+    adoc_inline(value).replace('|', '\\|')
+
+private fun adoc_listing(value: String): String =
+    let escaped = value.replace('\n....', '\n\\....')
+    if escaped.starts_with('....') then '\\' + escaped else escaped
+
+private fun adoc_failed_count(test_file: TestFile): int =
+    test_file.test_cases |> 0, (acc, test_case) =>
+        if adoc_test_case_failed(test_case) then acc + 1 else acc
+
+private fun adoc_test_case_failed(test_case: TestCase): bool =
+    match test_case.result with
+    case Passed -> false
+    case Failed -> true

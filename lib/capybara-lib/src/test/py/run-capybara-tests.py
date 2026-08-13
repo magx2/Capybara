@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 
-SUPPORTED_REPORT_TYPES = ("JUNIT", "CTRF", "JEST")
+SUPPORTED_REPORT_TYPES = ("JUNIT", "CTRF", "JEST", "ADOC")
 
 
 def parse_args(argv):
@@ -540,12 +540,73 @@ def suite_report(file_name, results):
     )
 
 
+def adoc_report_path(output_dir, file_name):
+    normalized = str(file_name).lstrip("/").replace("/", ".")
+    for suffix in (".cfun", ".coo"):
+        if normalized.endswith(suffix):
+            normalized = normalized[:-len(suffix)]
+            break
+    return pathlib.Path(output_dir, f"TEST-{normalized}.adoc")
+
+
+def adoc_inline(value):
+    return (str(value)
+            .replace("\\", "\\\\")
+            .replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("{", "\\{")
+            .replace("}", "\\}"))
+
+
+def adoc_table_cell(value):
+    return adoc_inline(value).replace("|", "\\|")
+
+
+def adoc_listing(value):
+    escaped = str(value).replace("\r\n", "\n").replace("\r", "\n").replace("\n....", "\n\\....")
+    return "\\" + escaped if escaped.startswith("....") else escaped
+
+
+def adoc_report(file_name, results):
+    failed = sum(1 for result in results if result["failed"])
+    rows = "".join(
+        f'|{adoc_table_cell(result["name"])}\n'
+        f'|{"FAIL" if result["failed"] else "PASS"}\n'
+        f'|{len(result["assertions"])}\n'
+        f'|{result["time"]}\n\n'
+        for result in results
+    )
+    failures = "".join(
+        f'=== {adoc_inline(result["name"])}\n\n'
+        f'*Type:* `{adoc_inline(result["failed"]["type"])}`\n\n'
+        f'[listing]\n....\n{adoc_listing(result["failed"]["message"])}\n....\n\n'
+        for result in results if result["failed"]
+    )
+    failure_section = f'\n== Failures\n\n{failures}' if failures else ""
+    return (
+        f'= Test results: {adoc_inline(file_name)}\n\n'
+        '[cols="3,1,1,1",options="header"]\n'
+        '|===\n'
+        '|Test |Status |Assertions |Time (seconds)\n\n'
+        f'{rows}'
+        '|===\n\n'
+        f'*Tests:* {len(results)} +\n'
+        f'*Passed:* {len(results) - failed} +\n'
+        f'*Failed:* {failed}\n'
+        f'{failure_section}'
+    )
+
+
 def write_reports(output_dir, report_type, suites, start_ms, stop_ms):
     output_dir = pathlib.Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if report_type == "JUNIT":
         for suite in suites:
             report_path(output_dir, suite["fileName"]).write_text(suite_report(suite["fileName"], suite["results"]))
+    if report_type == "ADOC":
+        for suite in suites:
+            adoc_report_path(output_dir, suite["fileName"]).write_text(adoc_report(suite["fileName"], suite["results"]))
     if report_type == "CTRF":
         tests = []
         for suite in suites:

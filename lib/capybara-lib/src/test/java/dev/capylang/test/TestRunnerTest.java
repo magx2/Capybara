@@ -277,7 +277,7 @@ class TestRunnerTest {
     }
 
     @Test
-    void shouldParseCtrfReportOutputTypes() {
+    void shouldParseReportOutputTypes() {
         var ctrfArguments = TestRunner.parseArguments(new String[]{
                 "-o", tempDir.toString(),
                 "-rt", "CTRF"
@@ -286,9 +286,14 @@ class TestRunnerTest {
                 "-o", tempDir.toString(),
                 "-rt", "JEST"
         });
+        var adocArguments = TestRunner.parseArguments(new String[]{
+                "-o", tempDir.toString(),
+                "-rt", "adoc"
+        });
 
         assertEquals(TestRunner.ReportType.CTRF, ctrfArguments.reportType());
         assertEquals(TestRunner.ReportType.JEST, jestArguments.reportType());
+        assertEquals(TestRunner.ReportType.ADOC, adocArguments.reportType());
     }
 
     @Test
