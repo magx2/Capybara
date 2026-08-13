@@ -24,6 +24,7 @@ import dev.capylang.compiler.parser.Expression.DoubleLiteral;
 import dev.capylang.compiler.parser.Expression.FieldAccessExpression;
 import dev.capylang.compiler.parser.Expression.FloatLiteral;
 import dev.capylang.compiler.parser.Expression.FunctionCallExpression;
+import dev.capylang.compiler.parser.Expression.FunctionReferenceExpression;
 import dev.capylang.compiler.parser.Expression.IfExpression;
 import dev.capylang.compiler.parser.Expression.IndexExpression;
 import dev.capylang.compiler.parser.Expression.IntLiteral;
@@ -435,8 +436,11 @@ public final class NativeCompilerValidator {
                 }
                 validateNestedLambdaFunctionArguments(context, module, block.result(), blockTypes, errors);
             }
-            case DataLiteral literal -> literal.fields().forEach(field ->
-                    validateNestedLambdaFunctionArguments(context, module, field.value(), types, errors));
+            case DataLiteral literal -> {
+                validateDataLiteralFieldTypes(context, module, literal, types, errors);
+                literal.fields().forEach(field ->
+                        validateNestedLambdaFunctionArguments(context, module, field.value(), types, errors));
+            }
             case DictLiteral literal -> literal.entries().forEach(entry -> {
                 validateNestedLambdaFunctionArguments(context, module, entry.key(), types, errors);
                 validateNestedLambdaFunctionArguments(context, module, entry.value(), types, errors);
@@ -508,6 +512,68 @@ public final class NativeCompilerValidator {
             default -> {
             }
         }
+    }
+
+    private void validateDataLiteralFieldTypes(
+            Context context,
+            ParsedModule module,
+            DataLiteral literal,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var declaration = context.dataDeclaration(module, literal.typeName());
+        if (declaration == null) {
+            return;
+        }
+        for (var field : literal.fields()) {
+            if (field.spread()) {
+                continue;
+            }
+            var declaredField = declaration.fields().stream()
+                    .filter(candidate -> candidate.name().equals(field.name()))
+                    .findFirst()
+                    .orElse(null);
+            if (declaredField == null) {
+                continue;
+            }
+            var expected = declaredField.typeReference();
+            var actual = validationExpressionType(context, module, field.value(), types);
+            if (functionTypeName(expected.name())) {
+                if (actual != null && !callableExpression(field.value(), actual)) {
+                    errors.add(error(
+                            module,
+                            field.location(),
+                            "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
+                                    + "` requires callable type `" + displayType(expected) + "`."
+                    ));
+                }
+                continue;
+            }
+            if (field.value() instanceof LambdaExpression || field.value() instanceof FunctionReferenceExpression) {
+                errors.add(error(
+                        module,
+                        field.location(),
+                        "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
+                                + "` requires `" + displayType(expected) + "`, but a callable value was provided."
+                ));
+                continue;
+            }
+            if (actual != null && distinctSequenceListMismatch(expected, actual)) {
+                errors.add(error(
+                        module,
+                        field.location(),
+                        "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
+                                + "` has type `" + displayType(actual) + "`, but requires `"
+                                + displayType(expected) + "`; use an explicit `to_seq` or `as_list` conversion."
+                ));
+            }
+        }
+    }
+
+    private boolean callableExpression(Expression expression, TypeReference inferredType) {
+        return expression instanceof LambdaExpression
+                || expression instanceof FunctionReferenceExpression
+                || (inferredType != null && functionTypeName(inferredType.name()));
     }
 
     private void validateDistinctCollectionReturnType(
@@ -1790,6 +1856,43 @@ public final class NativeCompilerValidator {
                 match = imported;
             }
             return match;
+        }
+
+        private DataDeclaration dataDeclaration(ParsedModule module, String name) {
+            var local = localDataDeclaration(module, unqualified(name));
+            if (local != null) {
+                return local;
+            }
+            DataDeclaration match = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(unqualified(name)))
+                        || declaration.excludedNames().contains(unqualified(name))) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule == null) {
+                    continue;
+                }
+                var imported = localDataDeclaration(importedModule, unqualified(name));
+                if (imported == null) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = imported;
+            }
+            return match;
+        }
+
+        private DataDeclaration localDataDeclaration(ParsedModule module, String name) {
+            for (var definition : module.definitions()) {
+                if (definition instanceof DataDeclaration data && data.name().equals(name)) {
+                    return data;
+                }
+            }
+            return null;
         }
 
         private Map<String, AnnotationDeclaration> availableAnnotations(ParsedModule module) {

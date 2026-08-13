@@ -1,6 +1,7 @@
 package dev.capylang.test;
 
 import capy.test.CapyTest;
+import capy.lang.Result;
 import dev.capylang.PathUtil;
 
 import java.lang.reflect.InvocationTargetException;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class TestRunner {
 
@@ -178,7 +180,7 @@ public class TestRunner {
         }
     }
 
-    private static List<Object> invokeGatherTests(Method gatherTestsMethod) {
+    private static List<CapyTest.TestFile> invokeGatherTests(Method gatherTestsMethod) {
         try {
             var result = gatherTestsMethod.invoke(null);
             var root = unsafeRunEffect(result);
@@ -210,13 +212,57 @@ public class TestRunner {
         return List.of(value);
     }
 
-    private static Object asTestFile(Object value) {
+    private static CapyTest.TestFile asTestFile(Object value) {
+        if (value instanceof CapyTest.TestFile testFile) {
+            return testFile;
+        }
         if (value instanceof Map<?, ?> map && "TestFile".equals(map.get("__type"))) {
-            return value;
+            var testCases = ((List<?>) map.get("test_cases")).stream()
+                    .map(TestRunner::asTestCase)
+                    .toList();
+            return new CapyTest.TestFile(
+                    String.valueOf(map.get("file_name")),
+                    testCases,
+                    ((Number) map.get("timestamp_millis")).longValue()
+            );
         }
         var valueType = value == null ? "null" : value.getClass().getCanonicalName();
         throw new IllegalStateException("Method `%s()` should return `TestFile` values, but it returned `%s`"
                 .formatted(GATHER_TESTS_METHOD_NAME, valueType));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static CapyTest.TestCase asTestCase(Object value) {
+        if (value instanceof CapyTest.TestCase testCase) {
+            return testCase;
+        }
+        if (value instanceof Map<?, ?> map && "TestCase".equals(map.get("__type"))) {
+            return new CapyTest.TestCase(
+                    String.valueOf(map.get("name")),
+                    asTestResult(map.get("result")),
+                    ((Number) map.get("assertions_count")).intValue(),
+                    ((Number) map.get("execution_time")).doubleValue(),
+                    (Supplier<capy.test.Assert>) map.get("assert_supplier")
+            );
+        }
+        var valueType = value == null ? "null" : value.getClass().getCanonicalName();
+        throw new IllegalStateException("Generated test data should contain `TestCase` values, but found `%s`"
+                .formatted(valueType));
+    }
+
+    private static CapyTest.TestResult asTestResult(Object value) {
+        if (value instanceof CapyTest.TestResult result) {
+            return result;
+        }
+        if (value instanceof Map<?, ?> map && "Passed".equals(map.get("__type"))) {
+            return CapyTest.Passed.INSTANCE;
+        }
+        if (value instanceof Map<?, ?> map && "Failed".equals(map.get("__type"))) {
+            return new CapyTest.Failed(String.valueOf(map.get("message")), String.valueOf(map.get("type")));
+        }
+        var valueType = value == null ? "null" : value.getClass().getCanonicalName();
+        throw new IllegalStateException("Generated test data should contain a `TestResult`, but found `%s`"
+                .formatted(valueType));
     }
 
     private static Object unsafeRunEffect(Object value) {
@@ -249,44 +295,15 @@ public class TestRunner {
             ReportType reportType,
             Path outputDir,
             LogType logType,
-            List<Object> testFiles
+            List<CapyTest.TestFile> testFiles
     ) {
-        var result = invokeGeneratedCapyTest(
-                "run_tests_and_print_summary",
-                generatedConstant(reportType.name()),
+        var result = CapyTest.runTestsAndPrintSummary(
+                CapyTest.ReportType.valueOf(reportType.name()),
                 PathUtil.fromJavaPath(outputDir),
-                generatedConstant(logType.name()),
+                CapyTest.LogType.valueOf(logType.name()),
                 testFiles
         );
         return unwrapResult(unsafeRunEffect(result), "Cannot run Capybara tests");
-    }
-
-    private static Object invokeGeneratedCapyTest(String namePrefix, Object... arguments) {
-        var method = findGeneratedMethod(CapyTest.class, namePrefix, arguments.length);
-        try {
-            return method.invoke(null, arguments);
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException("Generated method `%s` should be public".formatted(method.getName()), e);
-        } catch (InvocationTargetException e) {
-            throw new IllegalStateException("Cannot invoke generated method `%s`".formatted(method.getName()), e);
-        }
-    }
-
-    private static Method findGeneratedMethod(Class<?> type, String namePrefix, int parameterCount) {
-        for (var method : type.getMethods()) {
-            if (method.getName().startsWith(namePrefix) && method.getParameterCount() == parameterCount) {
-                return method;
-            }
-        }
-        throw new IllegalStateException("Cannot find generated method `%s` with %d parameters".formatted(namePrefix, parameterCount));
-    }
-
-    private static Object generatedConstant(String name) {
-        try {
-            return CapyTest.class.getField(name).get(null);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Cannot read generated CapyTest constant `%s`".formatted(name), e);
-        }
     }
 
     private static ClassLoader contextClassLoader() {
@@ -296,6 +313,12 @@ public class TestRunner {
 
     @SuppressWarnings("unchecked")
     private static Object unwrapResult(Object result, String message) {
+        if (result instanceof Result.Success<?> success) {
+            return success.value();
+        }
+        if (result instanceof Result.Error<?> error) {
+            throw new IllegalStateException(message + ": " + error.ex().getMessage(), error.ex());
+        }
         if (result instanceof Map<?, ?> map && "Success".equals(map.get("__type"))) {
             return ((Map<String, Object>) map).get("value");
         }
@@ -309,6 +332,9 @@ public class TestRunner {
 
     @SuppressWarnings("unchecked")
     private static boolean failed(Object testRun) {
+        if (testRun instanceof CapyTest.TestRun run) {
+            return run.failed();
+        }
         return Boolean.TRUE.equals(((Map<String, Object>) testRun).get("failed"));
     }
 }

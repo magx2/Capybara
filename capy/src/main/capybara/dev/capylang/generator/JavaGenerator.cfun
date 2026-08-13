@@ -209,8 +209,8 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     let nativeProviderScope = java_native_provider_scope_for_module(module, nativeProviderIndex)
     java_package(module)
     + java_imports(module, allModules)
-    + "public final class " + module.name + " {" + newline()
-    + "    private " + module.name + "() " + "{" + "}" + newline() + newline()
+    + "public final class " + java_module_class_name(module) + " {" + newline()
+    + "    private " + java_module_class_name(module) + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
     + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
     + java_object_interfaces(objects.interfaces, module, allModules)
@@ -1388,7 +1388,9 @@ private fun compiled_static_imports(imports: List[StaticImport]): String =
     match imports[0] with
     case None -> ""
     case Some { staticImport } ->
-        "import static " + staticImport.className + "." + staticImport.memberName + ";" + newline()
+        if java_default_package_class(staticImport.className)
+        then compiled_static_imports(imports[1:])
+        else "import static " + staticImport.className + "." + staticImport.memberName + ";" + newline()
             + compiled_static_imports(imports[1:])
 
 /// Emits import statements for static.
@@ -1553,7 +1555,23 @@ private fun constant_bindings(constants: List[CompiledFunction], module: Compile
     case None -> []
     case Some { constant } ->
         let rest = constant_bindings(constants[1:], module, allModules)
-        [java_binding(constant.name, constant_type(constant, rest, module, allModules))] + rest
+        [java_binding_with_java_name(
+            constant.name,
+            constant_type(constant, rest, module, allModules),
+            imported_constant_binding_name(constant, module, allModules)
+        )] + rest
+
+/// Computes the Java binding for a constant, normalizing compiled static-import member suffixes.
+private fun imported_constant_binding_name(constant: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_selected_function_binding(constant, module.functionBindings) with
+    case Some { binding } ->
+        if binding.moduleName == module.name & binding.modulePath == module.path
+        then java_identifier(constant.name)
+        else java_function_binding_class_name(binding) + "." + java_identifier(constant.name)
+    case None ->
+        match default_static_import_constant_owner(constant.name, module.staticImports) with
+        case Some { owner } -> owner + "." + java_identifier(constant.name)
+        case None -> ordinary_constant_name(constant, module, allModules)
 
 /// Resolves binding metadata for binding.
 private fun java_binding(name: String, typeReference: CompiledTypeReference): JavaBinding =
@@ -1689,10 +1707,10 @@ private fun java_function_name(function: CompiledFunction): String =
 /// Computes the Java name for function call.
 private fun java_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     match find_function(name, module.functions) with
-    case Some { function } -> java_function_name(function)
+    case Some { function } -> ordinary_function_call_name(function, module, allModules)
     case None ->
         match find_function_in_imports(name, module.imports, module, allModules) with
-        case Some { function } -> java_function_name(function)
+        case Some { function } -> ordinary_function_call_name(function, module, allModules)
         case None -> java_identifier(name)
 
 /// Builds precomputed metadata for matching a requested function name.
@@ -2370,9 +2388,46 @@ private fun variable_expression_code(variable: CompiledVariableExpression, env: 
             else match imported_stdlib_constant(variable.name, module.imports) with
                 case Some { constant } -> value_conversion_code(constant.javaName, constant.typeReference, expectedType, module, allModules)
                 case None ->
-                    match find_constant_in_scope(variable.name, module, allModules) with
-                    case Some { function } -> value_conversion_code(java_identifier(variable.name), effective_function_return_type(function, module, allModules), expectedType, module, allModules)
-                    case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
+                    match find_imported_constant(variable.name, module.functions) with
+                    case Some { function } -> value_conversion_code(imported_constant_reference_name(function, module), function.returnType, expectedType, module, allModules)
+                    case None ->
+                        match find_constant_in_scope(variable.name, module, allModules) with
+                        case Some { function } -> value_conversion_code(ordinary_constant_name(function, module, allModules), effective_function_return_type(function, module, allModules), expectedType, module, allModules)
+                        case None -> numeric_widening_code(java_identifier(variable.name), object_type(), expectedType)
+
+/// Finds an imported constant whose original constant visibility was normalized by library linking.
+private fun find_imported_constant(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if function.name == name & imported_function(function) & function.parameters.is_empty()
+        then /capy/lang/Option.Some { function }
+        else find_imported_constant(name, functions[1:])
+
+/// Formats a linked imported constant reference using its preserved static-import owner.
+private fun imported_constant_reference_name(function: CompiledFunction, module: CompiledModule): String =
+    match default_static_import_constant_owner(function.name, module.staticImports) with
+    case Some { owner } -> owner + "." + java_identifier(function.name)
+    case None -> java_identifier(function.name)
+
+/// Formats a constant reference, qualifying constants imported from Java's unnamed package.
+private fun ordinary_constant_name(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let memberName = java_identifier(function.name)
+    match find_selected_function_binding(function, module.functionBindings) with
+    case Some { binding } ->
+        if binding.moduleName == module.name & binding.modulePath == module.path
+        then memberName
+        else java_function_binding_class_name(binding) + "." + memberName
+    case None ->
+        match root_function_owner(function, module, allModules) with
+        case Some { owner } -> java_module_class_name(owner) + "." + memberName
+        case None ->
+            match root_imported_class_for_symbol(function.name, module.imports, module) with
+            case Some { owner } -> owner + "." + memberName
+            case None ->
+                match root_imported_module_for_symbol(function.name, module.imports, module, allModules) with
+                case Some { importedModule } -> java_module_class_name(importedModule) + "." + memberName
+                case None -> memberName
 
 /// Emits generated code for placeholder.
 private fun placeholder_code(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
@@ -3742,8 +3797,9 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then "__capy_data(\"TestCase\", java.util.Map.ofEntries(java.util.Map.entry(\"name\", "
         + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
         + "), java.util.Map.entry(\"result\", __capy_data(\"Passed\", java.util.Map.of())), java.util.Map.entry(\"assertions_count\", 0), java.util.Map.entry(\"execution_time\", 0.0), java.util.Map.entry(\"assert_supplier\", "
+        + "((java.util.function.Supplier<java.lang.Object>) ("
         + expression_code(argument(call.arguments, 1), env, supplier_type(assert_type()), module, allModules)
-        + ")))"
+        + ")))))"
     else if call.name == "test_file"
     then
         let testsExpression = argument(call.arguments, 1)
@@ -3853,7 +3909,7 @@ private fun partial_function_call_body_code(call: CompiledFunctionCallExpression
                 + "(" + partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
     else match find_function_for_arguments(call.name, call.arguments, env, module, allModules) with
         case Some { function } ->
-            java_function_name(function) + "(" + partial_parameter_expression_list_code(function.parameters, call.arguments, names, env, module, allModules) + ")"
+            ordinary_function_call_name(function, module, allModules) + "(" + partial_parameter_expression_list_code(function.parameters, call.arguments, names, env, module, allModules) + ")"
         case None -> java_function_call_name(call.name, module, allModules) + "(" + partial_expression_list_code(call.arguments, names, env, module, allModules) + ")"
 
 /// Emits generated code for partial method call body.
@@ -4249,12 +4305,94 @@ private fun ordinary_function_call_code(call: CompiledFunctionCallExpression, en
 
 /// Formats an ordinary function target, qualifying imports from Java's unnamed package.
 private fun ordinary_function_call_name(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
-    match find_selected_function_module_in_imports(function, module.imports, module, allModules) with
-    case Some { importedModule } ->
-        if importedModule.path.is_empty()
-        then module_fqcn(importedModule) + "." + java_function_name(function)
-        else java_function_name(function)
-    case None -> java_function_name(function)
+    let memberName = java_function_name(function)
+    match default_static_import_owner(memberName, module.staticImports) with
+    case Some { owner } -> owner + "." + memberName
+    case None ->
+        match root_function_owner(function, module, allModules) with
+        case Some { owner } -> java_module_class_name(owner) + "." + memberName
+        case None ->
+            match root_imported_module_for_symbol(function.name, module.imports, module, allModules) with
+            case Some { importedModule } -> java_module_class_name(importedModule) + "." + memberName
+            case None ->
+                match find_selected_function_module_in_imports(function, module.imports, module, allModules) with
+                case Some { importedModule } ->
+                    if importedModule.path.is_empty()
+                    then module_fqcn(importedModule) + "." + memberName
+                    else memberName
+                case None -> memberName
+
+/// Finds the root module that owns a linked function copy by stable declaration identity.
+private fun root_function_owner(function: CompiledFunction, current: CompiledModule, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { candidate } ->
+        if candidate.path.is_empty()
+            & (candidate.name != current.name | candidate.path != current.path)
+            & module_contains_function_origin(function, candidate.functions)
+        then /capy/lang/Option.Some { candidate }
+        else root_function_owner(function, current, modules[1:])
+
+/// Checks whether a module contains a declaration with the same stable source identity.
+private fun module_contains_function_origin(function: CompiledFunction, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { candidate } ->
+        if function.name == candidate.name
+            & function.parameters.size() == candidate.parameters.size()
+            & function.location.line == candidate.location.line
+            & function.location.column == candidate.location.column
+        then true
+        else module_contains_function_origin(function, functions[1:])
+
+/// Resolves an imported symbol to its declaring root module so Java can qualify it without an illegal import.
+private fun root_imported_module_for_symbol(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & import_includes_name(name, declaration)
+        then match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
+            case Some { importedModule } ->
+                if importedModule.path.is_empty()
+                then /capy/lang/Option.Some { importedModule }
+                else root_imported_module_for_symbol(name, imports[1:], module, allModules)
+            case None -> root_imported_module_for_symbol(name, imports[1:], module, allModules)
+        else root_imported_module_for_symbol(name, imports[1:], module, allModules)
+
+/// Resolves an imported symbol's Java owner when it lives in the unnamed package.
+private fun root_imported_class_for_symbol(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified & import_includes_name(name, declaration)
+        then
+            let className = imported_module_class(module, declaration.modulePath)
+            if java_default_package_class(className)
+            then /capy/lang/Option.Some { className }
+            else root_imported_class_for_symbol(name, imports[1:], module)
+        else root_imported_class_for_symbol(name, imports[1:], module)
+
+/// Finds the declaring class for a member that Java cannot import from the unnamed package.
+private fun default_static_import_owner(memberName: String, imports: List[StaticImport]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { staticImport } ->
+        if java_default_package_class(staticImport.className)
+            & (staticImport.memberName == memberName | staticImport.memberName == "*")
+        then /capy/lang/Option.Some { staticImport.className }
+        else default_static_import_owner(memberName, imports[1:])
+
+/// Finds the declaring class for a constant whose compiled import may carry a source suffix.
+private fun default_static_import_constant_owner(name: String, imports: List[StaticImport]): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { staticImport } ->
+        if java_default_package_class(staticImport.className)
+            & (staticImport.memberName == name
+                | java_generator_string_has_prefix(staticImport.memberName, name + "__")
+                | staticImport.memberName == "*")
+        then /capy/lang/Option.Some { staticImport.className }
+        else default_static_import_constant_owner(name, imports[1:])
 
 /// Finds the imported module that owns an already selected ordinary function overload.
 private fun find_selected_function_module_in_imports(function: CompiledFunction, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
@@ -6296,6 +6434,18 @@ private fun find_selected_function_binding(function: CompiledFunction, bindings:
         then /capy/lang/Option.Some { binding }
         else find_selected_function_binding(function, bindings[1:])
 
+/// Finds the declaration origin for a linked function copy whose visibility may have changed to `imported`.
+private fun find_function_origin_binding(function: CompiledFunction, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if function.name == binding.function.name
+            & function.parameters.size() == binding.function.parameters.size()
+            & function.location.line == binding.function.location.line
+            & function.location.column == binding.function.location.column
+        then /capy/lang/Option.Some { binding }
+        else find_function_origin_binding(function, bindings[1:])
+
 /// Computes the generated Java class name for a linked function binding.
 private fun java_function_binding_class_name(binding: CompiledFunctionBinding): String =
     if binding.modulePath.is_empty()
@@ -7051,7 +7201,7 @@ private fun assert_that_code(expression: CompiledExpression, env: List[JavaBindi
     else if actualType.name == "List"
     then java_assert_data("ListAssert", actual)
     else if seq_type_name(actualType.name)
-    then java_assert_data("ListAssert", seq_receiver_code(expression, actualType, env, module, allModules) + ".asList()")
+    then "capy.test.Assert.assertThat(" + seq_receiver_code(expression, actualType, env, module, allModules) + ")"
     else if actualType.name == "Set"
     then java_assert_data("SetAssert", actual)
     else if actualType.name == "Dict"
@@ -10846,13 +10996,20 @@ private fun enum_value_binding_in_imports(valueName: String, imports: List[Compi
         if !declaration.qualified & import_includes_name(valueName, declaration)
         then
             let className = imported_module_class(module, declaration.modulePath)
-            match find_module_by_class(className, allModules) with
-            case Some { importedModule } ->
-                match enum_value_type_in_functions(valueName, importedModule.functions) with
-                case Some { typeName } -> /capy/lang/Option.Some { JavaEnumValueBinding { moduleClassName: className, typeName: typeName } }
-                case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
-            case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+            enum_value_binding_in_imported_module(valueName, imports, module, allModules, className)
         else enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+
+/// Resolves an enum value from one imported module without nesting match expressions.
+private fun enum_value_binding_in_imported_module(valueName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[JavaEnumValueBinding] =
+    match find_module_by_class(className, allModules) with
+    case Some { importedModule } -> enum_value_binding_in_imported_functions(valueName, imports, module, allModules, className, importedModule.functions)
+    case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+
+/// Resolves an enum value in imported function metadata and otherwise continues import lookup.
+private fun enum_value_binding_in_imported_functions(valueName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String, functions: List[CompiledFunction]): /capy/lang/Option[JavaEnumValueBinding] =
+    match enum_value_type_in_functions(valueName, functions) with
+    case Some { typeName } -> /capy/lang/Option.Some { JavaEnumValueBinding { moduleClassName: className, typeName: typeName } }
+    case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
 
 /// Finds the enum type that declares a value in compiled schema metadata.
 private fun enum_value_type_in_functions(valueName: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
@@ -13573,6 +13730,15 @@ private fun test_runtime_modules(modules: List[CompiledModule]): List[GeneratedM
             + "    public static java.util.List<java.lang.Object> gatherTests() {" + newline()
             + "        return java.util.List.of(" + gather + ");" + newline()
             + "    }" + newline()
+            + newline()
+            + "    private static java.lang.Object invokeRootTests(java.lang.String className) {" + newline()
+            + "        try {" + newline()
+            + "            java.lang.Object effect = java.lang.Class.forName(className).getMethod(\"tests\").invoke(null);" + newline()
+            + "            return ((capy.lang.Effect<?>) effect).unsafeRun();" + newline()
+            + "        } catch (java.lang.ReflectiveOperationException exception) {" + newline()
+            + "            throw new java.lang.IllegalStateException(\"Cannot invoke tests from root module `\" + className + \"`.\", exception);" + newline()
+            + "        }" + newline()
+            + "    }" + newline()
             + "}" + newline()
     }]
 
@@ -13592,7 +13758,10 @@ private fun test_gather_calls_for_module(functions: List[CompiledFunction], modu
     case Some { function } ->
         if function.name == "tests"
         then
-            let current = module_fqcn(module) + ".tests().unsafeRun()"
+            let current =
+                if module.path.is_empty()
+                then "invokeRootTests(\"" + escape_java_string(java_module_class_name(module)) + "\")"
+                else module_fqcn(module) + ".tests().unsafeRun()"
             join_non_empty(current, test_gather_calls_for_module(functions[1:], module, allModules))
         else test_gather_calls_for_module(functions[1:], module, allModules)
 
@@ -13615,8 +13784,12 @@ private fun join_non_empty(first: String, second: String): String =
 /// Formats source text for module fully qualified class name.
 private fun module_fqcn(module: CompiledModule): String =
     if module.path.is_empty()
-    then module.name
-    else module.path.replace("/", ".") + "." + module.name
+    then java_module_class_name(module)
+    else module.path.replace("/", ".") + "." + java_module_class_name(module)
+
+/// Formats a module name as a legal Java class identifier.
+private fun java_module_class_name(module: CompiledModule): String =
+    java_identifier(module.name)
 
 /// Formats source text for module source file.
 private fun module_source_file(module: CompiledModule): String =
@@ -13739,8 +13912,8 @@ private fun java_package(module: CompiledModule): String =
 /// Computes the output or module path for module.
 private fun java_module_relative_path(module: CompiledModule, extension: String): String =
     if module.path.is_empty()
-    then module.name + extension
-    else module.path + "/" + module.name + extension
+    then java_module_class_name(module) + extension
+    else module.path + "/" + java_module_class_name(module) + extension
 
 /// Sanitizes a Capybara name into a Java identifier.
 private fun java_identifier(name: String): String =

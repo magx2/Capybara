@@ -29,11 +29,14 @@ class CompilationTest {
     @Test
     void shouldCompileAndGenerateRootModulesWithAbsoluteImports() {
         var program = compileProgram(List.of(
-                rawModule("Support", "", "fun increment(value: int): int = value + 1"),
+                rawModule("Support", "", """
+                        const ANSWER: int = 41
+                        fun increment(value: int): int = value + 1
+                        """),
                 rawModule("main", "", """
-                        from /Support import { increment }
+                        from /Support import { ANSWER, increment }
 
-                        fun answer(): int = increment(41)
+                        fun answer(): int = increment(ANSWER)
                         """)
         ));
 
@@ -47,7 +50,8 @@ class CompilationTest {
                 .orElseThrow()
                 .code())
                 .doesNotContain("package ;")
-                .contains("Support.increment");
+                .contains("Support.increment")
+                .contains("Support.ANSWER");
 
         var javaScriptModules = JavaScriptGenerator.javaScriptGenerator(program).modules();
         assertThat(javaScriptModules)
@@ -70,6 +74,34 @@ class CompilationTest {
                 .orElseThrow()
                 .code())
                 .contains("__import__(\"Support\"");
+    }
+
+    @Test
+    void shouldSanitizeDottedModuleNamesForJavaClasses() {
+        var program = compileProgram(List.of(rawModule(
+                "Kaprekar.test",
+                "",
+                "fun tests(): int = 1"
+        )));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        assertThat(generated.modules())
+                .extracting(module -> module.relativePath())
+                .contains("Kaprekar_test.java");
+        assertThat(generated.modules().stream()
+                .filter(module -> module.relativePath().equals("Kaprekar_test.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("public final class Kaprekar_test")
+                .contains("private Kaprekar_test()");
+        assertThat(generated.modules().stream()
+                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("invokeRootTests(\"Kaprekar_test\")")
+                .doesNotContain("Kaprekar_test.tests()");
     }
 
     @Test
@@ -117,6 +149,40 @@ class CompilationTest {
         var errors = (List<?>) ((Either.Right<?, ?>) result).value();
         assertThat(errors.toString())
                 .contains("Binding `strings` has type `List[Result[T]]`, but declares `List[String]`.");
+    }
+
+    @Test
+    void shouldRejectNonCallableDataFieldDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Main", "", """
+                        union Seq[T] = Cons | End
+                        data Cons[T] { value: T, rest: () => Seq[T] }
+                        data End {}
+
+                        fun broken(value: int): Seq[int] =
+                            Cons { value: value, rest: End {} }
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString())
+                .contains("Field `rest` of data `Cons` requires callable type `()=>Seq[T]`.");
+    }
+
+    @Test
+    void shouldAcceptCallableDataFieldDuringCompilation() {
+        compileProgram(List.of(rawModule("Main", "", """
+                union Seq[T] = Cons | End
+                data Cons[T] { value: T, rest: () => Seq[T] }
+                data End {}
+
+                fun valid(value: int): Seq[int] =
+                    Cons { value: value, rest: () => End {} }
+                """)));
     }
 
     @ParameterizedTest(name = "{index}: should {0}")

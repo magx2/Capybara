@@ -757,7 +757,7 @@ private fun imported_library_selection_from_module_with_indexes(declaration: Com
             functions: [function.with(visibility: "imported")] + rest.functions,
             functionBindings: [binding] + rest.functionBindings,
             staticImports: if includeStaticImports
-                then [StaticImport { className: compiled_function_binding_class_name(binding), memberName: compiler_java_function_name(function), enumValue: false }] + rest.staticImports
+                then [StaticImport { className: compiled_function_binding_class_name(binding), memberName: compiler_java_static_member_name(function), enumValue: false }] + rest.staticImports
                 else rest.staticImports
         }
         else rest
@@ -916,6 +916,12 @@ private fun compiler_java_function_name(function: CompiledFunction): String =
     else if function.name == "main"
     then "main"
     else compiler_java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
+
+/// Computes the Java member emitted for an imported function or constant.
+private fun compiler_java_static_member_name(function: CompiledFunction): String =
+    if compiler_string_has_prefix(function.visibility, "const:")
+    then compiler_java_identifier(function.name)
+    else compiler_java_function_name(function)
 
 /// Sanitizes a Capybara name into a Java identifier for compiler-generated symbols.
 private fun compiler_java_identifier(name: String): String =
