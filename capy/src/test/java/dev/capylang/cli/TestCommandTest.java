@@ -29,11 +29,18 @@ class TestCommandTest {
                 "js",
                 "--generated-dir", tempDir.toString(),
                 "--output-dir", tempDir.resolve("reports").toString(),
-                "--report-type", "ADOC"
+                "--report-type", "HTML"
         );
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.error()).contains("Use JUNIT, CTRF, or JEST");
+        assertThat(result.error()).contains("Use JUNIT, CTRF, JEST, or ADOC");
+    }
+
+    @Test
+    void selectsPythonExecutableForOperatingSystem() {
+        assertThat(TestCommand.pythonExecutable("Windows 11")).isEqualTo("python.exe");
+        assertThat(TestCommand.pythonExecutable("Linux")).isEqualTo("python3");
+        assertThat(TestCommand.pythonExecutable("Mac OS X")).isEqualTo("python3");
     }
 
     @Test
@@ -76,6 +83,21 @@ class TestCommandTest {
             assertThat(generatedFiles.filter(Files::isRegularFile))
                     .allMatch(path -> path.equals(source));
         }
+    }
+
+    @Test
+    void acceptsAdocReportTypeDuringValidation() {
+        var result = executeWithCapturedError(
+                "js",
+                "--generated-dir", tempDir.toString(),
+                "--output-dir", tempDir.resolve("reports").toString(),
+                "--report-type", "ADOC",
+                "--log", "INVALID"
+        );
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.error()).contains("Unknown log type");
+        assertThat(result.error()).doesNotContain("Unknown report type");
     }
 
     private static Execution executeWithCapturedError(String... args) {

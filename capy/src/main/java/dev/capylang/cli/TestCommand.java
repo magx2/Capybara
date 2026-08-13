@@ -29,8 +29,8 @@ final class TestCommand {
             var options = Options.parse(args);
             return switch (options.backend()) {
                 case JAVA -> runJava(options);
-                case JAVASCRIPT -> runScript(options, "node", JAVASCRIPT_RUNNER, ".js");
-                case PYTHON -> runScript(options, "python3", PYTHON_RUNNER, ".py");
+                case JAVASCRIPT -> runScript(options, "node", JAVASCRIPT_RUNNER, ".js", false);
+                case PYTHON -> runScript(options, pythonExecutable(System.getProperty("os.name", "")), PYTHON_RUNNER, ".py", true);
             };
         } catch (CommandException | IllegalArgumentException exception) {
             System.err.println(exception.getMessage());
@@ -42,7 +42,8 @@ final class TestCommand {
             Options options,
             String executable,
             String resource,
-            String suffix
+            String suffix,
+            boolean unbuffered
     ) throws CommandException {
         Path temporaryDirectory = null;
         try {
@@ -51,7 +52,7 @@ final class TestCommand {
             extractResource(resource, runner);
             var command = new ArrayList<String>();
             command.add(executable);
-            if ("python3".equals(executable)) {
+            if (unbuffered) {
                 command.add("-u");
             }
             command.add(runner.toString());
@@ -130,9 +131,15 @@ final class TestCommand {
     private static String runtimeName(String executable) {
         return switch (executable) {
             case "node" -> "Node.js";
-            case "python3" -> "Python";
+            case "python3", "python.exe" -> "Python";
             default -> "Java";
         };
+    }
+
+    static String pythonExecutable(String operatingSystemName) {
+        return operatingSystemName.toLowerCase(Locale.ROOT).contains("windows")
+                ? "python.exe"
+                : "python3";
     }
 
     private static void extractResource(String resource, Path target) throws IOException, CommandException {
@@ -200,7 +207,7 @@ final class TestCommand {
                 Options:
                   --generated-dir <directory>  Generated test sources or classes (required)
                   --output-dir <directory>     Test report output directory (required unless --available-tests)
-                  --report-type <type>         JUNIT, CTRF, or JEST (required unless --available-tests)
+                  --report-type <type>         JUNIT, CTRF, JEST, or ADOC (required unless --available-tests)
                   --log <type>                 NONE, LOG, TC, or TEAM_CITY (default: NONE)
                   --tests <selector>           Run matching tests; may be repeated
                   --available-tests            Print available test selectors without running tests
@@ -277,8 +284,8 @@ final class TestCommand {
             if (!availableTests && reportType == null) {
                 throw new IllegalArgumentException("Missing --report-type");
             }
-            if (reportType != null && !List.of("JUNIT", "CTRF", "JEST").contains(reportType)) {
-                throw new IllegalArgumentException("Unknown report type `%s`. Use JUNIT, CTRF, or JEST.".formatted(reportType));
+            if (reportType != null && !List.of("JUNIT", "CTRF", "JEST", "ADOC").contains(reportType)) {
+                throw new IllegalArgumentException("Unknown report type `%s`. Use JUNIT, CTRF, JEST, or ADOC.".formatted(reportType));
             }
             if (!List.of("NONE", "LOG", "TC", "TEAM_CITY").contains(logType)) {
                 throw new IllegalArgumentException("Unknown log type `%s`. Use NONE, LOG, TC, or TEAM_CITY.".formatted(logType));
