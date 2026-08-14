@@ -509,6 +509,59 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsLocalFunctionArgumentTypeDuringCompilationForEveryBackend() throws Exception {
+        var source = writeSource("sample/LocalFunctionTypeFailure.cfun", """
+                from /capy/collection/Seq import { Seq, Cons, End }
+
+                data Item { value: String }
+
+                private fun render(result: Cons[Item]): String =
+                    @/capy/meta_prog/Recursive
+                    fun render(result: Seq[Item], acc: String): String =
+                        match result with
+                        case Cons cons -> render(cons.rest(), acc)
+                        case End -> acc
+                    ---
+                    render(result.rest(), result.value)
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 1 error(s):
+                    /sample/LocalFunctionTypeFailure.cfun:12:4: Argument 2 of function `render` has type `Item`, but `String` is required.
+                    """);
+        }
+
+        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source, ".js")).doesNotExist();
+        assertThat(generatedPath(source, ".py")).doesNotExist();
+    }
+
+    @Test
+    void reportsInvalidImportedFunctionCallsInTestSourcesDuringCompilationForEveryBackend() throws Exception {
+        writeSource("Kaprekar.cfun", """
+                data Kaprekar { value: int }
+
+                const KAPREKAR: Kaprekar = Kaprekar { 6174 }
+                """);
+        var testSource = writeTestSource("Kaprekar.test.cfun", """
+                from /Kaprekar import { Kaprekar, KAPREKAR }
+                from /capy/collection/Seq import { Seq, to_seq }
+
+                fun wrong_argument_count(): Seq[Kaprekar] =
+                    to_seq(KAPREKAR, KAPREKAR, KAPREKAR, KAPREKAR)
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateWithTestsStderr(outputType))
+                    .contains("Compilation failed with 1 error(s):")
+                    .contains("Function `to_seq` does not accept 4 argument(s).");
+        }
+
+        assertThat(generatedTestPath(testSource)).doesNotExist();
+    }
+
+    @Test
     void reportsResultFlatMapReturningPlainValueDuringCompilationForEveryBackend() throws Exception {
         writeSource("sample/Values.cfun", """
                 fun find_values(value: int): List[int] = [value]
@@ -698,13 +751,17 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     private String compileGenerateWithTestsStderr() {
+        return compileGenerateWithTestsStderr("java");
+    }
+
+    private String compileGenerateWithTestsStderr(String outputType) {
         var originalError = System.err;
         var buffer = new ByteArrayOutputStream();
         try (var errorStream = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
             System.setErr(errorStream);
-            BackendCompilationContext.withOutputType("java", () -> Capy.runCompileGenerate(
+            BackendCompilationContext.withOutputType(outputType, () -> Capy.runCompileGenerate(
                     new Capy.CompileGenerateOptions(
-                            "java",
+                            outputType,
                             inputDir().toString(),
                             outputDir().toString(),
                             Optional.empty(),
