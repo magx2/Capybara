@@ -42,6 +42,18 @@ fun Assert.failed(): bool = (this.assertions | supplier => supplier().result).an
 /// Returns true when every assertion in the chain succeeds.
 fun Assert.succeeded(): bool = !this.failed()
 
+/// Creates an assertion that always fails with `message`.
+fun fail(message: String): Assert =
+    let assertion = Assertion { result: false, message: message, type: 'fail' }
+    let assertions: List[() => Assertion] = [() => assertion]
+    TechnicalAssert { assertions: assertions }
+
+/// Creates an assertion that always succeeds with `message`.
+fun pass(message: String): Assert =
+    let assertion = Assertion { result: true, message: message, type: 'pass' }
+    let assertions: List[() => Assertion] = [() => assertion]
+    TechnicalAssert { assertions: assertions }
+
 private data TechnicalAssert { assertions: List[() => Assertion] }
 /// Chainable assertions for a string value.
 data StringAssert { value: String }
