@@ -124,6 +124,19 @@ assert_that(parse_user(raw)).succeeds(user =>
 Starts a data assertion chain using data equality or containment checks.
 
 
+=== fun fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Assert[Assert]
+
+Creates an assertion that always fails with `message`.
+
+When `/capy/lang/Result` is also imported, exclude `fail` from one wildcard
+import or selectively import only the intended `fail` function.
+
+
+=== fun pass(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Assert[Assert]
+
+Creates an assertion that always succeeds with `message`.
+
+
 
 
 == Types

@@ -31,6 +31,9 @@ Creates an Error with a stable kind and structured details.
 
 Returns a failed Result with a generic Error.
 
+When `/capy/test/Assert` is also imported, exclude `fail` from one wildcard
+import or selectively import only the intended `fail` function.
+
 
 === fun fail_error(error: xref:#type-Error[Error]): xref:#type-Result[Result]&#91;T&#93;
 
