@@ -3521,10 +3521,12 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then reflection_call_code(call, env, module, allModules)
     else if object_type_function_call(call, module, allModules)
     then object_type_function_call_code(call, module, allModules)
-    else if call.name == "assert_all"
-    then "capy.test.Assert.assert_all__48_0(" + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules) + ")"
-    else if call.name == "assert_that"
+    else if assert_function_call(call, module) & call.name == "assert_all"
+    then assert_stdlib_function_call_code(call, env, module, allModules)
+    else if assert_function_call(call, module) & call.name == "assert_that"
     then assert_that_code(argument(call.arguments, 0), env, module, allModules)
+    else if assert_function_call(call, module)
+    then assert_stdlib_function_call_code(call, env, module, allModules)
     else if call.name == "test"
     then "__capy_data(\"TestCase\", java.util.Map.ofEntries(java.util.Map.entry(\"name\", "
         + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
@@ -5814,7 +5816,7 @@ private fun assert_method_call(call: CompiledMethodCallExpression, env: List[Jav
 /// Checks whether an expression has the assert expression shape.
 private fun assert_expression(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledFunctionCallExpression call -> call.name == "assert_that" | call.name == "assert_all"
+    case CompiledFunctionCallExpression call -> assert_function_call(call, module)
     case CompiledMethodCallExpression call -> assert_method_call(call, env, module, allModules) | assert_status_call(call, env, module, allModules)
     case CompiledVariableExpression variable -> lookup_binding(variable.name, env).name == "Assert"
     case _ -> expression_type(expression, env, module, allModules).name == "Assert"
@@ -6531,6 +6533,25 @@ private fun assert_that_code(expression: CompiledExpression, env: List[JavaBindi
 
 private fun java_assert_data(typeName: String, valueCode: String): String =
     "__capy_data(\"" + typeName + "\", java.util.Map.ofEntries(java.util.Map.entry(\"assertions\", java.util.List.of()), java.util.Map.entry(\"value\", " + valueCode + ")))"
+
+/// Emits a call to a generated assertion helper without relying on source-line-specific names.
+private fun assert_stdlib_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match find_assert_function_binding(call.name, module.functionBindings) with
+    case Some { binding } ->
+        java_function_binding_class_name(binding) + "." + java_function_name(binding.function)
+            + "(" + parameter_expression_list_code(binding.function.parameters, call.arguments, env, module, allModules) + ")"
+    case None -> "unsupported(\"assert function call\")"
+
+/// Finds an assertion helper together with its declaring standard-library module.
+private fun find_assert_function_binding(name: String, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if binding.moduleName == "Assert"
+            & normalized_stdlib_path(binding.modulePath) == "capy/test"
+            & binding.function.name == name
+        then /capy/lang/Option.Some { binding }
+        else find_assert_function_binding(name, bindings[1:])
 
 /// Emits generated code for expression list.
 private fun expression_list_code(expressions: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7893,7 +7914,7 @@ private fun function_call_type(call: CompiledFunctionCallExpression, env: List[J
     then data_type_reference("DataValueInfo")
     else if object_type_function_call(call, module, allModules)
     then object_type_function_call_type(call, module, allModules)
-    else if call.name == "assert_all" | call.name == "assert_that"
+    else if assert_function_call(call, module)
     then assert_type()
     else if call.name == "test"
     then test_case_type()
@@ -11407,10 +11428,12 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then reflection_call_emittable(call, env, module, allModules)
     else if object_type_function_call(call, module, allModules)
     then true
-    else if call.name == "assert_all"
+    else if assert_function_call(call, module) & call.name == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
-    else if call.name == "assert_that"
+    else if assert_function_call(call, module) & call.name == "assert_that"
     then assert_that_call_emittable(call.arguments, env, module, allModules)
+    else if assert_function_call(call, module)
+    then one_string_argument(call.arguments, env, module, allModules)
     else if call.name == "test"
     then test_call_emittable(call.arguments, env, module, allModules)
     else if call.name == "test_file"
@@ -12290,6 +12313,20 @@ private fun clock_member_imported(member: String, imports: List[CompiledImportDe
 /// Checks whether result member is imported into the current module scope.
 private fun result_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
+
+/// Checks whether an assertion helper is imported unambiguously into the current module.
+private fun assert_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
+    if call.name == "assert_all" | call.name == "assert_that" | call.name == "pass"
+    then !function_defined(call.name, module.functions) & assert_member_imported(call.name, module.imports)
+    else if call.name == "fail"
+    then !function_defined(call.name, module.functions)
+        & assert_member_imported(call.name, module.imports)
+        & !result_member_imported(call.name, module.imports)
+    else false
+
+/// Checks whether an Assert module member is imported into the current module scope.
+private fun assert_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    module_member_imported(member, imports, "/capy/test/Assert", "capy/test/Assert")
 
 /// Checks whether seq member is imported into the current module scope.
 private fun seq_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =

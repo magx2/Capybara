@@ -43,6 +43,9 @@ fun Assert.failed(): bool = (this.assertions | supplier => supplier().result).an
 fun Assert.succeeded(): bool = !this.failed()
 
 /// Creates an assertion that always fails with `message`.
+///
+/// When `/capy/lang/Result` is also imported, exclude `fail` from one wildcard
+/// import or selectively import only the intended `fail` function.
 fun fail(message: String): Assert =
     let assertion = Assertion { result: false, message: message, type: 'fail' }
     let assertions: List[() => Assertion] = [() => assertion]

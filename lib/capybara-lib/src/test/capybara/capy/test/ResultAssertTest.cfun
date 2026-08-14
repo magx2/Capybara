@@ -1,4 +1,4 @@
-from /capy/test/Assert import { * }
+from /capy/test/Assert import { * } except { fail }
 from /capy/test/CapyTest import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Result import { * }
@@ -11,6 +11,7 @@ fun tests(): Effect[TestFile] =
         test("should assert result error with nested assertions", () => should_assert_result_error_with_nested_assertions()),
         test("should reject wrong result error assertions", () => should_reject_wrong_result_error_assertions()),
         test("should reject result error assertions for success", () => should_reject_result_error_assertions_for_success()),
+        test("should keep Result fail unambiguous", () => should_keep_result_fail_unambiguous()),
     ])
 
 fun should_assert_result_error_kind(): Assert =
@@ -49,3 +50,7 @@ fun should_reject_result_error_assertions_for_success(): Assert =
         assert_that(assert_that(result).fails_with_message_containing("required").failed()).is_true(),
         assert_that(assert_that(result).fails(error => assert_that(error.kind).is_equal_to("capy.test.validation")).failed()).is_true(),
     ])
+
+fun should_keep_result_fail_unambiguous(): Assert =
+    let result: Result[int] = fail("expected result failure")
+    assert_that(result).fails_with_kind("capy.error", "expected result failure")

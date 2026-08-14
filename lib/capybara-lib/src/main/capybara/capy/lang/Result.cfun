@@ -93,6 +93,9 @@ fun error_full(
     }
 
 /// Returns a failed Result with a generic Error.
+///
+/// When `/capy/test/Assert` is also imported, exclude `fail` from one wildcard
+/// import or selectively import only the intended `fail` function.
 fun fail(message: String): Result[T] = error(message)
 
 /// Returns a failed Result with a stable error kind.
