@@ -1,5 +1,5 @@
 from /capy/date_time/Time import { * }
-from /capy/test/Assert import { * }
+from /capy/test/Assert import { * } except { fail }
 from /capy/lang/Effect import { * }
 from /capy/lang/Math import { * }
 from /capy/lang/Result import { * }

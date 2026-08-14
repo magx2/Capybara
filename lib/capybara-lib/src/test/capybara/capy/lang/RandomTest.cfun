@@ -1,4 +1,4 @@
-from /capy/test/Assert import { * }
+from /capy/test/Assert import { * } except { fail }
 from /capy/collection/CollectionTypes import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Primitives import { FLOAT_BOUND, DOUBLE_BOUND }

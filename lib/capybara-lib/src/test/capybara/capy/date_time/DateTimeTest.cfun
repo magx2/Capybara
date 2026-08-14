@@ -8,7 +8,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/collection/Dict import { * }
 from /capy/collection/Seq import { * }
-from /capy/test/Assert import { * }
+from /capy/test/Assert import { * } except { fail }
 from /capy/lang/Effect import { * }
 from /capy/test/CapyTest import { * }
 

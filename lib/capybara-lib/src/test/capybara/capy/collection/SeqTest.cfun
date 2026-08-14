@@ -1,4 +1,4 @@
-from /capy/test/Assert import { * }
+from /capy/test/Assert import { * } except { fail }
 from /capy/collection/CollectionTypes import { * }
 from /capy/collection/List import { * }
 from /capy/lang/Effect import { * }
