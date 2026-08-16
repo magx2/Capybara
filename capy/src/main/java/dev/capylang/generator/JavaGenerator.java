@@ -1,9 +1,14 @@
 package dev.capylang.generator;
 
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.LinkedJsonCodec;
 import dev.capylang.generator.internal.GeneratedJavaGenerator;
 
+import java.io.IOException;
 import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -18,6 +23,7 @@ import java.util.regex.Pattern;
 
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
 public final class JavaGenerator {
+    private static final ThreadLocal<CompiledProgram> MAIN_PROGRAM_CONTEXT = new ThreadLocal<>();
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Pattern UNSUPPORTED_FUNCTION = Pattern.compile(
             "throw new UnsupportedOperationException\\(\\\"Unsupported CFUN expression at (\\d+):(\\d+)\\\"\\);"
@@ -27,13 +33,152 @@ public final class JavaGenerator {
     }
 
     public static GeneratedProgram javaGenerator(CompiledProgram program) {
-        var compiledProgram = dataMap(toGeneratedValue(program));
+        var standaloneTestProgram = standaloneTestProgram(program);
+        var mainContext = MAIN_PROGRAM_CONTEXT.get();
+        var generationProgram = standaloneTestProgram
+                && mainContext != null
+                && importsMainModule(program, mainContext)
+                ? mergePrograms(mainContext, program)
+                : program;
+        if (standaloneTestProgram) {
+            MAIN_PROGRAM_CONTEXT.remove();
+        } else if (program.modules().stream().noneMatch(JavaGenerator::testModule)) {
+            MAIN_PROGRAM_CONTEXT.set(program);
+        }
+        var compiledProgram = withBundledImportModules(dataMap(toGeneratedValue(generationProgram)));
+        var sourceModulePaths = program.modules().stream()
+                .map(JavaGenerator::generatedJavaModulePath)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
         var generated = dataMap(GeneratedJavaGenerator.java_generator__133_0(compiledProgram));
         var modules = list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
+                .filter(module -> sourceModulePaths.contains(module.relativePath())
+                        || generatedSupportModule(module.relativePath()))
                 .toList();
         modules.forEach(module -> rejectUnsupportedFunctions(module, compiledProgram));
         return new GeneratedProgram(modules);
+    }
+
+    private static boolean standaloneTestProgram(CompiledProgram program) {
+        return !program.modules().isEmpty() && program.modules().stream().allMatch(JavaGenerator::testModule);
+    }
+
+    private static boolean testModule(CompiledModule module) {
+        return module.name().endsWith(".test");
+    }
+
+    private static boolean importsMainModule(CompiledProgram tests, CompiledProgram main) {
+        var mainModulePaths = main.modules().stream()
+                .map(JavaGenerator::moduleImportPath)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return tests.modules().stream()
+                .flatMap(module -> module.imports().stream())
+                .map(importDeclaration -> normalizeModuleImportPath(importDeclaration.modulePath()))
+                .anyMatch(mainModulePaths::contains);
+    }
+
+    private static String moduleImportPath(CompiledModule module) {
+        var path = normalizeModuleImportPath(module.path());
+        return path.isBlank() ? module.name() : path + "/" + module.name();
+    }
+
+    private static CompiledProgram mergePrograms(CompiledProgram main, CompiledProgram tests) {
+        var modules = new ArrayList<CompiledModule>(main.modules());
+        modules.addAll(tests.modules());
+        var objectOrientedModules = new ArrayList<>(main.objectOrientedModules());
+        objectOrientedModules.addAll(tests.objectOrientedModules());
+        return new CompiledProgram(
+                List.copyOf(modules),
+                List.copyOf(objectOrientedModules),
+                tests.nativeProviders(),
+                tests.nativeProviderCatalog()
+        );
+    }
+
+    private static Map<String, Object> withBundledImportModules(Map<String, Object> program) {
+        var modules = new ArrayList<>(list(program.get("modules")));
+        var knownModules = new LinkedHashSet<String>();
+        var pendingImports = new ArrayDeque<String>();
+        modules.stream().map(JavaGenerator::dataMap).forEach(module -> {
+            knownModules.add(moduleImportPath(module));
+            enqueueImports(module, pendingImports);
+        });
+
+        while (!pendingImports.isEmpty()) {
+            var modulePath = normalizeModuleImportPath(pendingImports.removeFirst());
+            if (!modulePath.startsWith("capy/") || knownModules.contains(modulePath)) {
+                continue;
+            }
+            var module = readBundledModule(modulePath);
+            if (module.isEmpty()) {
+                continue;
+            }
+            var generatedModule = dataMap(toGeneratedValue(module.get()));
+            modules.add(generatedModule);
+            knownModules.add(modulePath);
+            enqueueImports(generatedModule, pendingImports);
+        }
+
+        if (modules.size() == list(program.get("modules")).size()) {
+            return program;
+        }
+        var enriched = new LinkedHashMap<>(program);
+        enriched.put("modules", List.copyOf(modules));
+        return Collections.unmodifiableMap(enriched);
+    }
+
+    private static void enqueueImports(Map<String, Object> module, ArrayDeque<String> pendingImports) {
+        list(module.get("imports")).stream()
+                .map(JavaGenerator::dataMap)
+                .map(declaration -> string(declaration.get("modulePath")))
+                .filter(path -> !path.isBlank())
+                .forEach(pendingImports::addLast);
+    }
+
+    private static Optional<CompiledModule> readBundledModule(String modulePath) {
+        var resource = "/" + modulePath + ".json";
+        try (var input = JavaGenerator.class.getResourceAsStream(resource)) {
+            if (input == null) {
+                return Optional.empty();
+            }
+            var json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            return Optional.of(LinkedJsonCodec.read(json, CompiledModule.class));
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read bundled Capybara module `" + modulePath + "`", exception);
+        }
+    }
+
+    private static String moduleImportPath(Map<String, Object> module) {
+        var path = normalizeModuleImportPath(string(module.get("path")));
+        var name = string(module.get("name"));
+        return path.isBlank() ? name : path + "/" + name;
+    }
+
+    private static String generatedJavaModulePath(Map<String, Object> module) {
+        var path = normalizeModuleImportPath(string(module.get("path")));
+        var name = string(module.get("name")).replace('.', '_');
+        return path.isBlank() ? name + ".java" : path + "/" + name + ".java";
+    }
+
+    private static String generatedJavaModulePath(CompiledModule module) {
+        var path = normalizeModuleImportPath(module.path());
+        var name = module.name().replace('.', '_');
+        return path.isBlank() ? name + ".java" : path + "/" + name + ".java";
+    }
+
+    private static boolean generatedSupportModule(String relativePath) {
+        return "capy/test/CapyTestRuntime.java".equals(relativePath);
+    }
+
+    private static String normalizeModuleImportPath(String path) {
+        var normalized = path.replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     private static void rejectUnsupportedFunctions(GeneratedModule module, Map<String, Object> compiledProgram) {
@@ -417,7 +562,7 @@ public final class JavaGenerator {
     }
 
     private static void addBootstrapCompatibilityFields(Map<String, Object> data) {
-        if ("CompiledModule".equals(data.get("__type")) && !data.containsKey("functionBindings")) {
+        if ("CompiledModule".equals(data.get("__type")) && list(data.get("functionBindings")).isEmpty()) {
             var moduleName = string(data.get("name"));
             var modulePath = string(data.get("path"));
             var bindings = list(data.get("functions")).stream()

@@ -213,6 +213,7 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     + "    private " + java_module_class_name(module) + "() " + "{" + "}" + newline() + newline()
     + java_function_type_interfaces()
     + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
+    + java_imported_primitive_constructor_adapters(allModules, module, allModules)
     + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, module, allModules)
@@ -346,6 +347,46 @@ private fun java_data_types(typeNames: List[String], module: CompiledModule, all
         then java_data_type(typeName, module, allModules) + newline()
             + java_data_types(typeNames[1:], module, allModules)
         else java_data_types(typeNames[1:], module, allModules)
+
+/// Emits one-argument adapters so separately generated callers can prepare imported primitive-backed fields.
+private fun java_imported_primitive_constructor_adapters(candidates: List[CompiledModule], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match candidates[0] with
+    case None -> ""
+    case Some { candidate } ->
+        java_imported_primitive_constructor_adapters_for_types(
+            schema_names("__capy_schema_primitive|", candidate.functions),
+            candidate,
+            module,
+            allModules
+        ) + java_imported_primitive_constructor_adapters(candidates[1:], module, allModules)
+
+/// Emits imported primitive constructor adapters owned by one metadata module.
+private fun java_imported_primitive_constructor_adapters_for_types(typeNames: List[String], owner: CompiledModule, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match typeNames[0] with
+    case None -> ""
+    case Some { typeName } ->
+        java_imported_primitive_constructor_adapter(typeName, owner, module, allModules)
+            + java_imported_primitive_constructor_adapters_for_types(typeNames[1:], owner, module, allModules)
+
+/// Emits an adapter only for the uniquely resolved external owner of a primitive-backed type.
+private fun java_imported_primitive_constructor_adapter(typeName: String, owner: CompiledModule, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if schema_type_exists(typeName, module.functions) | !primitive_type_imported_from(typeName, owner, module.imports, module)
+    then ""
+    else match primitive_backed_backing_type_in_functions(typeName, owner.functions) with
+        case Some { backingType } ->
+            "    public static java.lang.Object __capy_constructor_" + java_identifier(typeName) + "__import_adapter(" + java_type(backingType) + " value) {" + newline()
+                + "        return __capy_data(\"Success\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", value)));" + newline()
+                + "    }" + newline() + newline()
+        case None -> ""
+
+/// Checks whether a primitive-backed type is imported from its declaring module.
+private fun primitive_type_imported_from(typeName: String, owner: CompiledModule, imports: List[CompiledImportDeclaration], module: CompiledModule): bool =
+    match imports[0] with
+    case None -> false
+    case Some { declaration } ->
+        if data_import_matches(typeName, declaration) & imported_module_class(module, declaration.modulePath) == module_fqcn(owner)
+        then true
+        else primitive_type_imported_from(typeName, owner, imports[1:], module)
 
 /// Checks whether a data type should be emitted as a nested Java declaration.
 private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
@@ -1399,7 +1440,7 @@ private fun static_imports(imports: List[CompiledImportDeclaration], module: Com
     case None -> ""
     case Some { declaration } ->
         let className = imported_module_class(module, declaration.modulePath)
-        if declaration.qualified
+        if declaration.qualified | stdlib_import(declaration.modulePath)
         then static_imports(imports[1:], module, allModules)
         else match find_module_by_class(className, allModules) with
             case Some { importedModule } ->
@@ -2404,6 +2445,12 @@ private fun find_imported_constant(name: String, functions: List[CompiledFunctio
         then /capy/lang/Option.Some { function }
         else find_imported_constant(name, functions[1:])
 
+/// Checks whether a linked imported constant is present in normalized functions.
+private fun imported_constant_exists(name: String, functions: List[CompiledFunction]): bool =
+    match find_imported_constant(name, functions) with
+    case Some _ -> true
+    case None -> false
+
 /// Formats a linked imported constant reference using its preserved static-import owner.
 private fun imported_constant_reference_name(function: CompiledFunction, module: CompiledModule): String =
     match default_static_import_constant_owner(function.name, module.staticImports) with
@@ -2688,7 +2735,7 @@ private fun object_equality_type(type: CompiledTypeReference): bool =
 
 /// Emits generated code for object equality.
 private fun object_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let code = "java.util.Objects.equals("
+    let code = "__capy_deep_equal("
         + expression_code(binary.left, env, leftType, module, allModules)
         + ", "
         + expression_code(binary.right, env, rightType, module, allModules)
@@ -3288,7 +3335,9 @@ private fun imported_stdlib_constant(name: String, imports: List[CompiledImportD
 /// Looks up optional metadata for standard-library constant.
 private fun stdlib_constant(name: String, modulePath: String): /capy/lang/Option[JavaStdlibValue] =
     let path = normalized_stdlib_path(modulePath)
-    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    if path == "capy/lang/Primitives"
+    then java_primitive_stdlib_constant(name)
+    else if path == "capy/date_time/Date" & name == "UNIX_DATE"
     then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.date_time.Date.UNIX_DATE", typeReference: date_type() } }
     else if path == "capy/date_time/Time" & name == "MIDNIGHT"
     then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.date_time.Time.MIDNIGHT", typeReference: time_type() } }
@@ -3297,6 +3346,51 @@ private fun stdlib_constant(name: String, modulePath: String): /capy/lang/Option
     else if path == "capy/date_time/Duration" & name == "ZERO"
     then /capy/lang/Option.Some { JavaStdlibValue { javaName: "capy.date_time.Duration.ZERO", typeReference: duration_type() } }
     else /capy/lang/Option.None {}
+
+/// Emits values for constants declared by the primitive standard-library module.
+private fun java_primitive_stdlib_constant(name: String): /capy/lang/Option[JavaStdlibValue] =
+    if name == "MAX_INT_VALUE"
+    then java_stdlib_value("2147483647", int_type())
+    else if name == "MIN_INT_VALUE"
+    then java_stdlib_value("-2147483648", int_type())
+    else if name == "MAX_LONG_VALUE"
+    then java_stdlib_value("9223372036854775807L", long_type())
+    else if name == "MIN_LONG_VALUE"
+    then java_stdlib_value("-9223372036854775808L", long_type())
+    else if name == "FLOAT_BOUND"
+    then java_stdlib_value("16777216L", long_type())
+    else if name == "DOUBLE_BOUND"
+    then java_stdlib_value("9007199254740992L", long_type())
+    else if name == "FLOAT_BOUND_AS_FLOAT"
+    then java_stdlib_value("16777216.0f", float_type())
+    else if name == "DOUBLE_BOUND_AS_DOUBLE"
+    then java_stdlib_value("9007199254740992.0", double_type())
+    else java_digit_stdlib_constant(name)
+
+/// Emits one of the ten primitive-backed digit constants.
+private fun java_digit_stdlib_constant(name: String): /capy/lang/Option[JavaStdlibValue] =
+    if name == "ZERO_DIGIT" then java_digit_stdlib_value("0")
+    else if name == "ONE_DIGIT" then java_digit_stdlib_value("1")
+    else if name == "TWO_DIGIT" then java_digit_stdlib_value("2")
+    else if name == "THREE_DIGIT" then java_digit_stdlib_value("3")
+    else if name == "FOUR_DIGIT" then java_digit_stdlib_value("4")
+    else if name == "FIVE_DIGIT" then java_digit_stdlib_value("5")
+    else if name == "SIX_DIGIT" then java_digit_stdlib_value("6")
+    else if name == "SEVEN_DIGIT" then java_digit_stdlib_value("7")
+    else if name == "EIGHT_DIGIT" then java_digit_stdlib_value("8")
+    else if name == "NINE_DIGIT" then java_digit_stdlib_value("9")
+    else /capy/lang/Option.None {}
+
+/// Emits a digit constant using the same primitive-backed representation as constructed digits.
+private fun java_digit_stdlib_value(value: String): /capy/lang/Option[JavaStdlibValue] =
+    java_stdlib_value(
+        "__capy_data(\"digit\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", " + value + ")))",
+        data_type_reference("digit")
+    )
+
+/// Wraps Java code and type metadata for a standard-library constant.
+private fun java_stdlib_value(javaName: String, typeReference: CompiledTypeReference): /capy/lang/Option[JavaStdlibValue] =
+    /capy/lang/Option.Some { JavaStdlibValue { javaName: javaName, typeReference: typeReference } }
 
 /// Computes the output or module path for normalized standard-library.
 private fun normalized_stdlib_path(modulePath: String): String =
@@ -3787,9 +3881,9 @@ private fun function_call_code(call: CompiledFunctionCallExpression, env: List[J
     then reflection_call_code(call, env, module, allModules)
     else if object_type_function_call(call, module, allModules)
     then object_type_function_call_code(call, module, allModules)
-    else if assert_function_call(call, module) & call.name == "assert_all"
+    else if assert_function_call(call, module) & stdlib_call_member_name(call.name) == "assert_all"
     then assert_stdlib_function_call_code(call, env, module, allModules)
-    else if assert_function_call(call, module) & call.name == "assert_that"
+    else if assert_function_call(call, module) & stdlib_call_member_name(call.name) == "assert_that"
     then assert_that_code(argument(call.arguments, 0), env, module, allModules)
     else if assert_function_call(call, module)
     then assert_stdlib_function_call_code(call, env, module, allModules)
@@ -5225,6 +5319,8 @@ private fun method_call_code(call: CompiledMethodCallExpression, env: List[JavaB
     then function_value_method_code(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)
     then result_reduce_method_code(call, env, expectedType, module, allModules)
+    else if result_recover_method_call(call, env, module, allModules)
+    then result_recover_method_code(call, env, expectedType, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_code(call, env, expectedType, module, allModules)
     else if result_or_else_method_call(call, env, module, allModules)
@@ -5353,6 +5449,22 @@ private fun result_reduce_method_call(call: CompiledMethodCallExpression, env: L
         else false
     else false
 
+/// Checks whether method metadata matches the Result recover method call rule.
+private fun result_recover_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if call.name == "recover"
+    then result_recover_method_argument(call.arguments)
+        & result_type_name(expression_type(call.receiver, env, module, allModules).name)
+    else false
+
+/// Checks whether Result recover has exactly one lambda argument.
+private fun result_recover_method_argument(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case Some { expression } ->
+        match expression with
+        case CompiledLambdaExpression _ -> arguments[1:].is_empty()
+        case _ -> false
+    case None -> false
+
 /// Checks whether method metadata matches the result or else method call rule.
 private fun result_or_else_method_call(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     if call.name == "or_else"
@@ -5439,6 +5551,25 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
     + "            }" + newline()
     + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ")
     + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, error_type(), env), resultType, module, allModules) + ";" + newline()
+    + "        }).get()"
+
+/// Emits Result.recover for both the value-returning and Result-returning overloads.
+private fun result_recover_method_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let inferredType = result_recover_method_type_with_receiver(call, receiverType, env, module, allModules)
+    let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then inferredType else expectedType
+    let resultName = "__capy_result_recover_" + call.location.line + "_" + call.location.column
+    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    let recoverLambda = result_reduce_lambda_argument(argument(call.arguments, 0))
+    let preservesResult = result_type_name(inferredType.name)
+    let successCode = if preservesResult then resultName else "__capy_result_success_value(" + resultName + ")"
+    "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
+    + "            java.lang.Object " + resultName + " = " + receiverCode + ";" + newline()
+    + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
+    + "                return ((" + boxed_java_type(resultType) + ") " + successCode + ");" + newline()
+    + "            }" + newline()
+    + result_reduce_error_binding_statement(recoverLambda.parameters, resultName, "            ")
+    + "            return " + expression_code(recoverLambda.body, lambda_value_env(recoverLambda.parameters, error_type(), env), resultType, module, allModules) + ";" + newline()
     + "        }).get()"
 
 /// Emits generated code for result or else method.
@@ -6243,8 +6374,8 @@ private fun option_assert_is_equal_to_code(call: CompiledMethodCallExpression, e
     case CompiledFunctionCallExpression receiver ->
         let actual = argument(receiver.arguments, 0)
         let expected = argument(call.arguments, 0)
-        assert_that_code(actual, env, module, allModules)
-            + ".isEqualTo(__capy_optional_value("
+        "__capy_assert_equal(" + assert_that_code(actual, env, module, allModules)
+            + ", __capy_optional_value("
             + expression_code(expected, env, expression_type(expected, env, module, allModules), module, allModules)
             + "))"
     case _ -> "unsupported(\"option assert is_equal_to\")"
@@ -6265,8 +6396,8 @@ private fun result_assert_is_equal_to_code(call: CompiledMethodCallExpression, e
     case CompiledFunctionCallExpression receiver ->
         let actual = argument(receiver.arguments, 0)
         let expected = argument(call.arguments, 0)
-        assert_that_code(actual, env, module, allModules)
-            + ".isEqualTo(__capy_result_value("
+        "__capy_assert_equal(" + assert_that_code(actual, env, module, allModules)
+            + ", __capy_result_value("
             + expression_code(expected, env, expression_type(expected, env, module, allModules), module, allModules)
             + "))"
     case _ -> "unsupported(\"result assert is_equal_to\")"
@@ -6351,11 +6482,27 @@ private fun assert_method_supported(name: String): bool =
         | name == "has_years" | name == "has_months" | name == "has_days" | name == "has_hours"
         | name == "has_minutes" | name == "has_seconds" | name == "has_weeks"
         | name == "has_start" | name == "has_end" | name == "has_duration"
+        | name == "fails_with_kind"
         | name == "does_not_contain" | name == "contains_key" | name == "does_not_contain_key" | name == "contains_value"
 
 /// Emits generated code for assert method call.
 private fun assert_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    expression_code(call.receiver, env, assert_type(), module, allModules)
+    let receiver = expression_code(call.receiver, env, assert_type(), module, allModules)
+    let expectedFailureMessage =
+        if two_method_arguments(call.arguments)
+        then expression_code(argument(call.arguments, 1), env, string_type(), module, allModules)
+        else "null"
+    if call.name == "is_equal_to" & no_second_expression(call.arguments)
+    then "__capy_assert_equal(" + receiver + ", " + expression_list_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "fails_with_kind" & (one_method_argument(call.arguments) | two_method_arguments(call.arguments))
+    then "__capy_assert_fails_with_kind(" + receiver
+        + ", " + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+        + ", " + expectedFailureMessage + ")"
+    else if call.name == "is_true"
+    then "__capy_assert_boolean(" + receiver + ", true)"
+    else if call.name == "is_false"
+    then "__capy_assert_boolean(" + receiver + ", false)"
+    else receiver
         + "." + java_method_name(call.name)
         + "(" + expression_list_code(call.arguments, env, module, allModules) + ")"
 
@@ -7217,11 +7364,24 @@ private fun java_assert_data(typeName: String, valueCode: String): String =
 
 /// Emits a call to a generated assertion helper without relying on source-line-specific names.
 private fun assert_stdlib_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match find_assert_function_binding(call.name, module.functionBindings) with
+    let member = stdlib_call_member_name(call.name)
+    match find_assert_function_binding(member, module.functionBindings) with
     case Some { binding } ->
         java_function_binding_class_name(binding) + "." + java_function_name(binding.function)
             + "(" + parameter_expression_list_code(binding.function.parameters, call.arguments, env, module, allModules) + ")"
-    case None -> "unsupported(\"assert function call\")"
+    case None ->
+        if member == "assert_all"
+        then "capy.test.Assert.assertAll((java.util.List<capy.test.Assert>) (java.util.List<?>) "
+            + expression_code(argument(call.arguments, 0), env, list_type(assert_type()), module, allModules)
+            + ")"
+        else if member == "fail" | member == "pass"
+        then
+            let resultCode = if member == "pass" then "true" else "false"
+            "new capy.test.Assert.TechnicalAssert(java.util.List.of(() -> new capy.test.Assert.Assertion("
+                + resultCode
+                + ", " + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
+                + ", \"" + member + "\")))"
+        else "unsupported(\"assert function call\")"
 
 /// Finds an assertion helper together with its declaring standard-library module.
 private fun find_assert_function_binding(name: String, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
@@ -7346,14 +7506,14 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
         case Some { field } -> "new capy.lang.Program.Failed(" + expression_code(field.value, env, int_type(), module, allModules) + ")"
         case None -> "new capy.lang.Program.Failed(0)"
     else if raw_data_literal(literal.typeName)
-    then raw_data_literal_code(literal, env, expectedType, module, allModules)
+    then raw_linked_data_literal_code(literal, env, expectedType, module, allModules)
     else
         let declaredType = data_literal_declared_type(literal.typeName)
         let parentConstructors = data_parent_constructor_type_names(declaredType.name, module, allModules)
         if parentConstructors.is_empty()
         then match data_constructor_binding(literal.typeName, module, allModules) with
             case Some { binding } -> data_constructor_call_code(binding, literal, env, module, allModules)
-            case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+            case None -> imported_data_constructor_call_code(literal, env, expectedType, module, allModules)
         else data_constructor_pipeline_code(parentConstructors + data_own_constructor_type_names(declaredType.name, module, allModules), literal, env, expectedType, module, allModules)
 
 /// Checks whether a standard sequence node literal should use the Java Seq runtime representation.
@@ -7385,6 +7545,51 @@ private fun raw_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBi
     let bindings = data_type_bindings(dataType, data_literal_context_type(declaredType, expectedType), module, allModules)
     "__capy_data(\"" + escape_java_string(data_literal_type_name(typeName, dataType)) + "\", " + data_fields_code(rawLiteral.fields, env, dataType, bindings, module, allModules) + ")"
 
+/// Restores constructor calls for linked raw literals when their declared context expects a Result.
+private fun raw_linked_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeName = raw_data_literal_type_name(literal.typeName)
+    let declaredLiteral = CompiledDataLiteral {
+        typeName: typeName,
+        fields: literal.fields,
+        location: literal.location
+    }
+    if result_type_name(expectedType.name)
+    then match data_constructor_binding(typeName, module, allModules) with
+        case Some { binding } -> data_constructor_call_code(binding, declaredLiteral, env, module, allModules)
+        case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+    else raw_data_literal_code(literal, env, expectedType, module, allModules)
+
+/// Emits an imported constructor call when linked test generation omits the imported module metadata.
+private fun imported_data_constructor_call_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let declaredType = data_literal_declared_type(literal.typeName)
+    let typeName = declaredType.name
+    let dataType = find_data_type(typeName, module, allModules)
+    let bindings = data_type_bindings(dataType, data_literal_context_type(declaredType, expectedType), module, allModules)
+    match imported_data_constructor_class(typeName, module.imports, module) with
+    case Some { className } ->
+        "__capy_invoke_constructor(\"" + escape_java_string(className) + "\", \"" + escape_java_string(typeName) + "\""
+            + data_constructor_reflection_arguments(literal.fields, dataType, bindings, env, module, allModules)
+            + ")"
+    case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+
+/// Finds the Java class named by an unqualified data import.
+private fun imported_data_constructor_class(typeName: String, imports: List[CompiledImportDeclaration], module: CompiledModule): /capy/lang/Option[String] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if data_import_matches(typeName, declaration)
+        then /capy/lang/Option.Some { imported_module_class(module, declaration.modulePath) }
+        else imported_data_constructor_class(typeName, imports[1:], module)
+
+/// Emits arguments for reflective imported-constructor dispatch.
+private fun data_constructor_reflection_arguments(fields: List[CompiledDataField], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        let fieldType = data_constructor_field_type(field.name, dataType, bindings, expression_type(field.value, env, module, allModules), module, allModules)
+        ", " + expression_code(field.value, env, fieldType, module, allModules)
+            + data_constructor_reflection_arguments(fields[1:], dataType, bindings, env, module, allModules)
+
 /// Checks whether the current value satisfies the raw data literal rule for compiler processing.
 private fun raw_data_literal(typeName: String): bool =
     java_generator_string_has_prefix(typeName, "__capy_raw|")
@@ -7411,9 +7616,24 @@ private fun data_constructor_binding(typeName: String, module: CompiledModule, a
     then /capy/lang/Option.None {}
     else
         let name = data_literal_declared_type(typeName).name
-        match data_type_owner_module(name, module, allModules) with
-        case Some { owner } -> data_constructor_binding_in_owner(name, owner)
-        case None -> /capy/lang/Option.None {}
+        match find_function(data_constructor_function_name(name), module.functions) with
+        case Some { function } -> /capy/lang/Option.Some { JavaDataConstructorBinding { module: module, function: function } }
+        case None ->
+            match data_constructor_binding_in_modules(name, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None ->
+                match data_type_owner_module(name, module, allModules) with
+                case Some { owner } -> data_constructor_binding_in_owner(name, owner)
+                case None -> /capy/lang/Option.None {}
+
+/// Finds a constructor declaration directly in linked modules when schema ownership is ambiguous.
+private fun data_constructor_binding_in_modules(typeName: String, modules: List[CompiledModule]): /capy/lang/Option[JavaDataConstructorBinding] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { candidate } ->
+        match data_constructor_binding_in_owner(typeName, candidate) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> data_constructor_binding_in_modules(typeName, modules[1:])
 
 /// Looks up a data constructor in its resolved declaring module.
 private fun data_constructor_binding_in_owner(typeName: String, owner: CompiledModule): /capy/lang/Option[JavaDataConstructorBinding] =
@@ -7526,7 +7746,9 @@ private fun data_constructor_data_call_code(binding: JavaDataConstructorBinding,
 /// Formats a local or cross-module Java constructor function reference.
 private fun data_constructor_java_function_name(binding: JavaDataConstructorBinding, module: CompiledModule): String =
     if module_fqcn(binding.module) == module_fqcn(module)
-    then java_function_name(binding.function)
+    then match find_selected_function_binding(binding.function, module.functionBindings) with
+        case Some { functionBinding } -> java_function_binding_class_name(functionBinding) + "." + java_function_name(binding.function)
+        case None -> java_function_name(binding.function)
     else module_fqcn(binding.module) + "." + java_function_name(binding.function)
 
 /// Formats data constructor data call arguments for generated emission.
@@ -7550,10 +7772,33 @@ private fun data_constructor_data_call_argument(parameter: CompiledFunctionParam
 /// Emits generated code for data constructor call.
 private fun data_constructor_call_code(binding: JavaDataConstructorBinding, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let typeName = data_literal_declared_type(literal.typeName).name
-    let callCode = data_constructor_java_function_name(binding, module) + "(" + data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules) + ")"
+    let callCode = if stdlib_import(binding.module.path)
+        then bundled_data_constructor_call_code(binding, literal, env, module, allModules)
+        else data_constructor_java_function_name(binding, module) + "(" + data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules) + ")"
     if data_constructor_function_returns_result(binding.function, binding.module, allModules)
     then "__capy_constructor_result(\"" + escape_java_string(typeName) + "\", " + callCode + ")"
     else "__capy_constructor_value(\"" + escape_java_string(typeName) + "\", " + callCode + ")"
+
+/// Inlines a constructor from bundled metadata because handwritten Java runtime classes do not expose compiled constructor methods.
+private fun bundled_data_constructor_call_code(binding: JavaDataConstructorBinding, literal: CompiledDataLiteral, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let constructorEnv = bundled_data_constructor_bindings(binding.function.parameters, literal.fields, 0, env, module, allModules)
+        + constant_bindings(constant_functions(binding.module.functions), binding.module, allModules)
+    let returnType = if binding.function.returnType.name == "any"
+        then data_constructor_inferred_return_type(binding.function, binding.module, allModules)
+        else binding.function.returnType
+    expression_code(binding.function.body, constructorEnv, returnType, binding.module, allModules)
+
+/// Binds bundled constructor parameters directly to the caller's emitted argument expressions.
+private fun bundled_data_constructor_bindings(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): List[JavaBinding] =
+    match parameters[0] with
+    case None -> []
+    case Some { parameter } ->
+        let value = data_constructor_argument_value(fields, parameter.name, "$" + idx)
+        [java_binding_with_java_name(
+            parameter.name,
+            parameter.typeReference,
+            expression_code(value, env, parameter.typeReference, module, allModules)
+        )] + bundled_data_constructor_bindings(parameters[1:], fields, idx + 1, env, module, allModules)
 
 /// Formats data constructor call arguments for generated emission.
 private fun data_constructor_call_arguments(parameters: List[CompiledFunctionParameter], fields: List[CompiledDataField], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -8410,6 +8655,15 @@ private fun expression_type(expression: CompiledExpression, env: List[JavaBindin
         then method_call_type(collection_pipe_chained_method_call(binary), env, module, allModules)
         else if collection_pipe_expression(binary, leftType)
         then collection_pipe_result_type(binary, leftType, env, module, allModules)
+        else if collection_plus_expression(binary.operator, leftType, expression_type(binary.right, env, module, allModules))
+            | collection_minus_expression(binary.operator, leftType, expression_type(binary.right, env, module, allModules))
+        then binary_result_type(
+            binary.operator,
+            leftType,
+            expression_type(binary.right, env, module, allModules),
+            module,
+            allModules
+        )
         else if binary_extension_operator_expression_with_left_type(binary, leftType, env, module, allModules)
         then binary_extension_operator_type_with_left_type(binary, leftType, env, module, allModules)
         else if stdlib_path_slash_expression(binary, leftType, module)
@@ -8597,9 +8851,12 @@ private fun variable_expression_type(variable: CompiledVariableExpression, env: 
             else match imported_stdlib_constant(variable.name, module.imports) with
                 case Some { constant } -> constant.typeReference
                 case None ->
-                    match find_constant_in_scope(variable.name, module, allModules) with
+                    match find_imported_constant(variable.name, module.functions) with
                     case Some { function } -> effective_function_return_type(function, module, allModules)
-                    case None -> object_type()
+                    case None ->
+                        match find_constant_in_scope(variable.name, module, allModules) with
+                        case Some { function } -> effective_function_return_type(function, module, allModules)
+                        case None -> object_type()
 
 /// Infers the expression type for match.
 private fun match_expression_type(cases: List[CompiledMatchCase], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -9862,6 +10119,8 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     then receiverType
     else if (call.name == "reduce" | call.name == "reduce_left") & result_reduce_method_arguments(call.arguments) & result_type_name(receiverType.name)
     then result_reduce_method_type_with_receiver(call, receiverType, env, module, allModules)
+    else if call.name == "recover" & result_recover_method_argument(call.arguments) & result_type_name(receiverType.name)
+    then result_recover_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if (call.name == "map" | call.name == "flat_map") & result_map_method_argument(call.arguments) & result_type_name(receiverType.name)
     then result_map_method_type_with_receiver(call, receiverType, env, module, allModules)
     else if call.name == "or_else" & one_method_argument(call.arguments) & (result_type_name(receiverType.name) | option_type_name(receiverType.name))
@@ -9942,6 +10201,14 @@ private fun result_reduce_method_type_with_receiver(call: CompiledMethodCallExpr
     match argument(call.arguments, 0) with
     case CompiledLambdaExpression lambda -> expression_type(lambda.body, declared_lambda_value_env(lambda, valueType, env), module, allModules)
     case _ -> object_type()
+
+/// Computes the return type selected by Result.recover's overload.
+private fun result_recover_method_type_with_receiver(call: CompiledMethodCallExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match argument(call.arguments, 0) with
+    case CompiledLambdaExpression lambda ->
+        let bodyType = expression_type(lambda.body, lambda_value_env(lambda.parameters, error_type(), env), module, allModules)
+        if result_type_name(bodyType.name) then receiverType else first_type_argument(receiverType)
+    case _ -> first_type_argument(receiverType)
 
 /// Computes the compiled type for result or else method.
 private fun result_or_else_method_type(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -10595,7 +10862,9 @@ private fun function_import_matches(name: String, declaration: CompiledImportDec
 /// Finds an extension method in available declarations, imports, or modules.
 private fun find_extension_method(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    find_extension_method_for_arguments_in_scope(receiverType, call.name, call.arguments, env, module, allModules)
+    match find_extension_method_for_arguments_in_scope(receiverType, call.name, call.arguments, env, module, allModules) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_extension_method_in_scope(receiverType.name, call.name, module, allModules)
 
 /// Finds a binary extension operator in available declarations, imports, or modules.
 private fun find_binary_extension_operator(binary: CompiledBinaryExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -10641,11 +10910,15 @@ private fun find_extension_method_for_arguments_in_imports(receiverType: Compile
         then
             match find_module_by_class(imported_module_class(module, declaration.modulePath), allModules) with
             case Some { importedModule } ->
-                match find_method_function_for_arguments(receiverType, methodName, arguments, env, importedModule.functions, module, allModules) with
-                case Some { function } -> /capy/lang/Option.Some { function }
-                case None -> find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, imports[1:], module, allModules)
+                find_extension_method_for_arguments_in_imported_module(receiverType, methodName, arguments, env, imports[1:], importedModule, module, allModules)
             case None -> find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, imports[1:], module, allModules)
         else find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, imports[1:], module, allModules)
+
+/// Finds an argument-compatible extension method in one imported module.
+private fun find_extension_method_for_arguments_in_imported_module(receiverType: CompiledTypeReference, methodName: String, arguments: List[CompiledExpression], env: List[JavaBinding], remainingImports: List[CompiledImportDeclaration], importedModule: CompiledModule, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match find_method_function_for_arguments(receiverType, methodName, arguments, env, importedModule.functions, module, allModules) with
+    case Some { function } -> /capy/lang/Option.Some { function }
+    case None -> find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, remainingImports, module, allModules)
 
 /// Finds an extension method in scope in available declarations, imports, or modules.
 private fun find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -10926,6 +11199,15 @@ private fun schema_values(prefix: String, functions: List[CompiledFunction]): Li
             then [schema_value(function)] + schema_values(prefix, functions[1:])
             else schema_values(prefix, functions[1:])
         else schema_values(prefix, functions[1:])
+
+/// Collects schema key suffixes rather than their encoded values.
+private fun schema_names(prefix: String, functions: List[CompiledFunction]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if compiled_schema(function) & java_generator_string_has_prefix(function.name, prefix)
+        then [function.name[prefix.size().value, function.name.size().value]] + schema_names(prefix, functions[1:])
+        else schema_names(prefix, functions[1:])
 
 /// Checks whether any schema helper has the requested key prefix without materializing values.
 private fun schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
@@ -11231,7 +11513,9 @@ private fun data_type_parameters_in_modules(name: String, modules: List[Compiled
 
 /// Computes the compiled type for primitive backed backing.
 private fun primitive_backed_backing_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
-    if qualified_call_name(name)
+    if !primitive_backed_lookup_candidate(name)
+    then /capy/lang/Option.None {}
+    else if qualified_call_name(name)
     then primitive_backed_backing_type_in_class(qualified_call_class_name(name, module), qualified_call_member(name), allModules)
     else match module.visiblePrimitiveBackedTypes.get(type_unqualified_name(name)) with
     case Some { primitiveBackedType } -> /capy/lang/Option.Some { primitiveBackedType.backingType }
@@ -11239,7 +11523,21 @@ private fun primitive_backed_backing_type(name: String, module: CompiledModule, 
         case Some { backingType } -> /capy/lang/Option.Some { backingType }
         case None -> match primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
             case Some { backingType } -> /capy/lang/Option.Some { backingType }
-            case None -> primitive_backed_backing_type_in_modules(name, allModules)
+            case None -> /capy/lang/Option.None {}
+
+/// Excludes built-in types that can never have primitive-backed schema metadata.
+private fun primitive_backed_lookup_candidate(name: String): bool =
+    let typeName = type_unqualified_name(name)
+    typeName != "byte"
+        & typeName != "int"
+        & typeName != "long"
+        & typeName != "float"
+        & typeName != "double"
+        & typeName != "bool"
+        & typeName != "char"
+        & typeName != "String"
+        & typeName != "any"
+        & typeName != "nothing"
 
 /// Resolves a primitive-backed type to its backing type and leaves ordinary types unchanged.
 private fun primitive_backed_effective_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -11261,33 +11559,25 @@ private fun primitive_backed_backing_type_in_class(className: String, member: St
 
 /// Emits import statements for primitive backed backing type in.
 private fun primitive_backed_backing_type_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
-    match imports[0] with
+    primitive_backed_backing_type_in_imports_at(name, imports, 0, module, allModules)
+
+/// Resolves primitive backing metadata from imports without allocating a tail list for every declaration.
+private fun primitive_backed_backing_type_in_imports_at(name: String, imports: List[CompiledImportDeclaration], idx: int, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
+    match imports[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if data_import_matches(name, declaration)
-        then primitive_backed_backing_type_in_import(name, imports[1:], module, allModules, imported_module_class(module, declaration.modulePath))
-        else primitive_backed_backing_type_in_imports(name, imports[1:], module, allModules)
+        let importedBackingType = if data_import_matches(name, declaration)
+            then primitive_backed_backing_type_in_import_class(name, imported_module_class(module, declaration.modulePath), allModules)
+            else /capy/lang/Option.None {}
+        match importedBackingType with
+        case Some { backingType } -> /capy/lang/Option.Some { backingType }
+        case None -> primitive_backed_backing_type_in_imports_at(name, imports, idx + 1, module, allModules)
 
-/// Emits one import statement for primitive backed backing type in.
-private fun primitive_backed_backing_type_in_import(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[CompiledTypeReference] =
+/// Resolves primitive backing metadata from one imported module class.
+private fun primitive_backed_backing_type_in_import_class(name: String, className: String, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
     match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> primitive_backed_backing_type_in_imported_module(name, rest, module, allModules, importedModule)
-    case _ -> primitive_backed_backing_type_in_imports(name, rest, module, allModules)
-
-/// Resolves type metadata for primitive backed backing type in imported module.
-private fun primitive_backed_backing_type_in_imported_module(name: String, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], importedModule: CompiledModule): /capy/lang/Option[CompiledTypeReference] =
-    match primitive_backed_backing_type_in_functions(name, importedModule.functions) with
-    case Some { backingType } -> /capy/lang/Option.Some { backingType }
-    case None -> primitive_backed_backing_type_in_imports(name, rest, module, allModules)
-
-/// Creates generated-module entries for primitive backed backing type in a.
-private fun primitive_backed_backing_type_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
-    match modules[0] with
+    case Some { importedModule } -> primitive_backed_backing_type_in_functions(name, importedModule.functions)
     case None -> /capy/lang/Option.None {}
-    case Some { module } ->
-        match primitive_backed_backing_type_in_functions(name, module.functions) with
-            case Some { backingType } -> /capy/lang/Option.Some { backingType }
-            case None -> primitive_backed_backing_type_in_modules(name, modules[1:])
 
 /// Collects data type parent types for compiler processing.
 private fun data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =
@@ -11662,6 +11952,7 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
         binding_exists(variable.name, env)
             | program_member_imported(variable.name, module.imports)
             | imported_stdlib_constant_exists(variable.name, module.imports)
+            | imported_constant_exists(variable.name, module.functions)
             | constant_exists_in_scope(variable.name, module, allModules)
             | enum_value_binding_exists(variable.name, module, allModules)
             | qualified_enum_value_name(variable.name, module, allModules)
@@ -11680,6 +11971,11 @@ private fun expression_emittable(expression: CompiledExpression, env: List[JavaB
         then expression_emittable(collection_pipe_chained_method_call(e), env, module, allModules)
         else if collection_pipe_expression(e, leftType)
         then collection_pipe_emittable(e, env, module, allModules)
+        else if collection_plus_expression(e.operator, leftType, expression_type(e.right, env, module, allModules))
+            | collection_minus_expression(e.operator, leftType, expression_type(e.right, env, module, allModules))
+        then java_binary_operator_emittable(e, env, module, allModules)
+            & expression_emittable(e.left, env, module, allModules)
+            & expression_emittable(e.right, env, module, allModules)
         else if binary_extension_operator_expression_with_left_type(e, leftType, env, module, allModules)
         then binary_extension_operator_emittable_with_left_type(e, leftType, env, module, allModules)
         else if stdlib_path_slash_expression(e, leftType, module)
@@ -11810,8 +12106,9 @@ private fun let_bindings_emittable(bindings: List[CompiledLetBinding], env: List
         let valueType = binding_type(binding, env, module, allModules)
         let bindingValueType = binding_value_type(binding, env, module, allModules)
         let effectBindNeedsSpecialCode = binding.operator == "<-" & bindingValueType.name == "Effect"
+        let expectedValueType = if binding.operator == "<-" then bindingValueType else valueType
         !effectBindNeedsSpecialCode
-            & expression_emittable_as(binding.value, valueType, env, module, allModules)
+            & expression_emittable_as(binding.value, expectedValueType, env, module, allModules)
             & let_bindings_emittable(bindings[1:], [local_java_binding(binding.name, valueType, binding.location, env)] + env, module, allModules)
 
 /// Checks whether binding exists in the relevant declarations or imports.
@@ -12104,6 +12401,8 @@ private fun java_method_emittable(call: CompiledMethodCallExpression, env: List[
     then function_value_method_emittable(call, env, module, allModules)
     else if result_reduce_method_call(call, env, module, allModules)
     then result_reduce_method_emittable(call, env, module, allModules)
+    else if result_recover_method_call(call, env, module, allModules)
+    then result_recover_method_emittable(call, env, module, allModules)
     else if result_map_method_call(call, env, module, allModules)
     then result_map_method_emittable(call, env, module, allModules)
     else if result_or_else_method_call(call, env, module, allModules)
@@ -12172,6 +12471,14 @@ private fun result_reduce_method_emittable(call: CompiledMethodCallExpression, e
     expression_emittable(call.receiver, env, module, allModules)
         & result_reduce_argument_emittable(argument(call.arguments, 0), valueType, env, module, allModules)
         & result_reduce_argument_emittable(argument(call.arguments, 1), error_type(), env, module, allModules)
+
+/// Checks whether Result.recover can be emitted by the target backend.
+private fun result_recover_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let receiverType = expression_type(call.receiver, env, module, allModules)
+    let resultType = result_recover_method_type_with_receiver(call, receiverType, env, module, allModules)
+    expression_emittable(call.receiver, env, module, allModules)
+        & result_reduce_argument_emittable(argument(call.arguments, 0), error_type(), env, module, allModules)
+        & !resultType.name.is_empty()
 
 /// Checks whether result or else method can be emitted by the target backend.
 private fun result_or_else_method_emittable(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -12456,9 +12763,9 @@ private fun function_call_emittable(call: CompiledFunctionCallExpression, env: L
     then reflection_call_emittable(call, env, module, allModules)
     else if object_type_function_call(call, module, allModules)
     then true
-    else if assert_function_call(call, module) & call.name == "assert_all"
+    else if assert_function_call(call, module) & stdlib_call_member_name(call.name) == "assert_all"
     then expressions_emittable(call.arguments, env, module, allModules)
-    else if assert_function_call(call, module) & call.name == "assert_that"
+    else if assert_function_call(call, module) & stdlib_call_member_name(call.name) == "assert_that"
     then assert_that_call_emittable(call.arguments, env, module, allModules)
     else if assert_function_call(call, module)
     then one_string_argument(call.arguments, env, module, allModules)
@@ -12594,27 +12901,7 @@ private fun assert_that_call_emittable(arguments: List[CompiledExpression], env:
     match arguments[0] with
     case None -> false
     case Some { expression } ->
-        assert_type_supported(expression_type(expression, env, module, allModules))
-        & expression_emittable(expression, env, module, allModules)
-
-/// Checks whether assert type is supported by the current backend.
-private fun assert_type_supported(type: CompiledTypeReference): bool =
-    type.name == "int" | type.name == "long" | type.name == "float" | type.name == "double"
-        | type.name == "bool" | type.name == "String" | type.name == "List" | type.name == "Set" | type.name == "Dict"
-        | data_assert_type_supported(type)
-
-/// Checks whether data assert type is supported by the current backend.
-private fun data_assert_type_supported(type: CompiledTypeReference): bool =
-    concrete_return_type(type)
-        & !collection_assert_type(type.name)
-        & type.name != "Assert"
-        & type.name != "Effect"
-        & type.name != "Supplier"
-        & (type.name == "data" | type.name == "enum" | java_generator_string_has_prefix(type.name, "/") | uppercase_data_type_name(type.name))
-
-/// Checks whether a type reference matches the collection assert type rule.
-private fun collection_assert_type(name: String): bool =
-    name == "List" | name == "Set" | name == "Dict" | seq_type_name(name)
+        expression_emittable(expression, env, module, allModules)
 
 /// Checks whether a type reference matches the uppercase data type name rule.
 private fun uppercase_data_type_name(name: String): bool =
@@ -13404,12 +13691,12 @@ private fun result_member_imported(member: String, imports: List[CompiledImportD
 
 /// Checks whether an assertion helper is imported unambiguously into the current module.
 private fun assert_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
-    if call.name == "assert_all" | call.name == "assert_that" | call.name == "pass"
-    then !function_defined(call.name, module.functions) & assert_member_imported(call.name, module.imports)
-    else if call.name == "fail"
-    then !function_defined(call.name, module.functions)
-        & assert_member_imported(call.name, module.imports)
-        & !result_member_imported(call.name, module.imports)
+    let member = stdlib_call_member_name(call.name)
+    if member == "assert_all" | member == "assert_that" | member == "pass"
+    then stdlib_function_call(call, "capy/test/Assert", member, module)
+    else if member == "fail"
+    then stdlib_function_call(call, "capy/test/Assert", member, module)
+        & (call.name != member | !result_member_imported(member, module.imports))
     else false
 
 /// Checks whether an Assert module member is imported into the current module scope.
@@ -13813,9 +14100,25 @@ private fun java_seq_helpers(): String =
 private fun java_base_helpers(): String =
     java_pow_helpers()
         + java_data_helpers()
+        + java_deep_equal_helper()
+        + java_assert_helper()
+        + java_assert_result_helper()
         + java_option_result_helpers()
         + java_regex_helpers()
         + java_parse_helpers()
+
+/// Emits Java runtime helper source for value-based equality.
+private fun java_deep_equal_helper(): String =
+    "    private static boolean __capy_deep_equal(java.lang.Object left, java.lang.Object right) {\n        if (left == right) {\n            return true;\n        }\n        if (left == null || right == null) {\n            return false;\n        }\n        if (left instanceof java.util.Optional<?> leftOptional && right instanceof java.util.Optional<?> rightOptional) {\n            if (leftOptional.isEmpty() || rightOptional.isEmpty()) {\n                return leftOptional.isEmpty() && rightOptional.isEmpty();\n            }\n            return __capy_deep_equal(leftOptional.get(), rightOptional.get());\n        }\n        if (left instanceof java.util.List<?> leftList && right instanceof java.util.List<?> rightList) {\n            if (leftList.size() != rightList.size()) {\n                return false;\n            }\n            for (int i = 0; i < leftList.size(); i++) {\n                if (!__capy_deep_equal(leftList.get(i), rightList.get(i))) {\n                    return false;\n                }\n            }\n            return true;\n        }\n        if (left instanceof java.util.Set<?> leftSet && right instanceof java.util.Set<?> rightSet) {\n            if (leftSet.size() != rightSet.size()) {\n                return false;\n            }\n            for (java.lang.Object item : leftSet) {\n                boolean found = false;\n                for (java.lang.Object other : rightSet) {\n                    if (__capy_deep_equal(item, other)) {\n                        found = true;\n                        break;\n                    }\n                }\n                if (!found) {\n                    return false;\n                }\n            }\n            return true;\n        }\n        if (left instanceof java.util.Map<?, ?> leftMap && right instanceof java.util.Map<?, ?> rightMap) {\n            boolean leftHasType = leftMap.containsKey(\"__type\");\n            boolean rightHasType = rightMap.containsKey(\"__type\");\n            if (leftHasType || rightHasType) {\n                if (!leftHasType || !rightHasType || !__capy_value_type_name(leftMap.get(\"__type\")).equals(__capy_value_type_name(rightMap.get(\"__type\")))) {\n                    return false;\n                }\n            }\n            java.util.Set<?> leftKeys = new java.util.LinkedHashSet<>(leftMap.keySet());\n            java.util.Set<?> rightKeys = new java.util.LinkedHashSet<>(rightMap.keySet());\n            leftKeys.remove(\"__type\");\n            rightKeys.remove(\"__type\");\n            if (!leftKeys.equals(rightKeys)) {\n                return false;\n            }\n            for (java.lang.Object key : leftKeys) {\n                if (!__capy_deep_equal(leftMap.get(key), rightMap.get(key))) {\n                    return false;\n                }\n            }\n            return true;\n        }\n        return java.util.Objects.equals(left, right);\n    }\n\n    private static java.lang.String __capy_value_type_name(java.lang.Object type) {\n        java.lang.String name = java.lang.String.valueOf(type);\n        while (name.startsWith(\"__capy_raw|\")) {\n            name = name.substring(\"__capy_raw|\".length());\n        }\n        int slash = name.lastIndexOf('/');\n        if (slash >= 0) {\n            name = name.substring(slash + 1);\n        }\n        int dot = name.lastIndexOf('.');\n        if (dot >= 0) {\n            name = name.substring(dot + 1);\n        }\n        return name;\n    }\n\n"
+
+/// Emits Java runtime support for assertions represented as generated data values.
+private fun java_assert_helper(): String =
+    "    private static java.lang.Object __capy_assert_value(java.lang.Object assertion) {\n        return assertion instanceof capy.test.Assert.DataAssert generated ? generated.value() : __capy_data_field(assertion, \"value\");\n    }\n\n    private static java.lang.Object __capy_assert_equal(java.lang.Object assertion, java.lang.Object expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, __capy_deep_equal(actual, expected), \"Expected \" + actual + \" to be equal to \" + expected, \"Assert.is_equal_to\");\n    }\n\n    private static java.lang.Object __capy_assert_boolean(java.lang.Object assertion, boolean expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, java.util.Objects.equals(actual, expected), \"Expected bool \" + actual + \" to be equal to \" + expected, expected ? \"Assert.is_true\" : \"Assert.is_false\");\n    }\n\n    private static java.lang.Object __capy_append_assertion(java.lang.Object assertion, boolean result, java.lang.String message, java.lang.String type) {\n        java.util.List<java.util.function.Supplier<capy.test.Assert.Assertion>> assertions = new java.util.ArrayList<>();\n        if (assertion instanceof capy.test.Assert existing) {\n            assertions.addAll(existing.assertions());\n        }\n        java.lang.Object value = __capy_assert_value(assertion);\n        assertions.add(() -> new capy.test.Assert.Assertion(result, message, type));\n        return new capy.test.Assert.DataAssert(java.util.List.copyOf(assertions), value);\n    }\n\n"
+        + "    private static java.lang.Object __capy_invoke_constructor(java.lang.String className, java.lang.String typeName, java.lang.Object... arguments) {\n        try {\n            java.lang.reflect.Method[] methods = java.lang.Class.forName(className).getMethods();\n            java.lang.Object[] prepared = arguments.clone();\n            for (int index = 0; index < prepared.length; index++) {\n                if (prepared[index] instanceof java.util.Map<?, ?>) {\n                    continue;\n                }\n                java.lang.reflect.Method converter = null;\n                for (java.lang.reflect.Method candidate : methods) {\n                    if (java.lang.reflect.Modifier.isStatic(candidate.getModifiers()) && candidate.getName().startsWith(\"__capy_constructor_\") && !candidate.getName().startsWith(\"__capy_constructor_\" + typeName + \"__\") && candidate.getParameterCount() == 1 && __capy_reflection_argument_matches(candidate.getParameterTypes()[0], prepared[index])) {\n                        if (converter != null) {\n                            converter = null;\n                            break;\n                        }\n                        converter = candidate;\n                    }\n                }\n                if (converter != null) {\n                    java.lang.Object converted = converter.invoke(null, prepared[index]);\n                    if (__capy_result_is_error(converted)) {\n                        return converted;\n                    }\n                    java.lang.String converterName = converter.getName();\n                    int start = \"__capy_constructor_\".length();\n                    int end = converterName.indexOf(\"__\", start);\n                    prepared[index] = __capy_constructor_value(converterName.substring(start, end), __capy_result_success_value(converted));\n                }\n            }\n            for (java.lang.reflect.Method method : methods) {\n                if (java.lang.reflect.Modifier.isStatic(method.getModifiers()) && method.getName().startsWith(\"__capy_constructor_\" + typeName + \"__\") && method.getParameterCount() == prepared.length) {\n                    return __capy_constructor_result(typeName, method.invoke(null, prepared));\n                }\n            }\n            throw new java.lang.IllegalStateException(\"Imported constructor for `\" + typeName + \"` is unavailable in `\" + className + \"`\");\n        } catch (java.lang.reflect.InvocationTargetException exception) {\n            java.lang.Throwable cause = exception.getCause();\n            if (cause instanceof java.lang.RuntimeException runtimeException) {\n                throw runtimeException;\n            }\n            throw new java.lang.IllegalStateException(\"Imported constructor for `\" + typeName + \"` failed\", cause);\n        } catch (java.lang.ReflectiveOperationException exception) {\n            throw new java.lang.IllegalStateException(\"Cannot invoke imported constructor for `\" + typeName + \"`\", exception);\n        }\n    }\n\n    private static boolean __capy_reflection_argument_matches(java.lang.Class<?> parameterType, java.lang.Object argument) {\n        if (argument == null) {\n            return !parameterType.isPrimitive();\n        }\n        if (!parameterType.isPrimitive()) {\n            return parameterType.isInstance(argument);\n        }\n        return (parameterType == int.class && argument instanceof java.lang.Integer) || (parameterType == long.class && argument instanceof java.lang.Long) || (parameterType == float.class && argument instanceof java.lang.Float) || (parameterType == double.class && argument instanceof java.lang.Double) || (parameterType == byte.class && argument instanceof java.lang.Byte) || (parameterType == boolean.class && argument instanceof java.lang.Boolean) || (parameterType == char.class && argument instanceof java.lang.Character) || (parameterType == short.class && argument instanceof java.lang.Short);\n    }\n\n"
+
+/// Emits Java runtime support for assertions against Result error metadata.
+private fun java_assert_result_helper(): String =
+    "    private static java.lang.Object __capy_assert_fails_with_kind(java.lang.Object assertion, java.lang.String expectedKind, java.lang.String expectedMessage) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        boolean error = __capy_result_is_error(actual);\n        boolean kindMatches = error && __capy_deep_equal(__capy_data_field(actual, \"kind\"), expectedKind);\n        boolean messageMatches = expectedMessage == null || (error && __capy_deep_equal(__capy_data_field(actual, \"message\"), expectedMessage));\n        return __capy_append_assertion(assertion, kindMatches && messageMatches, \"Expected \" + actual + \" to fail with kind \" + expectedKind, \"Assert.fails_with_kind\");\n    }\n\n"
 
 /// Emits Java runtime helper source for pow helpers.
 private fun java_pow_helpers(): String =

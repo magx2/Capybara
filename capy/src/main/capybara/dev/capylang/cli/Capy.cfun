@@ -1342,13 +1342,13 @@ private fun compile_generate_tests(
                 )
         )
 
-private fun write_compile_generate_test_output(options: CompileGenerateOptions, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
+private fun write_compile_generate_test_output(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
     match testProgram with
     case None -> pure(Success { "test output skipped" })
     case Some { program } ->
         match options.test_output with
         case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
-        case Some { rawTestOutput } -> write_generated_program(from_string(rawTestOutput), generate(program, options.output_type))
+        case Some { rawTestOutput } -> write_generated_program(from_string(rawTestOutput), test_generated_program(options.output_type, mainProgram, program))
 
 private fun write_compile_generate_outputs(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
     match testProgram with
@@ -1357,19 +1357,32 @@ private fun write_compile_generate_outputs(options: CompileGenerateOptions, main
         case Some { rawTestOutput } when rawTestOutput == options.output ->
             write_generated_program(
                 from_string(options.output),
-                merge_generated_programs(generate(mainProgram, options.output_type), generate(test, options.output_type))
+                merge_generated_programs(generate(mainProgram, options.output_type), test_generated_program(options.output_type, mainProgram, test))
             )
         case _ ->
             write_generated_program(from_string(options.output), generate(mainProgram, options.output_type)).flat_map(writeResult =>
                 match writeResult with
                 case Error e -> pure(e)
-                case Success _ -> write_compile_generate_test_output(options, testProgram)
+                case Success _ -> write_compile_generate_test_output(options, mainProgram, testProgram)
             )
     }
     case None -> write_generated_program(from_string(options.output), generate(mainProgram, options.output_type))
 
 private fun merge_generated_programs(first: GeneratedProgram, second: GeneratedProgram): GeneratedProgram =
     GeneratedProgram { modules: first.modules + second.modules }
+
+/// Generates tests with main-module metadata available while keeping Java main classes in their dedicated output directory.
+private fun test_generated_program(outputType: String, mainProgram: CompiledProgram, testProgram: CompiledProgram): GeneratedProgram =
+    if outputType == "java"
+    then
+        let generated = generate(merge_programs(mainProgram, testProgram), outputType)
+        GeneratedProgram { modules: drop_generated_modules(generated.modules, mainProgram.modules.size()) }
+    else generate(testProgram, outputType)
+
+private fun drop_generated_modules(modules: List[GeneratedModule], count: int): List[GeneratedModule] =
+    if count <= 0
+    then modules
+    else drop_generated_modules(modules[1:], count - 1)
 
 private fun merge_libraries(libraries: Set[CompiledModule], program: CompiledProgram): Set[CompiledModule] =
     add_modules_to_libraries(libraries, program.modules)

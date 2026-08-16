@@ -109,7 +109,53 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 definitions.add(functionalDefinition(definition));
             }
         }
-        return List.copyOf(definitions);
+        return rewriteQualifiedConstantMethodCalls(definitions);
+    }
+
+    private static List<Definition> rewriteQualifiedConstantMethodCalls(List<Definition> definitions) {
+        var constantMarkers = new LinkedHashMap<String, String>();
+        for (var definition : definitions) {
+            if (definition instanceof Definition.ConstantDefinition constant) {
+                constantMarkers.put("__capy_constant|" + constant.constant().name(), "");
+            }
+        }
+        if (constantMarkers.isEmpty()) {
+            return List.copyOf(definitions);
+        }
+        return definitions.stream()
+                .map(definition -> rewriteQualifiedConstantMethodCalls(definition, constantMarkers))
+                .toList();
+    }
+
+    private static Definition rewriteQualifiedConstantMethodCalls(
+            Definition definition,
+            Map<String, String> constantMarkers
+    ) {
+        if (definition instanceof Definition.FunctionDefinition functionDefinition) {
+            var function = functionDefinition.function();
+            return new Definition.FunctionDefinition(new FunctionDeclaration(
+                    function.name(),
+                    function.visibility(),
+                    function.parameters(),
+                    function.returnType(),
+                    rewriteLocalFunctionCalls(function.body(), constantMarkers),
+                    function.documentation(),
+                    function.annotations(),
+                    function.location()
+            ));
+        }
+        if (definition instanceof Definition.ConstantDefinition constantDefinition) {
+            var constant = constantDefinition.constant();
+            return new Definition.ConstantDefinition(new ConstantDeclaration(
+                    constant.name(),
+                    constant.visibility(),
+                    constant.typeReference(),
+                    rewriteLocalFunctionCalls(constant.expression(), constantMarkers),
+                    constant.documentation(),
+                    constant.location()
+            ));
+        }
+        return definition;
     }
 
     private ObjectOriented parseObjectOriented(RawModule module, String source) {
@@ -2016,6 +2062,18 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             );
         }
         if (expression instanceof Expression.FunctionCallExpression value) {
+            var separator = value.name().lastIndexOf('.');
+            if (separator > 0) {
+                var receiverName = value.name().substring(0, separator);
+                if (localNames.containsKey("__capy_constant|" + receiverName)) {
+                    return new Expression.MethodCallExpression(
+                            new Expression.VariableExpression(receiverName, value.location()),
+                            value.name().substring(separator + 1),
+                            rewriteLocalFunctionCalls(value.arguments(), localNames),
+                            value.location()
+                    );
+                }
+            }
             return new Expression.FunctionCallExpression(
                     localNames.getOrDefault(value.name(), value.name()),
                     rewriteLocalFunctionCalls(value.arguments(), localNames),

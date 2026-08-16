@@ -4,6 +4,8 @@ import dev.capylang.cli.Capy;
 import dev.capylang.compiler.BackendCompilationContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,6 +24,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class JavaGenerationDiagnosticsIntegrationTest {
     @TempDir
     Path tempDir;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"java", "javascript", "python"})
+    void rejectsFunctionCallAsTestPipeRightOperandBeforeGeneration(String outputType) throws Exception {
+        writeSource("sample/Main.cfun", "fun value(): int = 1");
+        var testSource = writeTestSource("sample/Main.test.cfun", """
+                fun broken(value: Result[int]): bool = value | diff()
+
+                private fun diff(): int = 1
+                """);
+
+        assertThat(compileGenerateWithTestsStderr(outputType))
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Operator `|` requires a lambda or function reference on its right-hand side; "
+                        + "found a function call.");
+        var extension = switch (outputType) {
+            case "javascript" -> ".js";
+            case "python" -> ".py";
+            default -> ".java";
+        };
+        assertThat(generatedTestPath(testSource, extension)).doesNotExist();
+    }
 
     @Test
     void compilesJavaForRootModulesWithAbsoluteImports() throws Exception {
@@ -307,9 +331,136 @@ class JavaGenerationDiagnosticsIntegrationTest {
         var generated = generatedPath(source);
         assertThat(generated)
                 .content()
-                .contains("return __capy_data(\"Success\", __capy_value_fields(java.util.List.of(value)))")
+                .contains("return __capy_data(\"Success\", __capy_value_fields(java.util.List.of(((java.lang.Integer) value))))")
                 .doesNotContain("Unsupported CFUN expression at");
         assertJavaCompiles(generated);
+    }
+
+    @Test
+    void generatesChainedResultBindingsInJava() throws Exception {
+        var source = writeSource("sample/ResultBindings.cfun", """
+                from /capy/lang/Result import { Result, Success }
+
+                private fun success(value: int): Result[int] = Success { value }
+
+                fun total(): Result[int] =
+                    let first: int <- success(1)
+                    let second: int <- success(2)
+                    let third: int <- success(3)
+                    first + second + third
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_bind_first")
+                .contains("__capy_bind_second")
+                .contains("__capy_bind_third")
+                .contains("if (!__capy_result_is_success(")
+                .contains("return __capy_data(\"Success\"")
+                .doesNotContain("Unsupported CFUN expression at");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
+    void generatesChainedResultBindingsWithImportedConstantInTypedList() throws Exception {
+        var values = writeSource("sample/Values.cfun", """
+                data Value { value: int }
+
+                const FINAL: Value = Value { value: 4 }
+                """);
+        var source = writeSource("sample/ImportedConstantResultBindings.cfun", """
+                from /sample/Values import { Value, FINAL }
+                from /capy/lang/Result import { Result, Success }
+                from /capy/test/Assert import { Assert, assert_that }
+
+                private fun success(value: int): Result[Value] = Success { Value { value } }
+
+                fun compare(): Result[Assert] =
+                    let first: Value <- success(1)
+                    let second: Value <- success(2)
+                    let third: Value <- success(3)
+                    let actual: List[Value] = [first, second, third, FINAL]
+                    assert_that(actual).is_equal_to([first, second, third, FINAL])
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_bind_first")
+                .contains("Values.FINAL")
+                .contains("__capy_assert_equal(")
+                .contains("return __capy_data(\"Success\"")
+                .doesNotContain("Unsupported CFUN expression at");
+        assertJavaCompiles(generatedPath(values), generated);
+    }
+
+    @Test
+    void generatesResultBindingWithPrimitiveBackedFieldAssertions() throws Exception {
+        var valueSource = writeSource("sample/Kaprekar.cfun", """
+                from /capy/lang/Primitives import { digit, ONE_DIGIT, TWO_DIGIT, EIGHT_DIGIT, NINE_DIGIT }
+                from /capy/lang/Result import { Result, Success }
+
+                data Kaprekar {
+                    first: digit,
+                    second: digit,
+                    third: digit,
+                    fourth: digit
+                } with constructor {
+                    Success { * { first, second, third, fourth } }
+                }
+
+                fun Kaprekar.diff(): Kaprekar = this
+                """);
+        var source = writeTestSource("sample/PrimitiveBackedAssertions.test.cfun", """
+                from /sample/Kaprekar import { Kaprekar }
+                from /capy/lang/Primitives import { ONE_DIGIT, TWO_DIGIT, EIGHT_DIGIT, NINE_DIGIT }
+                from /capy/lang/Result import { Result }
+                from /capy/test/Assert import { Assert, assert_all, assert_that }
+
+                private fun kaprekar_new_instance(): Result[Assert] =
+                    let kaprekar: Kaprekar <- Kaprekar {
+                        first: ONE_DIGIT,
+                        second: NINE_DIGIT,
+                        third: EIGHT_DIGIT,
+                        fourth: TWO_DIGIT
+                    }
+                    assert_all([
+                        assert_that(kaprekar.first).is_equal_to(ONE_DIGIT),
+                        assert_that(kaprekar.second).is_equal_to(NINE_DIGIT),
+                        assert_that(kaprekar.third).is_equal_to(EIGHT_DIGIT),
+                        assert_that(kaprekar.fourth).is_equal_to(TWO_DIGIT),
+                    ])
+
+                const K1234: Result[Kaprekar] = Kaprekar {
+                    first: ONE_DIGIT,
+                    second: TWO_DIGIT,
+                    third: EIGHT_DIGIT,
+                    fourth: NINE_DIGIT
+                }
+
+                private fun mapped_assertion(): Assert =
+                    assert_that(K1234.map(k => k.diff())).is_equal_to(K1234)
+                """);
+
+        assertThat(compileGenerateWithTestsStderr()).isEmpty();
+
+        var generated = generatedTestPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_bind_kaprekar")
+                .contains("__capy_assert_equal(")
+                .contains("Kaprekar.Kaprekar_diff__")
+                .contains("return __capy_data(\"Success\"")
+                .doesNotContain(".diff()")
+                .doesNotContain(".isEqualTo(")
+                .doesNotContain("unsupported(\"assert function call\")")
+                .doesNotContain("Unsupported CFUN expression at");
+        assertJavaCompiles(generatedPath(valueSource), generated);
     }
 
     @Test
@@ -359,6 +510,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     void generatesDigitReductionFromString() throws Exception {
         var source = writeSource("sample/StringDigitReduction.cfun", """
+                import /capy/collection/Seq
                 from /capy/lang/Primitives import { to_int }
                 from /capy/lang/Result import { Result, Success }
 
@@ -366,10 +518,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     Success { value }
                 }
 
-                fun parse_digits(value: String): Result[List[digit]] =
+                fun parse_digits(value: String): Result[Seq[digit]] =
                     value
                     | char => to_int(char)
-                    |> Success { [] }, (acc, int_char) => {
+                    |> Success { Seq.to_seq([]) }, (acc, int_char) => {
                         acc.flat_map(acc_list => {
                             int_char.flat_map(int_value => {
                                 digit { int_value }.map(digit => acc_list + digit)
@@ -384,6 +536,35 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .content()
                 .contains("__capy_parse_int")
                 .doesNotContain("Unsupported CFUN expression at");
+    }
+
+    @Test
+    void generatesImportedDigitSequenceReductionFromStringMethod() throws Exception {
+        var source = writeSource("sample/ImportedStringDigitReduction.cfun", """
+                import /capy/collection/Seq
+                import /capy/lang/String
+                from /capy/lang/Primitives import { digit }
+                from /capy/lang/Result import { Result, Success }
+
+                fun parse_digits(value: String): Result[Seq[digit]] =
+                    value
+                    | char => char.to_int()
+                    |> Success { Seq.to_seq([]) }, (acc, int_char) => {
+                        acc.flat_map(acc_list => {
+                            int_char.flat_map(int_value => {
+                                digit { int_value }.map(digit => acc_list + digit)
+                            })
+                        })
+                    }
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+        assertThat(generatedPath(source))
+                .content()
+                .contains("__capy_parse_int")
+                .contains("__capy_seq_append(")
+                .doesNotContain("Unsupported CFUN expression at");
+        assertJavaCompiles(generatedPath(source));
     }
 
     @Test
@@ -426,7 +607,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("__capy_parse_int")
                 .contains("sample.Digit.")
                 .contains("java.lang.Object digit =")
-                .contains("__capy_list_append(acc_list, digit)")
+                .contains("__capy_list_append(((java.util.List<java.lang.Object>) acc_list), ((java.lang.Object) digit))")
                 .doesNotContain("int digit =")
                 .doesNotContain("__capy_list_append(acc_list, ((java.lang.Integer) __capy_data_field(digit")
                 .doesNotContain("Unsupported CFUN expression at");
@@ -618,6 +799,22 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void supportsAppendingSingleElementToSeqForEveryBackend() throws Exception {
+        var source = writeSource("sample/SeqAppend.cfun", """
+                fun append(values: Seq[int], value: int): Seq[int] = values + value
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+        assertThat(generatedPath(source)).content().contains("__capy_seq_append(");
+
+        assertThat(compileGenerateStderr("javascript")).isEmpty();
+        assertThat(generatedPath(source, ".js")).content().contains("__capy_add(");
+
+        assertThat(compileGenerateStderr("python")).isEmpty();
+        assertThat(generatedPath(source, ".py")).content().contains("__capy_add(");
+    }
+
+    @Test
     void compilesExplicitSeqToListConversionInsideAsyncEffect() throws Exception {
         var source = writeSource("sample/AsyncEffectBind.cfun", """
                 import /capy/collection/Seq
@@ -664,6 +861,131 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesQualifiedAssertFailInsideResultRecoverForEveryBackend() throws Exception {
+        writeSource("sample/RecoverValue.cfun", """
+                from /capy/lang/Result import { Result, Success }
+
+                fun value(): Result[int] = Success { 1 }
+                """);
+        var testSource = writeTestSource("sample/RecoverValue.test.cfun", """
+                import /capy/test/Assert
+                from /sample/RecoverValue import { value }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests() =
+                    test_file("/sample/RecoverValue.cfun", [
+                        test("recover result assertion", () =>
+                            value()
+                                .map(number => assert_that(number).is_equal_to(1))
+                                .recover(error => Assert.fail("[{error.kind}] {error.message}"))
+                        )
+                    ])
+                """);
+
+        assertThat(compileGenerateWithTestsStderr("java")).isEmpty();
+        assertThat(generatedTestPath(testSource))
+                .content()
+                .contains("__capy_result_recover_")
+                .contains("new capy.test.Assert.TechnicalAssert")
+                .doesNotContain(".recover(")
+                .doesNotContain("capy.test.Assert.fail(");
+        assertJavaCompiles(generatedPath(inputDir().resolve("sample/RecoverValue.cfun")), generatedTestPath(testSource));
+
+        assertThat(compileGenerateWithTestsStderr("javascript")).isEmpty();
+        assertThat(generatedTestPath(testSource, ".js"))
+                .content()
+                .contains("__capy_result_recover(")
+                .contains("fail(")
+                .doesNotContain(".recover(");
+        assertThat(testOutputDir().resolve("capy/test/CapyTestRuntime.js"))
+                .content()
+                .contains("__capy_gather_module(\"../../sample/RecoverValue.test\")");
+
+        assertThat(compileGenerateWithTestsStderr("python")).isEmpty();
+        assertThat(generatedTestPath(testSource, ".py"))
+                .content()
+                .contains("__capy_result_recover(")
+                .contains("fail(")
+                .doesNotContain(".recover(");
+        assertThat(testOutputDir().resolve("capy/test/CapyTestRuntime.py"))
+                .content()
+                .contains("_gather_module(\"sample.RecoverValue.test\")");
+    }
+
+    @Test
+    void generatesImportedBinaryExtensionOperatorInTestModule() throws Exception {
+        var mainSource = writeSource("sample/ComparableValue.cfun", """
+                data Value { number: int }
+
+                fun Value.`==`(other: Value): bool = this.number == other.number
+                """);
+        var testSource = writeTestSource("sample/ComparableValue.test.cfun", """
+                from /sample/ComparableValue import { Value }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/sample/ComparableValue.cfun", [
+                        test("uses imported equality", () => assert_that(Value { 1 } == Value { 1 }).is_true())
+                    ])
+                """);
+
+        assertThat(compileGenerateWithTestsStderr()).isEmpty();
+        assertThat(generatedTestPath(testSource))
+                .content()
+                .doesNotContain("unsupported(\"match\")");
+        assertJavaCompiles(generatedPath(mainSource), generatedTestPath(testSource));
+    }
+
+    @Test
+    void generatesPrimitiveBackedArithmeticInTestModuleWithoutRecursiveImportScanning() throws Exception {
+        var mainSource = writeSource("sample/Digits.cfun", """
+                from /capy/lang/Primitives import { digit, ONE_DIGIT, TWO_DIGIT, THREE_DIGIT, FOUR_DIGIT }
+
+                data Digits { first: digit, second: digit, third: digit, fourth: digit }
+
+                const EXPECTED: Digits = Digits! {
+                    ONE_DIGIT,
+                    TWO_DIGIT,
+                    THREE_DIGIT,
+                    FOUR_DIGIT
+                }
+
+                fun total(value: Digits): int =
+                    value.first * 1000 + value.second * 100 + value.third * 10 + value.fourth
+
+                fun Digits.same(other: Digits): bool =
+                    this.first == other.first & this.second == other.second &
+                    this.third == other.third & this.fourth == other.fourth
+                """);
+        var testSource = writeTestSource("sample/Digits.test.cfun", """
+                from /sample/Digits import { Digits, total }
+                from /capy/lang/Primitives import { ONE_DIGIT, TWO_DIGIT, THREE_DIGIT, FOUR_DIGIT }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/sample/Digits.cfun", [
+                        test("primitive-backed arithmetic", () =>
+                            assert_that(total(Digits! { ONE_DIGIT, TWO_DIGIT, THREE_DIGIT, FOUR_DIGIT }))
+                                .is_equal_to(1234)
+                        )
+                    ])
+                """);
+
+        assertThat(compileGenerateWithTestsStderr()).isEmpty();
+        assertThat(generatedPath(mainSource))
+                .content()
+                .contains("Map.entry(\"first\", __capy_data(\"digit\"")
+                .contains("Map.entry(\"fourth\", __capy_data(\"digit\"");
+        assertThat(generatedTestPath(testSource))
+                .content()
+                .doesNotContain("unsupported(\"match\")");
+        assertJavaCompiles(generatedPath(mainSource), generatedTestPath(testSource));
+    }
+
+    @Test
     void validatesTestProgramBeforeJavaGeneration() throws Exception {
         writeSource("sample/Main.cfun", """
                 fun count(values: List[int]): int = values.size().value
@@ -679,6 +1001,22 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 """);
 
         assertThat(generatedTestPath(testSource)).doesNotExist();
+    }
+
+    @Test
+    void rejectsUnknownExplicitStandardLibraryImportsBeforeGeneration() throws Exception {
+        var source = writeSource("sample/UnknownPrimitive.cfun", """
+                from /capy/lang/Primitives import { ONE }
+
+                const VALUE: int = ONE
+                """);
+
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/UnknownPrimitive.cfun:1:0: Module `/capy/lang/Primitives` does not export `ONE`.
+                """);
+
+        assertThat(generatedPath(source)).doesNotExist();
     }
 
     @Test
@@ -804,8 +1142,15 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     private Path generatedTestPath(Path source) {
+        return generatedTestPath(source, ".java");
+    }
+
+    private Path generatedTestPath(Path source, String extension) {
         var relative = testInputDir().relativize(source);
-        var fileName = relative.getFileName().toString().replaceFirst("\\.cfun$", ".java");
+        var fileName = relative.getFileName().toString().replaceFirst("\\.cfun$", extension);
+        if (extension.equals(".java")) {
+            fileName = fileName.replace('.', '_').replaceFirst("_java$", ".java");
+        }
         return testOutputDir().resolve(relative).resolveSibling(fileName);
     }
 

@@ -68,9 +68,18 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class NativeCompilerValidator {
+    private static final ThreadLocal<Map<String, ParsedModule>> VALIDATED_MODULES =
+            ThreadLocal.withInitial(LinkedHashMap::new);
+    private static final Map<String, Optional<CompiledModule>> BUNDLED_MODULES = new ConcurrentHashMap<>();
+
+    private record LinkedDataField(String name, TypeReference typeReference) {
+    }
+
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_FUNCTION_ARITIES = Map.of(
             "capy/collection/Seq", Map.of("to_seq", Set.of(1))
@@ -104,7 +113,36 @@ public final class NativeCompilerValidator {
         validateDefinitions(context, errors);
         validateObjectOriented(context, errors);
         validateNativeProviderManifest(nativeProviders, errors);
+        if (errors.isEmpty()) {
+            rememberValidatedModules(modules);
+        }
         return List.copyOf(errors);
+    }
+
+    private void rememberValidatedModules(List<ParsedModule> modules) {
+        var validated = VALIDATED_MODULES.get();
+        for (var module : modules) {
+            validated.put(parsedModulePath(module), module);
+        }
+    }
+
+    private String parsedModulePath(ParsedModule module) {
+        var path = normalizeModulePath(module.path());
+        return path.isBlank() ? module.name() : path + "/" + module.name();
+    }
+
+    private Optional<CompiledModule> bundledModule(String modulePath) {
+        return BUNDLED_MODULES.computeIfAbsent(modulePath, path -> {
+            try (var input = NativeCompilerValidator.class.getResourceAsStream("/" + path + ".json")) {
+                if (input == null) {
+                    return Optional.empty();
+                }
+                var json = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                return Optional.of(LinkedJsonCodec.read(json, CompiledModule.class));
+            } catch (java.io.IOException | RuntimeException ignored) {
+                return Optional.empty();
+            }
+        });
     }
 
     private void validateImports(Context context, List<CompilerError> errors) {
@@ -165,6 +203,13 @@ public final class NativeCompilerValidator {
             case ConstantDefinition constant -> {
                 validateTypeReference(context, module, constant.constant().typeReference(), List.of(), errors, constant.constant().location());
                 validateExpression(context, module, constant.constant().expression(), errors);
+                validateNestedLambdaFunctionArguments(
+                        context,
+                        module,
+                        constant.constant().expression(),
+                        Map.of(),
+                        errors
+                );
             }
             case DataDeclaration data -> {
                 validateDuplicateDataFields(module, data.fields(), errors);
@@ -205,6 +250,7 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors,
             Set<String> nativeProviderKeys
     ) {
+        validatePublicFunctionSignatureVisibility(context, module, function, errors);
         validateTypeReference(context, module, function.returnType(), List.of(), errors, function.location());
         for (var parameter : function.parameters()) {
             validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
@@ -234,6 +280,66 @@ public final class NativeCompilerValidator {
                     errors
             );
         }
+    }
+
+    private void validatePublicFunctionSignatureVisibility(
+            Context context,
+            ParsedModule module,
+            FunctionDeclaration function,
+            List<CompilerError> errors
+    ) {
+        if (!function.visibility().equals("public")) {
+            return;
+        }
+        for (var parameter : function.parameters()) {
+            var privateType = privateSignatureType(context, module, parameter.typeReference());
+            if (privateType != null) {
+                errors.add(privateSignatureTypeError(
+                        module,
+                        function,
+                        privateType,
+                        "parameter `" + parameter.name() + "`"
+                ));
+            }
+        }
+        var returnType = function.returnType().name().isBlank()
+                ? validationExpressionType(context, module, function.body(), parameterTypes(function))
+                : function.returnType();
+        var privateReturnType = privateSignatureType(context, module, returnType);
+        if (privateReturnType != null) {
+            errors.add(privateSignatureTypeError(module, function, privateReturnType, "return type"));
+        }
+    }
+
+    private CompilerError privateSignatureTypeError(
+            ParsedModule module,
+            FunctionDeclaration function,
+            String typeName,
+            String position
+    ) {
+        return error(
+                module,
+                function.location(),
+                "Public function `" + function.name() + "` exposes private type `"
+                        + typeName + "` in its " + position + "."
+        );
+    }
+
+    private String privateSignatureType(Context context, ParsedModule module, TypeReference type) {
+        if (type == null) {
+            return null;
+        }
+        var typeName = nominalTypeName(type.name());
+        if (!typeName.isBlank() && context.privateType(module, typeName)) {
+            return typeName;
+        }
+        for (var argument : type.arguments()) {
+            var privateType = privateSignatureType(context, module, argument);
+            if (privateType != null) {
+                return privateType;
+            }
+        }
+        return null;
     }
 
     private Set<String> functionVariableNames(FunctionDeclaration function) {
@@ -425,8 +531,20 @@ public final class NativeCompilerValidator {
     ) {
         switch (expression) {
             case BinaryExpression binary -> {
+                validatePipeRightOperand(context, module, binary, types, errors);
+                validateSequenceConcatOperands(context, module, binary, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, binary.left(), types, errors);
-                validateNestedLambdaFunctionArguments(context, module, binary.right(), types, errors);
+                if (PIPE_OPERATORS.contains(binary.operator())
+                        && binary.right() instanceof LambdaExpression mapper) {
+                    var receiverType = validationExpressionType(context, module, binary.left(), types);
+                    var valueType = validationIterableElementType(receiverType);
+                    var mapperTypes = valueType == null
+                            ? types
+                            : validationLambdaTypes(mapper, valueType, types);
+                    validateNestedLambdaFunctionArguments(context, module, mapper.body(), mapperTypes, errors);
+                } else {
+                    validateNestedLambdaFunctionArguments(context, module, binary.right(), types, errors);
+                }
             }
             case BlockExpression block -> {
                 var blockTypes = new LinkedHashMap<>(types);
@@ -451,6 +569,7 @@ public final class NativeCompilerValidator {
             case FieldAccessExpression access ->
                     validateNestedLambdaFunctionArguments(context, module, access.receiver(), types, errors);
             case FunctionCallExpression call -> {
+                validateKnownQualifiedExtensionMethodReceiver(context, module, call, types, errors);
                 validateNestedLambdaCall(context, module, call, types, errors);
                 call.arguments().forEach(argument ->
                         validateNestedLambdaFunctionArguments(context, module, argument, types, errors));
@@ -484,15 +603,41 @@ public final class NativeCompilerValidator {
                 }
             }
             case MethodCallExpression call -> {
+                validateKnownExtensionMethodReceiver(context, module, call, types, errors);
                 validateResultFlatMapMapper(context, module, call, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, call.receiver(), types, errors);
-                call.arguments().forEach(argument ->
-                        validateNestedLambdaFunctionArguments(context, module, argument, types, errors));
+                var receiverType = validationExpressionType(context, module, call.receiver(), types);
+                var valueType = receiverType != null && receiverType.arguments().size() == 1
+                        ? receiverType.arguments().getFirst()
+                        : null;
+                for (var argument : call.arguments()) {
+                    if (argument instanceof LambdaExpression mapper && valueType != null) {
+                        validateNestedLambdaFunctionArguments(
+                                context,
+                                module,
+                                mapper.body(),
+                                validationLambdaTypes(mapper, valueType, types),
+                                errors
+                        );
+                    } else {
+                        validateNestedLambdaFunctionArguments(context, module, argument, types, errors);
+                    }
+                }
             }
             case ReduceExpression reduce -> {
                 validateNestedLambdaFunctionArguments(context, module, reduce.receiver(), types, errors);
                 validateNestedLambdaFunctionArguments(context, module, reduce.initial(), types, errors);
-                validateNestedLambdaFunctionArguments(context, module, reduce.body(), types, errors);
+                var reduceTypes = new LinkedHashMap<>(types);
+                var accumulatorType = validationExpressionType(context, module, reduce.initial(), types);
+                if (accumulatorType != null) {
+                    reduceTypes.put(reduce.accumulatorName(), accumulatorType);
+                }
+                var receiverType = validationExpressionType(context, module, reduce.receiver(), types);
+                var valueType = validationIterableElementType(receiverType);
+                if (valueType != null && !reduce.valueName().isBlank() && !reduce.valueName().equals("_")) {
+                    reduceTypes.put(reduce.valueName(), valueType);
+                }
+                validateNestedLambdaFunctionArguments(context, module, reduce.body(), reduceTypes, errors);
             }
             case SetLiteral literal -> literal.values().forEach(value ->
                     validateNestedLambdaFunctionArguments(context, module, value, types, errors));
@@ -517,6 +662,146 @@ public final class NativeCompilerValidator {
         }
     }
 
+    private void validateKnownExtensionMethodReceiver(
+            Context context,
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var receiverType = validationExpressionType(context, module, call.receiver(), types);
+        validateKnownExtensionMethodReceiver(
+                context,
+                module,
+                call.name(),
+                call.arguments().size(),
+                receiverType,
+                call.location(),
+                errors
+        );
+    }
+
+    private void validateKnownQualifiedExtensionMethodReceiver(
+            Context context,
+            ParsedModule module,
+            FunctionCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var separator = call.name().lastIndexOf('.');
+        if (separator <= 0 || separator == call.name().length() - 1) {
+            return;
+        }
+        var receiverName = call.name().substring(0, separator);
+        var receiverType = types.get(receiverName);
+        if (receiverType == null) {
+            receiverType = context.constantType(module, receiverName);
+        }
+        validateKnownExtensionMethodReceiver(
+                context,
+                module,
+                call.name().substring(separator + 1),
+                call.arguments().size(),
+                receiverType,
+                call.location(),
+                errors
+        );
+    }
+
+    private void validateKnownExtensionMethodReceiver(
+            Context context,
+            ParsedModule module,
+            String methodName,
+            int arity,
+            TypeReference receiverType,
+            SourceLocation location,
+            List<CompilerError> errors
+    ) {
+        if (receiverType == null || receiverType.name().isBlank()
+                || unqualified(receiverType.name()).equals("any")) {
+            return;
+        }
+        var receiverTypes = context.extensionMethodReceiverTypes(module, methodName, arity);
+        if (receiverTypes.isEmpty() || receiverTypes.contains(unqualified(receiverType.name()))) {
+            return;
+        }
+        var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, receiverTypes);
+        if (wrappedReceiverType.isEmpty()) {
+            return;
+        }
+        var expectedTypes = String.join("`, `", receiverTypes);
+        var hint = wrappedReceiverType
+                .map(type -> "; extract a `" + type + "` value before calling the method")
+                .orElse("");
+        errors.add(error(
+                module,
+                location,
+                "Method `" + methodName + "` requires receiver type `" + expectedTypes
+                        + "`, but the receiver has type `" + displayType(receiverType) + "`" + hint + "."
+        ));
+    }
+
+    private Optional<String> wrappedExtensionReceiverType(
+            TypeReference receiverType,
+            Set<String> receiverTypes
+    ) {
+        for (var argument : receiverType.arguments()) {
+            var argumentName = unqualified(argument.name());
+            if (receiverTypes.contains(argumentName)) {
+                return Optional.of(argumentName);
+            }
+            var nested = wrappedExtensionReceiverType(argument, receiverTypes);
+            if (nested.isPresent()) {
+                return nested;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private void validatePipeRightOperand(
+            Context context,
+            ParsedModule module,
+            BinaryExpression binary,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!PIPE_OPERATORS.contains(binary.operator()) || callablePipeRight(binary.right())) {
+            return;
+        }
+        if (binary.operator().equals("|")) {
+            var leftType = validationExpressionType(context, module, binary.left(), types);
+            if (leftType == null || unqualified(leftType.name()).equals("bool")) {
+                return;
+            }
+        }
+        errors.add(error(
+                module,
+                binary.location(),
+                "Operator `" + binary.operator()
+                        + "` requires a lambda or function reference on its right-hand side; found "
+                        + pipeOperandDescription(binary.right()) + "."
+        ));
+    }
+
+    private boolean callablePipeRight(Expression expression) {
+        if (expression instanceof LambdaExpression || expression instanceof FunctionReferenceExpression) {
+            return true;
+        }
+        if (expression instanceof MethodCallExpression call) {
+            return callablePipeRight(call.receiver());
+        }
+        return false;
+    }
+
+    private String pipeOperandDescription(Expression expression) {
+        return switch (expression) {
+            case FunctionCallExpression ignored -> "a function call";
+            case MethodCallExpression ignored -> "a method call";
+            case VariableExpression ignored -> "a variable";
+            default -> "an expression";
+        };
+    }
+
     private void validateDataLiteralFieldTypes(
             Context context,
             ParsedModule module,
@@ -524,30 +809,44 @@ public final class NativeCompilerValidator {
             Map<String, TypeReference> types,
             List<CompilerError> errors
     ) {
-        var declaration = context.dataDeclaration(module, literal.typeName());
-        if (declaration == null) {
+        var literalTypeName = nominalTypeName(literal.typeName());
+        var declarationOwner = context.dataDeclarationOwner(module, literalTypeName);
+        if (declarationOwner == null) {
+            validateLinkedDataLiteralFieldTypes(context, module, literal, types, errors);
             return;
         }
-        for (var field : literal.fields()) {
+        var declaration = context.localDataDeclaration(declarationOwner, literalTypeName);
+        for (var fieldIndex = 0; fieldIndex < literal.fields().size(); fieldIndex++) {
+            var field = literal.fields().get(fieldIndex);
             if (field.spread()) {
                 continue;
             }
-            var declaredField = declaration.fields().stream()
-                    .filter(candidate -> candidate.name().equals(field.name()))
-                    .findFirst()
-                    .orElse(null);
+            var declaredField = declaredDataField(declaration, field, fieldIndex);
             if (declaredField == null) {
                 continue;
             }
             var expected = declaredField.typeReference();
             var actual = validationExpressionType(context, module, field.value(), types);
+            var primitive = context.primitiveBackedTypeDeclaration(declarationOwner, expected.name());
+            if (primitiveBackedFieldType(expected, primitive) && actual != null && !sameTypeName(expected, actual)) {
+                errors.add(error(
+                        module,
+                        field.location(),
+                        "Field `" + declaredField.name() + "` of data `" + literalTypeName
+                                + "` has type `" + displayType(actual) + "`, but requires primitive-backed type `"
+                                + displayType(expected) + "`; construct `" + displayType(expected)
+                                + "` explicitly and unwrap its `Result` before constructing `"
+                                + literalTypeName + "`."
+                ));
+                continue;
+            }
             if (functionTypeName(expected.name())) {
                 if (actual != null && !callableExpression(field.value(), actual)) {
                     errors.add(error(
                             module,
                             field.location(),
-                            "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
-                                    + "` requires callable type `" + displayType(expected) + "`."
+                        "Field `" + field.name() + "` of data `" + literalTypeName
+                                + "` requires callable type `" + displayType(expected) + "`."
                     ));
                 }
                 continue;
@@ -556,7 +855,7 @@ public final class NativeCompilerValidator {
                 errors.add(error(
                         module,
                         field.location(),
-                        "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
+                        "Field `" + field.name() + "` of data `" + literalTypeName
                                 + "` requires `" + displayType(expected) + "`, but a callable value was provided."
                 ));
                 continue;
@@ -565,12 +864,92 @@ public final class NativeCompilerValidator {
                 errors.add(error(
                         module,
                         field.location(),
-                        "Field `" + field.name() + "` of data `" + unqualified(literal.typeName())
+                        "Field `" + field.name() + "` of data `" + literalTypeName
                                 + "` has type `" + displayType(actual) + "`, but requires `"
                                 + displayType(expected) + "`; use an explicit `to_seq` or `as_list` conversion."
                 ));
             }
         }
+    }
+
+    private void validateLinkedDataLiteralFieldTypes(
+            Context context,
+            ParsedModule module,
+            DataLiteral literal,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var literalTypeName = nominalTypeName(literal.typeName());
+        var declaredFields = context.linkedDataFields(module, literalTypeName);
+        if (declaredFields == null) {
+            return;
+        }
+        for (var fieldIndex = 0; fieldIndex < literal.fields().size(); fieldIndex++) {
+            var field = literal.fields().get(fieldIndex);
+            if (field.spread()) {
+                continue;
+            }
+            var declaredField = linkedDataField(declaredFields, field, fieldIndex);
+            if (declaredField == null) {
+                continue;
+            }
+            var expected = declaredField.typeReference();
+            var actual = validationExpressionType(context, module, field.value(), types);
+            if (primitiveBackedFieldType(expected, null) && actual != null && !sameTypeName(expected, actual)) {
+                errors.add(error(
+                        module,
+                        field.location(),
+                        "Field `" + declaredField.name() + "` of data `" + literalTypeName
+                                + "` has type `" + displayType(actual) + "`, but requires primitive-backed type `"
+                                + displayType(expected) + "`; construct `" + displayType(expected)
+                                + "` explicitly and unwrap its `Result` before constructing `"
+                                + literalTypeName + "`."
+                ));
+            }
+        }
+    }
+
+    private LinkedDataField linkedDataField(List<LinkedDataField> fields, DataField field, int fieldIndex) {
+        if (field.name().equals("$" + fieldIndex) && fieldIndex < fields.size()) {
+            return fields.get(fieldIndex);
+        }
+        return fields.stream()
+                .filter(candidate -> candidate.name().equals(field.name()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private DataFieldDeclaration declaredDataField(DataDeclaration declaration, DataField field, int fieldIndex) {
+        if (field.name().equals("$" + fieldIndex) && fieldIndex < declaration.fields().size()) {
+            return declaration.fields().get(fieldIndex);
+        }
+        return declaration.fields().stream()
+                .filter(candidate -> candidate.name().equals(field.name()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean sameTypeName(TypeReference expected, TypeReference actual) {
+        return nominalTypeName(expected.name()).equals(nominalTypeName(actual.name()));
+    }
+
+    private boolean primitiveBackedFieldType(
+            TypeReference expected,
+            PrimitiveBackedTypeDeclaration declaration
+    ) {
+        if (declaration != null) {
+            return true;
+        }
+        var typeName = nominalTypeName(expected.name());
+        return !typeName.isEmpty()
+                && Character.isLowerCase(typeName.charAt(0))
+                && !BUILTIN_TYPES.contains(typeName);
+    }
+
+    private String nominalTypeName(String name) {
+        var typeName = unqualified(name);
+        var rawPrefix = "__capy_raw|";
+        return typeName.startsWith(rawPrefix) ? typeName.substring(rawPrefix.length()) : typeName;
     }
 
     private boolean callableExpression(Expression expression, TypeReference inferredType) {
@@ -737,7 +1116,16 @@ public final class NativeCompilerValidator {
             Map<String, TypeReference> types
     ) {
         return switch (expression) {
-            case VariableExpression variable -> types.get(variable.name());
+            case BoolLiteral ignored -> new TypeReference("bool", List.of());
+            case IntLiteral ignored -> new TypeReference("int", List.of());
+            case LongLiteral ignored -> new TypeReference("long", List.of());
+            case FloatLiteral ignored -> new TypeReference("float", List.of());
+            case DoubleLiteral ignored -> new TypeReference("double", List.of());
+            case StringLiteral ignored -> new TypeReference("String", List.of());
+            case VariableExpression variable -> {
+                var localType = types.get(variable.name());
+                yield localType == null ? context.constantType(module, variable.name()) : localType;
+            }
             case FunctionCallExpression call -> {
                 var function = context.functionDeclaration(module, call.name(), call.arguments().size());
                 if (function != null) {
@@ -751,6 +1139,7 @@ public final class NativeCompilerValidator {
             case ListLiteral literal -> validationListLiteralType(context, module, literal, types);
             case BlockExpression block -> validationBlockType(context, module, block, types);
             case MethodCallExpression call -> validationMethodCallType(context, module, call, types);
+            case ReduceExpression reduce -> validationExpressionType(context, module, reduce.initial(), types);
             default -> null;
         };
     }
@@ -801,6 +1190,10 @@ public final class NativeCompilerValidator {
                 return new TypeReference("Result", List.of(payload));
             }
         }
+        var typeName = unqualified(literal.typeName());
+        if (context.hasConstructor(module, typeName)) {
+            return new TypeReference("Result", List.of(new TypeReference(literal.typeName(), List.of())));
+        }
         return new TypeReference(literal.typeName(), List.of());
     }
 
@@ -825,17 +1218,24 @@ public final class NativeCompilerValidator {
             BinaryExpression binary,
             Map<String, TypeReference> types
     ) {
+        var receiverType = validationExpressionType(context, module, binary.left(), types);
+        if (binary.operator().equals("+") && receiverType != null) {
+            var receiverName = unqualified(receiverType.name());
+            if (receiverName.equals("Seq") || receiverName.equals("List")) {
+                return receiverType;
+            }
+            if (receiverName.equals("String")) {
+                return new TypeReference("String", List.of());
+            }
+        }
         if (!binary.operator().equals("|") || !(binary.right() instanceof LambdaExpression mapper)) {
             return null;
         }
-        var receiverType = validationExpressionType(context, module, binary.left(), types);
         if (receiverType == null
-                || !(unqualified(receiverType.name()).equals("List")
-                || unqualified(receiverType.name()).equals("Seq"))
-                || receiverType.arguments().size() != 1) {
+                || validationIterableElementType(receiverType) == null) {
             return null;
         }
-        var mapperTypes = validationLambdaTypes(mapper, receiverType.arguments().getFirst(), types);
+        var mapperTypes = validationLambdaTypes(mapper, validationIterableElementType(receiverType), types);
         var mappedType = validationExpressionType(context, module, mapper.body(), mapperTypes);
         return mappedType == null ? null : new TypeReference("Seq", List.of(mappedType));
     }
@@ -869,6 +1269,9 @@ public final class NativeCompilerValidator {
             return null;
         }
         var receiverName = unqualified(receiverType.name());
+        if (receiverName.equals("String") && call.name().equals("to_int") && call.arguments().isEmpty()) {
+            return new TypeReference("Result", List.of(new TypeReference("int", List.of())));
+        }
         if (receiverName.equals("Seq") && call.name().equals("as_list") && call.arguments().isEmpty()) {
             return new TypeReference("List", receiverType.arguments());
         }
@@ -893,6 +1296,51 @@ public final class NativeCompilerValidator {
             return new TypeReference("Seq", List.of(mapperReturnType));
         }
         return null;
+    }
+
+    private TypeReference validationIterableElementType(TypeReference receiverType) {
+        if (receiverType == null) {
+            return null;
+        }
+        var receiverName = unqualified(receiverType.name());
+        if ((receiverName.equals("List") || receiverName.equals("Seq"))
+                && receiverType.arguments().size() == 1) {
+            return receiverType.arguments().getFirst();
+        }
+        if (receiverName.equals("String")) {
+            return new TypeReference("String", List.of());
+        }
+        return null;
+    }
+
+    private void validateSequenceConcatOperands(
+            Context context,
+            ParsedModule module,
+            BinaryExpression binary,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!binary.operator().equals("+")) {
+            return;
+        }
+        var leftType = validationExpressionType(context, module, binary.left(), types);
+        if (leftType == null || !unqualified(leftType.name()).equals("Seq")) {
+            return;
+        }
+        var rightType = validationExpressionType(context, module, binary.right(), types);
+        if (rightType == null || Set.of("Seq", "Cons", "End").contains(unqualified(rightType.name()))) {
+            return;
+        }
+        if (leftType.arguments().size() == 1
+                && compatibleFunctionArgument(leftType.arguments().getFirst(), rightType)) {
+            return;
+        }
+        errors.add(error(
+                module,
+                binary.location(),
+                "Operator `+` on `" + displayType(leftType) + "` requires another `Seq` or a compatible element, "
+                        + "but the right operand has type `" + displayType(rightType) + "`."
+        ));
     }
 
     private Map<String, TypeReference> validationLambdaTypes(
@@ -1827,6 +2275,8 @@ public final class NativeCompilerValidator {
     private final class Context {
         private final List<ParsedModule> modules;
         private final Set<String> libraryModules;
+        private final List<CompiledModule> linkedModules;
+        private final List<ParsedModule> previouslyValidatedModules;
         private final Map<ParsedModule, Set<String>> symbolsByModule = new LinkedHashMap<>();
         private final Map<ParsedModule, Set<String>> typesByModule = new LinkedHashMap<>();
         private final Map<ParsedModule, Map<String, AnnotationDeclaration>> annotationsByModule = new LinkedHashMap<>();
@@ -1834,10 +2284,17 @@ public final class NativeCompilerValidator {
         private Context(List<ParsedModule> modules, List<String> libraryModules) {
             this.modules = modules;
             this.libraryModules = new LinkedHashSet<>(libraryModules);
+            this.linkedModules = NativeLinkedProgramIO.linkedModules();
+            this.previouslyValidatedModules = List.copyOf(VALIDATED_MODULES.get().values());
             for (var module : modules) {
                 symbolsByModule.put(module, parsedSymbols(module));
                 typesByModule.put(module, parsedTypes(module));
                 annotationsByModule.put(module, parsedAnnotations(module));
+            }
+            for (var module : previouslyValidatedModules) {
+                symbolsByModule.putIfAbsent(module, parsedSymbols(module));
+                typesByModule.putIfAbsent(module, parsedTypes(module));
+                annotationsByModule.putIfAbsent(module, parsedAnnotations(module));
             }
         }
 
@@ -1849,14 +2306,35 @@ public final class NativeCompilerValidator {
         }
 
         private boolean symbolExists(String path, String name) {
-            if (stdlibImport(path)) {
-                return true;
-            }
             var module = parsedModule(path);
             if (module != null) {
                 return symbolsByModule.get(module).contains(name);
             }
+            var linked = linkedModule(path);
+            if (linked != null) {
+                return linkedSymbolExists(linked, name);
+            }
+            if (stdlibImport(path)) {
+                return true;
+            }
             return libraryModule(path);
+        }
+
+        private boolean linkedSymbolExists(CompiledModule module, String name) {
+            if (module.types().containsKey(name)
+                    || module.visiblePrimitiveBackedTypes().containsKey(name)
+                    || module.annotations().containsKey(name)) {
+                return true;
+            }
+            for (var function : module.functions()) {
+                if (function.name().equals(name)
+                        || function.name().equals("__capy_schema_type|" + name)
+                        || function.name().equals("__capy_schema_primitive|" + name)
+                        || function.name().equals("__capy_constructor|" + name)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private boolean typeExists(String name) {
@@ -1913,6 +2391,78 @@ public final class NativeCompilerValidator {
             return false;
         }
 
+        private TypeReference constantType(ParsedModule module, String name) {
+            var local = localConstantType(module, name);
+            if (local != null) {
+                return local;
+            }
+            TypeReference match = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(name))
+                        || declaration.excludedNames().contains(name)) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule == null) {
+                    continue;
+                }
+                var imported = localConstantType(importedModule, name);
+                if (imported == null) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = imported;
+            }
+            return match;
+        }
+
+        private TypeReference localConstantType(ParsedModule module, String name) {
+            for (var definition : module.definitions()) {
+                if (definition instanceof ConstantDefinition constant
+                        && constant.constant().name().equals(name)) {
+                    return constant.constant().typeReference();
+                }
+            }
+            return null;
+        }
+
+        private boolean hasConstructor(ParsedModule module, String typeName) {
+            var constructorName = "__capy_constructor|" + typeName;
+            if (hasLocalFunction(module, constructorName)) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(typeName))
+                        || declaration.excludedNames().contains(typeName)) {
+                    continue;
+                }
+                var parsed = parsedModule(declaration.modulePath());
+                if (parsed != null && hasLocalFunction(parsed, constructorName)) {
+                    return true;
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked != null && linked.functions().stream()
+                        .anyMatch(function -> function.name().equals(constructorName))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean hasLocalFunction(ParsedModule module, String name) {
+            for (var definition : module.definitions()) {
+                if (definition instanceof FunctionDefinition function
+                        && function.function().name().equals(name)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private FunctionDeclaration functionDeclaration(ParsedModule module, String name, int arity) {
             var local = localFunction(module, name, arity);
             if (local != null) {
@@ -1941,6 +2491,119 @@ public final class NativeCompilerValidator {
             return match;
         }
 
+        private Set<String> extensionMethodReceiverTypes(
+                ParsedModule module,
+                String methodName,
+                int arity
+        ) {
+            var receiverTypes = new LinkedHashSet<String>();
+            collectParsedExtensionMethodReceiverTypes(module, null, methodName, arity, receiverTypes);
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule != null) {
+                    collectParsedExtensionMethodReceiverTypes(
+                            importedModule,
+                            declaration,
+                            methodName,
+                            arity,
+                            receiverTypes
+                    );
+                }
+                var linkedModule = linkedModule(declaration.modulePath());
+                if (linkedModule != null) {
+                    collectLinkedExtensionMethodReceiverTypes(
+                            declaration,
+                            linkedModule,
+                            methodName,
+                            arity,
+                            receiverTypes
+                    );
+                }
+            }
+            return receiverTypes;
+        }
+
+        private void collectParsedExtensionMethodReceiverTypes(
+                ParsedModule module,
+                ImportDeclaration declaration,
+                String methodName,
+                int arity,
+                Set<String> receiverTypes
+        ) {
+            for (var definition : module.definitions()) {
+                if (!(definition instanceof FunctionDefinition function)
+                        || function.function().parameters().size() != arity
+                        || (declaration != null && function.function().visibility().equals("private"))) {
+                    continue;
+                }
+                var receiverType = extensionMethodReceiverType(function.function().name(), methodName);
+                if (receiverType != null && (declaration == null || importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                ))) {
+                    receiverTypes.add(receiverType);
+                }
+            }
+        }
+
+        private void collectLinkedExtensionMethodReceiverTypes(
+                ImportDeclaration declaration,
+                CompiledModule module,
+                String methodName,
+                int arity,
+                Set<String> receiverTypes
+        ) {
+            for (var function : module.functions()) {
+                if (function.parameters().size() != arity || function.visibility().equals("private")) {
+                    continue;
+                }
+                var receiverType = extensionMethodReceiverType(function.name(), methodName);
+                if (receiverType != null && importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                )) {
+                    receiverTypes.add(receiverType);
+                }
+            }
+        }
+
+        private boolean importedExtensionMethodVisible(
+                ImportDeclaration declaration,
+                String receiverType,
+                String methodName
+        ) {
+            return declaration.wildcard()
+                    ? !declaration.excludedNames().contains(methodName)
+                    : declaration.importedNames().contains(receiverType);
+        }
+
+        private String extensionMethodReceiverType(String functionName, String methodName) {
+            var suffix = "." + methodName;
+            var quotedSuffix = ".`" + methodName + "`";
+            if (functionName.endsWith(suffix)) {
+                return extensionMethodReceiverBaseType(
+                        functionName.substring(0, functionName.length() - suffix.length())
+                );
+            }
+            if (functionName.endsWith(quotedSuffix)) {
+                return extensionMethodReceiverBaseType(
+                        functionName.substring(0, functionName.length() - quotedSuffix.length())
+                );
+            }
+            return null;
+        }
+
+        private String extensionMethodReceiverBaseType(String name) {
+            var typeName = unqualified(name);
+            var genericStart = typeName.indexOf('[');
+            return genericStart < 0 ? typeName : typeName.substring(0, genericStart);
+        }
+
         private Set<Integer> standardFunctionArities(ParsedModule module, String name) {
             if (moduleHasFunctionOrConstant(module, name)) {
                 return null;
@@ -1964,11 +2627,15 @@ public final class NativeCompilerValidator {
         }
 
         private DataDeclaration dataDeclaration(ParsedModule module, String name) {
-            var local = localDataDeclaration(module, unqualified(name));
-            if (local != null) {
-                return local;
+            var owner = dataDeclarationOwner(module, name);
+            return owner == null ? null : localDataDeclaration(owner, unqualified(name));
+        }
+
+        private ParsedModule dataDeclarationOwner(ParsedModule module, String name) {
+            if (localDataDeclaration(module, unqualified(name)) != null) {
+                return module;
             }
-            DataDeclaration match = null;
+            ParsedModule match = null;
             for (var declaration : module.imports()) {
                 if (declaration.qualified()
                         || (!declaration.wildcard() && !declaration.importedNames().contains(unqualified(name)))
@@ -1986,7 +2653,7 @@ public final class NativeCompilerValidator {
                 if (match != null) {
                     return null;
                 }
-                match = imported;
+                match = importedModule;
             }
             return match;
         }
@@ -1995,6 +2662,180 @@ public final class NativeCompilerValidator {
             for (var definition : module.definitions()) {
                 if (definition instanceof DataDeclaration data && data.name().equals(name)) {
                     return data;
+                }
+            }
+            return null;
+        }
+
+        private boolean privateType(ParsedModule module, String name) {
+            var typeName = unqualified(name);
+            if (localTypeVisibility(module, typeName).map("private"::equals).orElse(false)) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(typeName))
+                        || declaration.excludedNames().contains(typeName)) {
+                    continue;
+                }
+                var parsed = parsedModule(declaration.modulePath());
+                if (parsed != null
+                        && localTypeVisibility(parsed, typeName).map("private"::equals).orElse(false)) {
+                    return true;
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked != null && linkedTypeVisibility(linked, typeName).map("private"::equals).orElse(false)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private Optional<String> localTypeVisibility(ParsedModule module, String name) {
+            for (var definition : module.definitions()) {
+                switch (definition) {
+                    case AnnotationDeclaration annotation -> {
+                        if (annotation.name().equals(name)) {
+                            return Optional.of(annotation.visibility());
+                        }
+                    }
+                    case DataDeclaration data -> {
+                        if (data.name().equals(name)) {
+                            return Optional.of(data.visibility());
+                        }
+                    }
+                    case PrimitiveBackedTypeDeclaration primitive -> {
+                        if (primitive.name().equals(name)) {
+                            return Optional.of(primitive.visibility());
+                        }
+                    }
+                    case TypeDeclaration type -> {
+                        if (type.name().equals(name)) {
+                            return Optional.of(type.visibility());
+                        }
+                    }
+                    default -> {
+                    }
+                }
+            }
+            return Optional.empty();
+        }
+
+        private Optional<String> linkedTypeVisibility(CompiledModule module, String name) {
+            var primitive = module.visiblePrimitiveBackedTypes().get(name);
+            if (primitive != null) {
+                return Optional.of(primitive.visibility());
+            }
+            var schemaName = "__capy_schema_visibility|" + name;
+            for (var function : module.functions()) {
+                if (function.name().equals(schemaName)
+                        && function.body() instanceof CompiledExpression.CompiledStringLiteral literal) {
+                    return Optional.of(literal.value());
+                }
+            }
+            return Optional.empty();
+        }
+
+        private List<LinkedDataField> linkedDataFields(ParsedModule module, String name) {
+            var typeName = unqualified(name);
+            CompiledModule owner = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(typeName))
+                        || declaration.excludedNames().contains(typeName)) {
+                    continue;
+                }
+                var imported = linkedModule(declaration.modulePath());
+                if (imported == null || !hasLinkedSchema(imported, "__capy_schema_type|" + typeName)) {
+                    continue;
+                }
+                if (owner != null) {
+                    return null;
+                }
+                owner = imported;
+            }
+            return owner == null ? null : linkedDataFields(owner, typeName);
+        }
+
+        private List<LinkedDataField> linkedDataFields(CompiledModule module, String typeName) {
+            var fields = new java.util.TreeMap<Integer, LinkedDataField>();
+            var prefix = "__capy_schema_field|" + typeName + "|";
+            for (var function : module.functions()) {
+                if (!function.name().startsWith(prefix)
+                        || !(function.body() instanceof CompiledExpression.CompiledStringLiteral schema)) {
+                    continue;
+                }
+                var separator = schema.value().indexOf('|');
+                if (separator < 0) {
+                    continue;
+                }
+                try {
+                    var index = Integer.parseInt(function.name().substring(prefix.length()));
+                    fields.put(index, new LinkedDataField(
+                            schema.value().substring(0, separator),
+                            new TypeReference(schema.value().substring(separator + 1), List.of())
+                    ));
+                } catch (NumberFormatException ignored) {
+                    // Ignore malformed linked schema entries; linked JSON compatibility checks handle them.
+                }
+            }
+            return fields.isEmpty() ? null : List.copyOf(fields.values());
+        }
+
+        private boolean hasLinkedSchema(CompiledModule module, String name) {
+            return module.functions().stream().anyMatch(function -> function.name().equals(name));
+        }
+
+        private CompiledModule linkedModule(String path) {
+            for (var module : linkedModules) {
+                if (linkedModuleMatches(path, module)) {
+                    return module;
+                }
+            }
+            return stdlibImport(path)
+                    ? bundledModule(normalizeImportModulePath(path)).orElse(null)
+                    : null;
+        }
+
+        private boolean linkedModuleMatches(String path, CompiledModule module) {
+            var modulePath = module.path().isBlank() ? module.name() : module.path() + "/" + module.name();
+            return path.equals(module.name())
+                    || normalizeModulePath(path).equals(modulePath)
+                    || normalizeImportModulePath(path).equals(modulePath);
+        }
+
+        private PrimitiveBackedTypeDeclaration primitiveBackedTypeDeclaration(ParsedModule module, String name) {
+            var local = localPrimitiveBackedTypeDeclaration(module, unqualified(name));
+            if (local != null) {
+                return local;
+            }
+            PrimitiveBackedTypeDeclaration match = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(unqualified(name)))
+                        || declaration.excludedNames().contains(unqualified(name))) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule == null) {
+                    continue;
+                }
+                var imported = localPrimitiveBackedTypeDeclaration(importedModule, unqualified(name));
+                if (imported == null) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = imported;
+            }
+            return match;
+        }
+
+        private PrimitiveBackedTypeDeclaration localPrimitiveBackedTypeDeclaration(ParsedModule module, String name) {
+            for (var definition : module.definitions()) {
+                if (definition instanceof PrimitiveBackedTypeDeclaration primitive && primitive.name().equals(name)) {
+                    return primitive;
                 }
             }
             return null;
@@ -2048,6 +2889,13 @@ public final class NativeCompilerValidator {
             for (var module : modules) {
                 if (parsedModuleMatches(path, module)) {
                     return module;
+                }
+            }
+            if (libraryModule(path)) {
+                for (var module : previouslyValidatedModules) {
+                    if (parsedModuleMatches(path, module)) {
+                        return module;
+                    }
                 }
             }
             return null;

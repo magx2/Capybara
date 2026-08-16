@@ -27,6 +27,159 @@ import static org.assertj.core.api.Assertions.fail;
 
 class CompilationTest {
     @Test
+    void shouldRejectExtensionMethodCalledOnWrappedReceiverDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                extensionMethodReceiverModules("""
+                        const K1234: Result[Kaprekar] = Success { Kaprekar { 1234 } }
+
+                        private fun test(name: String, body: () => any): int = 0
+
+                        fun broken(): int = test('Kaprekar.diff()', () => K1234.diff())
+                        """),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `diff` requires receiver type `Kaprekar`, but the receiver has type "
+                        + "`Result[Kaprekar]`; extract a `Kaprekar` value before calling the method.");
+    }
+
+    @Test
+    void shouldAllowExtensionMethodCalledOnItsDeclaredReceiver() {
+        compileProgram(extensionMethodReceiverModules("""
+                fun valid(value: Kaprekar): Kaprekar = value.diff()
+                """));
+    }
+
+    @Test
+    void shouldGenerateMappedExtensionCallOnWrappedConstantForEveryBackend() {
+        var program = compileProgram(extensionMethodReceiverModules("""
+                const K1234: Result[Kaprekar] = Success { Kaprekar { 1234 } }
+
+                fun mapped(): Result[Kaprekar] = K1234.map(k => k.diff())
+                """));
+
+        var javaCode = String.join("\n", JavaGenerator.javaGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .toList());
+        assertThat(javaCode)
+                .contains("Kaprekar_diff__")
+                .doesNotContain("k.diff(");
+
+        var javaScriptCode = String.join("\n", JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .toList());
+        assertThat(javaScriptCode)
+                .contains("__capy_result_map(K1234")
+                .contains("Kaprekar_diff__")
+                .doesNotContain("k.diff(");
+
+        var pythonCode = String.join("\n", PythonGenerator.pythonGenerator(program).modules().stream()
+                .map(module -> module.code())
+                .toList());
+        assertThat(pythonCode)
+                .contains("__capy_result_map(K1234")
+                .contains("Kaprekar_diff__")
+                .doesNotContain("k.diff(");
+    }
+
+    @Test
+    void shouldKeepPrimitiveConstructionWithoutValidatorUnwrapped() {
+        compileProgram(List.of(rawModule("TimeUnit", "", """
+                type second -> long
+
+                fun second.same(): second = this
+
+                fun duration(): second = second { 1L }.same()
+                """)));
+    }
+
+    private static List<RawModule> extensionMethodReceiverModules(String consumerSource) {
+        return List.of(
+                rawModule("Kaprekar", "", """
+                        data Kaprekar { value: int }
+
+                        fun Kaprekar.diff(): Kaprekar = this
+                        """),
+                rawModule("Kaprekar.test", "", """
+                        from /Kaprekar import { Kaprekar }
+
+                        data Error { kind: String, message: String }
+                        data Success[T] { value: T }
+                        union Result[T] = Success[T] | Error
+
+                        %s
+                        """.formatted(consumerSource))
+        );
+    }
+
+    @Test
+    void shouldRejectPrivateTypesInPublicFunctionSignatures() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Visibility", "", """
+                        private data Hidden { value: int }
+
+                        fun accepts_hidden(values: List[Hidden]): int = 0
+
+                        fun returns_hidden(): Result[Hidden] = Success { Hidden { 1 } }
+
+                        fun infers_hidden() = Hidden { 2 }
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Public function `accepts_hidden` exposes private type `Hidden` in its parameter `values`.")
+                .contains("Public function `returns_hidden` exposes private type `Hidden` in its return type.")
+                .contains("Public function `infers_hidden` exposes private type `Hidden` in its return type.");
+    }
+
+    @Test
+    void shouldAllowPrivateTypesInPrivateFunctionSignatures() {
+        compileProgram(List.of(rawModule("Visibility", "", """
+                private data Hidden { value: int }
+
+                private fun accepts_hidden(values: List[Hidden]): int = 0
+
+                private fun returns_hidden(): Result[Hidden] = Success { Hidden { 1 } }
+
+                private fun infers_hidden() = Hidden { 2 }
+                """)));
+    }
+
+    @Test
+    void shouldRejectFunctionCallAsPipeRightOperandDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("main", "", """
+                        fun broken(value: Result[int]): bool = value | diff()
+
+                        private fun diff(): int = 1
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Operator `|` requires a lambda or function reference on its right-hand side; "
+                        + "found a function call.");
+    }
+
+    @Test
+    void shouldContinueToAllowBooleanOrWithoutCallableRightOperand() {
+        compileProgram(List.of(rawModule("main", "", """
+                fun either(left: bool, right: bool): bool = left | right
+                """)));
+    }
+
+    @Test
     void shouldCompileAndGenerateRootModulesWithAbsoluteImports() {
         var program = compileProgram(List.of(
                 rawModule("Support", "", """
@@ -118,6 +271,88 @@ class CompilationTest {
         ).unsafeRun())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("main.cfun:1:0: ParserError");
+    }
+
+    @Test
+    void shouldRejectUnknownExplicitStandardLibraryImports() {
+        var libraries = compileProgram(List.of(rawModule("Primitives", "/capy/lang", """
+                const ZERO_DIGIT: int = 0
+                """)));
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("main", "", """
+                        from /capy/lang/Primitives import { ZERO_DIGIT, ONE }
+
+                        fun zero(): int = ZERO_DIGIT
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Module `/capy/lang/Primitives` does not export `ONE`.")
+                .doesNotContain("does not export `ZERO_DIGIT`");
+    }
+
+    @Test
+    void shouldGenerateImportedPrimitiveConstantsForEveryBackend() {
+        var libraries = compileProgram(List.of(rawModule("Primitives", "/capy/lang", """
+                type digit -> int
+                const ONE_DIGIT: digit = digit! { 1 }
+                const NINE_DIGIT: digit = digit! { 9 }
+                const MAX_INT_VALUE: int = 2147483647
+                const MAX_LONG_VALUE: long = 9223372036854775807L
+                """)));
+        var compilation = CapybaraCompiler.compile(
+                List.of(rawModule("main", "", """
+                from /capy/lang/Primitives import { ONE_DIGIT, NINE_DIGIT, MAX_INT_VALUE, MAX_LONG_VALUE }
+
+                fun digits(): List[digit] = [ONE_DIGIT, NINE_DIGIT]
+                fun max_int(): int = MAX_INT_VALUE
+                fun max_long(): long = MAX_LONG_VALUE
+                """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+        if (compilation instanceof Either.Right<?, ?> error) {
+            fail(error.value().toString());
+        }
+        var program = (CompiledProgram) ((Either.Left<?, ?>) compilation).value();
+
+        var javaCode = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(javaCode)
+                .contains("return java.util.List.of(1, 9);")
+                .contains("return 2147483647;")
+                .contains("return 9223372036854775807L;")
+                .doesNotContain("java.util.List.of(ONE_DIGIT, NINE_DIGIT)");
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("main.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(javaScriptCode)
+                .contains("return [1, 9];")
+                .contains("return 2147483647;")
+                .contains("return 9223372036854775807n;")
+                .doesNotContain("return [ONE_DIGIT, NINE_DIGIT];");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("main.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonCode)
+                .contains("return [1, 9]")
+                .contains("return 2147483647")
+                .contains("return 9223372036854775807")
+                .doesNotContain("return [ONE_DIGIT, NINE_DIGIT]");
     }
 
     @Test
@@ -938,10 +1173,10 @@ class CompilationTest {
                 fun Digits.diff(): Digits =
                     let ordered = this
                     let diff: int = ordered.to_int() - ordered.to_int()
-                    let a = diff / 1000
-                    let b = (diff / 100) % 10
-                    let c = (diff / 10) % 10
-                    let d = diff % 10
+                    let a: digit = digit! { diff / 1000 }
+                    let b: digit = digit! { (diff / 100) % 10 }
+                    let c: digit = digit! { (diff / 10) % 10 }
+                    let d: digit = digit! { diff % 10 }
                     Digits! { a, b, c, d }
                 """;
         var program = compileProgram(List.of(rawModule("PrimitiveData", "/sample/app", source, SourceKind.FUNCTIONAL)));
@@ -955,6 +1190,143 @@ class CompilationTest {
         assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
         assertThat(code).contains("__capy_data_field(value, \"first\")");
         assertThat(code).contains("__capy_list_get_optional(values, 0)");
+    }
+
+    @Test
+    void shouldRejectPrimitiveBackingValuesPassedToImportedDataFields() {
+        var result = CapybaraCompiler.compile(
+                primitiveBackedDataModules("""
+                        from /support/Result import { Result }
+                        from /Kaprekar import { Kaprekar }
+
+                        const K1234: Result[Kaprekar] = Kaprekar { 1, 2, 3, 4 }
+                        """),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = ((Either.Right<?, ?>) result).value().toString();
+        assertThat(errors)
+                .contains("Field `first` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("Field `second` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("construct `digit` explicitly and unwrap its `Result` before constructing `Kaprekar`");
+    }
+
+    @Test
+    void shouldRejectPrimitiveBackingValuesPassedToUnsafeDataFields() {
+        var result = CapybaraCompiler.compile(
+                primitiveBackedDataModules("""
+                        from /Kaprekar import { Kaprekar }
+
+                        const KAPREKAR: Kaprekar = Kaprekar! { 6, 1, 7, 4 }
+                        """),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Field `first` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("Field `fourth` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("construct `digit` explicitly and unwrap its `Result` before constructing `Kaprekar`");
+    }
+
+    @Test
+    void shouldRejectPrimitiveBackingValuesPassedToDataFieldsFromCompiledLibraries() {
+        var libraries = compileProgram(primitiveBackedLibraryModules());
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Kaprekar.test", "", """
+                        from /support/Result import { Result }
+                        from /Kaprekar import { Kaprekar }
+
+                        const K1234: Result[Kaprekar] = Kaprekar { 1, 2, 3, 4 }
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Field `first` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("Field `fourth` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("construct `digit` explicitly and unwrap its `Result` before constructing `Kaprekar`");
+    }
+
+    @Test
+    void shouldRejectPrimitiveBackingValuesPassedToUnsafeDataFieldsFromCompiledLibraries() {
+        var libraries = compileProgram(primitiveBackedLibraryModules());
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Kaprekar.test", "", """
+                        from /Kaprekar import { Kaprekar }
+
+                        const KAPREKAR: Kaprekar = Kaprekar! { 6, 1, 7, 4 }
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Field `first` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("Field `fourth` of data `Kaprekar` has type `int`, but requires primitive-backed type `digit`")
+                .contains("construct `digit` explicitly and unwrap its `Result` before constructing `Kaprekar`");
+    }
+
+    @Test
+    void shouldAcceptConstructedPrimitiveBackedValuesInDataFields() {
+        compileProgram(primitiveBackedDataModules("""
+                from /support/Result import { Result }
+                from /support/Digit import { digit }
+                from /Kaprekar import { Kaprekar }
+
+                fun k1234(): Result[Kaprekar] =
+                    let first: digit <- digit { 1 }
+                    let second: digit <- digit { 2 }
+                    let third: digit <- digit { 3 }
+                    let fourth: digit <- digit { 4 }
+                    Kaprekar { first, second, third, fourth }
+                """));
+    }
+
+    private static List<RawModule> primitiveBackedDataModules(String consumerSource) {
+        var modules = new java.util.ArrayList<>(primitiveBackedLibraryModules());
+        modules.add(rawModule("Kaprekar.test", "", consumerSource));
+        return modules;
+    }
+
+    private static List<RawModule> primitiveBackedLibraryModules() {
+        return List.of(
+                rawModule("Result", "/support", """
+                        data Error { kind: String, message: String }
+                        data Success[T] { value: T }
+                        union Result[T] = Success[T] | Error
+                        """),
+                rawModule("Digit", "/support", """
+                        from /support/Result import { Success }
+
+                        type digit -> int with constructor {
+                            Success { value }
+                        }
+                        """),
+                rawModule("Kaprekar", "", """
+                        from /support/Result import { Success }
+                        from /support/Digit import { digit }
+
+                        data Kaprekar {
+                            first: digit,
+                            second: digit,
+                            third: digit,
+                            fourth: digit
+                        } with constructor {
+                            Success { * { first, second, third, fourth } }
+                        }
+                        """)
+        );
     }
 
     @Test

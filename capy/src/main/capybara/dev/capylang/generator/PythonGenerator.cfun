@@ -1730,6 +1730,9 @@ private fun python_result_method_call(call: CompiledMethodCallExpression, receiv
     if call.name == "map" | call.name == "flat_map"
     then python_result_pipe_receiver_type(receiverType)
         & python_single_callable_argument(call.arguments)
+    else if call.name == "recover"
+    then python_result_pipe_receiver_type(receiverType)
+        & python_single_callable_argument(call.arguments)
     else if call.name == "or" | call.name == "or_else"
     then (python_result_pipe_receiver_type(receiverType) | python_option_pipe_receiver_type(receiverType))
         & python_one_method_argument(call.arguments)
@@ -1740,7 +1743,14 @@ private fun python_result_method_call(call: CompiledMethodCallExpression, receiv
 
 /// Emits Python code for result method call.
 private fun python_result_method_call_code(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if call.name == "or" | call.name == "or_else"
+    if call.name == "recover"
+    then
+        let preservesResult = if python_result_recover_preserves_result(call, env, module, allModules) then "True" else "False"
+        "__capy_result_recover("
+            + python_expression_code(call.receiver, env, module, allModules)
+            + ", " + python_first_method_argument_code(call.arguments, env, module, allModules)
+            + ", " + preservesResult + ")"
+    else if call.name == "or" | call.name == "or_else"
     then python_result_or_option_helper(call.name, python_expression_type(call.receiver, env, module, allModules))
         + "("
         + python_expression_code(call.receiver, env, module, allModules)
@@ -1772,6 +1782,13 @@ private fun python_result_method_helper(name: String): String =
     if name == "flat_map"
     then "__capy_result_flat_map"
     else "__capy_result_map"
+
+/// Checks which Result.recover overload was selected from the recovery lambda result.
+private fun python_result_recover_preserves_result(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match python_first_method_argument(call.arguments) with
+    case CompiledLambdaExpression lambda ->
+        python_type_unqualified_name(python_expression_type(lambda.body, python_lambda_bindings_with_single_type(lambda.parameters, "Error") + env, module, allModules)) == python_result_type()
+    case _ -> false
 
 /// Checks whether an unknown receiver needs runtime map or flat-map dispatch.
 private fun python_dynamic_map_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
@@ -3574,7 +3591,9 @@ private fun python_imported_stdlib_constant(name: String, imports: List[Compiled
 /// Looks up optional metadata for standard-library constant.
 private fun python_stdlib_constant(name: String, modulePath: String): /capy/lang/Option[PythonStdlibValue] =
     let path = python_normalize_import_module_path(modulePath)
-    if path == "capy/date_time/Date" & name == "UNIX_DATE"
+    if path == "capy/lang/Primitives"
+    then python_primitive_stdlib_constant(name)
+    else if path == "capy/date_time/Date" & name == "UNIX_DATE"
     then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_date_unix_date()", typeName: "Date" } }
     else if path == "capy/date_time/Time" & name == "MIDNIGHT"
     then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_time_midnight()", typeName: "Time" } }
@@ -3583,6 +3602,36 @@ private fun python_stdlib_constant(name: String, modulePath: String): /capy/lang
     else if path == "capy/date_time/Duration" & name == "ZERO"
     then /capy/lang/Option.Some { PythonStdlibValue { pythonName: "__capy_duration_zero()", typeName: "Duration" } }
     else /capy/lang/Option.None {}
+
+/// Emits values for constants declared by the primitive standard-library module.
+private fun python_primitive_stdlib_constant(name: String): /capy/lang/Option[PythonStdlibValue] =
+    if name == "MAX_INT_VALUE" then python_stdlib_value("2147483647", "int")
+    else if name == "MIN_INT_VALUE" then python_stdlib_value("-2147483648", "int")
+    else if name == "MAX_LONG_VALUE" then python_stdlib_value("9223372036854775807", "long")
+    else if name == "MIN_LONG_VALUE" then python_stdlib_value("-9223372036854775808", "long")
+    else if name == "FLOAT_BOUND" then python_stdlib_value("16777216", "long")
+    else if name == "DOUBLE_BOUND" then python_stdlib_value("9007199254740992", "long")
+    else if name == "FLOAT_BOUND_AS_FLOAT" then python_stdlib_value("16777216.0", "float")
+    else if name == "DOUBLE_BOUND_AS_DOUBLE" then python_stdlib_value("9007199254740992.0", "double")
+    else python_digit_stdlib_constant(name)
+
+/// Emits one of the ten primitive-backed digit constants for Python.
+private fun python_digit_stdlib_constant(name: String): /capy/lang/Option[PythonStdlibValue] =
+    if name == "ZERO_DIGIT" then python_stdlib_value("0", "digit")
+    else if name == "ONE_DIGIT" then python_stdlib_value("1", "digit")
+    else if name == "TWO_DIGIT" then python_stdlib_value("2", "digit")
+    else if name == "THREE_DIGIT" then python_stdlib_value("3", "digit")
+    else if name == "FOUR_DIGIT" then python_stdlib_value("4", "digit")
+    else if name == "FIVE_DIGIT" then python_stdlib_value("5", "digit")
+    else if name == "SIX_DIGIT" then python_stdlib_value("6", "digit")
+    else if name == "SEVEN_DIGIT" then python_stdlib_value("7", "digit")
+    else if name == "EIGHT_DIGIT" then python_stdlib_value("8", "digit")
+    else if name == "NINE_DIGIT" then python_stdlib_value("9", "digit")
+    else /capy/lang/Option.None {}
+
+/// Wraps Python code and type metadata for a standard-library constant.
+private fun python_stdlib_value(pythonName: String, typeName: String): /capy/lang/Option[PythonStdlibValue] =
+    /capy/lang/Option.Some { PythonStdlibValue { pythonName: pythonName, typeName: typeName } }
 
 /// Computes the Python type for field access.
 private fun python_field_access_type(access: CompiledFieldAccessExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3739,7 +3788,7 @@ private fun python_function_name_expression_type(name: String, module: CompiledM
 
 /// Computes the Python type for runtime function.
 private fun python_runtime_function_type(name: String): String =
-    if name == "assert_that" | name == "assert_all"
+    if name == "assert_that" | name == "assert_all" | name == "fail"
     then python_assert_type()
     else if name == "test"
     then python_test_case_type()
@@ -4061,13 +4110,22 @@ private fun python_primitive_backed_method_call_type(call: CompiledMethodCallExp
 
 /// Computes the Python type for result method call.
 private fun python_result_method_call_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if call.name == "or_else"
+    if call.name == "recover"
+    then python_result_recover_method_type(call, env, module, allModules)
+    else if call.name == "or_else"
     then python_first_method_argument_type(call.arguments, env, module, allModules)
     else if call.name == "reduce" | call.name == "reduce_left"
     then python_unknown_type()
     else if python_option_pipe_receiver_type(python_expression_type(call.receiver, env, module, allModules))
     then python_option_type()
     else python_result_type()
+
+/// Computes the return type selected by Result.recover's overload.
+private fun python_result_recover_method_type(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_first_method_argument(call.arguments) with
+    case CompiledLambdaExpression lambda ->
+        python_expression_type(lambda.body, python_lambda_bindings_with_single_type(lambda.parameters, "Error") + env, module, allModules)
+    case _ -> python_unknown_type()
 
 /// Infers the expression type for data literal.
 private fun python_data_literal_expression_type(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4178,6 +4236,7 @@ private fun python_callable_return_type(typeName: String): String =
 /// Computes the Python type for result payload.
 private fun python_result_payload_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
+    case CompiledVariableExpression variable -> python_result_payload_type_from_variable(variable.name, module, allModules)
     case CompiledBinaryExpression binary -> python_result_payload_type_from_binary(binary, env, module, allModules)
     case CompiledFunctionCallExpression call -> python_result_payload_type_from_function_call(call.name, module, allModules)
     case CompiledMethodCallExpression call -> python_result_payload_type_from_method_call(call, env, module, allModules)
@@ -4187,6 +4246,15 @@ private fun python_result_payload_type(expression: CompiledExpression, env: List
     case CompiledBlockExpression block -> python_result_payload_type(block.result, python_block_env(block.bindings, env, module, allModules), module, allModules)
     case CompiledReduceExpression reduce -> python_result_payload_type(reduce.initial, env, module, allModules)
     case _ -> python_unknown_type()
+
+/// Computes the Result payload retained by a local or imported constant.
+private fun python_result_payload_type_from_variable(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_constant(name, module.functions) with
+    case Some { function } -> python_result_payload_type_from_type_reference(function.returnType)
+    case None ->
+        match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> python_result_payload_type_from_type_reference(binding.function.returnType)
+        case None -> python_unknown_type()
 
 /// Computes the Python type for effect payload.
 private fun python_effect_payload_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4851,6 +4919,7 @@ private fun python_function_call_name(name: String, module: CompiledModule, allM
 private fun python_runtime_function(name: String): bool =
     name == "assert_all"
         | name == "assert_that"
+        | name == "fail"
         | name == "test"
         | name == "test_file"
         | name == "reflection"
@@ -6189,6 +6258,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + python_runtime_data_helpers_code()
     + python_test_runtime_reflection_code(modules)
     + python_test_runtime_effect_helpers_code()
+    + "__all__.extend(['fail', '__capy_result_recover'])" + python_newline()
     + python_test_runtime_gather_code(modules)
 
 /// Emits Python code for test runtime header.
@@ -6612,6 +6682,9 @@ private fun python_test_runtime_assert_code(): String =
     + python_newline()
     + "def assert_that(value):" + python_newline()
     + "    return ValueAssert(value)" + python_newline()
+    + python_newline()
+    + "def fail(message):" + python_newline()
+    + "    return ValueAssert(None, [lambda: dict(result=False, message=str(message), type='fail')])" + python_newline()
     + python_newline()
     + "def assert_all(asserts):" + python_newline()
     + "    assertions = []" + python_newline()
@@ -7400,6 +7473,14 @@ private fun python_value_assert_extra_methods_code(): String =
     + "            return self._append(True, 'Expected ' + repr(self.value) + ' to fail', 'Assert.fails')" + python_newline()
     + "        return self._append(globals()['__capy_deep_equal'](error_value, expected), 'Expected ' + repr(self.value) + ' to fail with ' + repr(expected), 'Assert.fails')" + python_newline()
     + python_newline()
+    + "    def fails_with_kind(self, kind, message=None):" + python_newline()
+    + "        if not _capy_data_is(self.value, 'Error'):" + python_newline()
+    + "            return self._append(False, 'Expected ' + repr(self.value) + ' to fail with kind ' + repr(kind), 'Assert.fails_with_kind')" + python_newline()
+    + "        actual_kind = self.value.get('kind')" + python_newline()
+    + "        actual_message = self.value.get('message')" + python_newline()
+    + "        result = globals()['__capy_deep_equal'](actual_kind, kind) and (message is None or globals()['__capy_deep_equal'](actual_message, message))" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' to fail with kind ' + repr(kind), 'Assert.fails_with_kind')" + python_newline()
+    + python_newline()
 
 /// Emits Python code for runtime data helpers.
 private fun python_runtime_data_helpers_code(): String =
@@ -7645,13 +7726,24 @@ private fun python_test_runtime_set_helpers_code(): String =
     + "    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):" + python_newline()
     + "        return len(left) == len(right) and all(__capy_deep_equal(a, b) for a, b in zip(left, right))" + python_newline()
     + "    if isinstance(left, dict) and isinstance(right, dict):" + python_newline()
-    + "        if set(left.keys()) != set(right.keys()):" + python_newline()
+    + "        left_has_type = '__type' in left" + python_newline()
+    + "        right_has_type = '__type' in right" + python_newline()
+    + "        if left_has_type or right_has_type:" + python_newline()
+    + "            if not left_has_type or not right_has_type or __capy_value_type_name(left['__type']) != __capy_value_type_name(right['__type']):" + python_newline()
+    + "                return False" + python_newline()
+    + "        left_keys = set(left.keys()).difference(['__type'])" + python_newline()
+    + "        right_keys = set(right.keys()).difference(['__type'])" + python_newline()
+    + "        if left_keys != right_keys:" + python_newline()
     + "            return False" + python_newline()
-    + "        return all(__capy_deep_equal(left[key], right[key]) for key in left.keys())" + python_newline()
+    + "        return all(__capy_deep_equal(left[key], right[key]) for key in left_keys)" + python_newline()
     + "    try:" + python_newline()
     + "        return left == right" + python_newline()
     + "    except Exception:" + python_newline()
     + "        return False" + python_newline()
+    + python_newline()
+    + "def __capy_value_type_name(type_name):" + python_newline()
+    + "    normalized = __capy_normalize_type_name(type_name)" + python_newline()
+    + "    return normalized[len('__capy_raw|'):] if normalized.startswith('__capy_raw|') else normalized" + python_newline()
     + python_newline()
     + "def __capy_set_append(values, value):" + python_newline()
     + "    return __capy_set(values).add(value)" + python_newline()
@@ -7987,6 +8079,14 @@ private fun python_test_runtime_result_helpers_code(): String =
     + "        return _unsafe_run(error_mapper(value))" + python_newline()
     + "    return __capy_unsupported('result reduce')" + python_newline()
     + python_newline()
+    + "def __capy_result_recover(value, recover, preserve_success):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Success'):" + python_newline()
+    + "        return value if preserve_success else _capy_data_value(value)" + python_newline()
+    + "    if _capy_data_is(value, 'Error'):" + python_newline()
+    + "        return _unsafe_run(recover(value))" + python_newline()
+    + "    return __capy_unsupported('result recover')" + python_newline()
+    + python_newline()
 
 /// Emits Python code for map and flat-map dispatch when static generic element types are unavailable.
 private fun python_test_runtime_dynamic_map_helpers_code(): String =
@@ -8141,11 +8241,7 @@ private fun python_test_gather_calls_for_module(functions: List[CompiledFunction
 /// Emits Python expression text for test gather call for function.
 private fun python_test_gather_call_for_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function.name == "tests"
-    then if python_test_function_gatherable(function)
-        then if python_module_gatherable(module, allModules)
-            then "    files.extend(_gather_module(" + python_string_literal(python_module_import_name(module)) + "))" + python_newline()
-            else ""
-        else ""
+    then "    files.extend(_gather_module(" + python_string_literal(python_module_import_name(module)) + "))" + python_newline()
     else ""
 
 /// Checks whether module can be included in generated test gathering.

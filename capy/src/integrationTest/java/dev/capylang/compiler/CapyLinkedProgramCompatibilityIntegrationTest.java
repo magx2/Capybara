@@ -43,6 +43,64 @@ class CapyLinkedProgramCompatibilityIntegrationTest {
         assertThat(consumerOutput.resolve("consumer/App.java")).isRegularFile();
     }
 
+    @Test
+    void rejectsPrimitiveValuesForPrimitiveBackedFieldsFromLinkedDataSchemas() throws Exception {
+        var libraryInput = tempDir.resolve("typed-library-input");
+        var libraryOutput = tempDir.resolve("typed-library-output");
+        var libraryLinkedOutput = tempDir.resolve("typed-library-linked");
+        writeSource(libraryInput.resolve("support/Result.cfun"), """
+                data Error { kind: String, message: String }
+                data Success[T] { value: T }
+                union Result[T] = Success[T] | Error
+                """);
+        writeSource(libraryInput.resolve("support/Digit.cfun"), """
+                from /support/Result import { Success }
+
+                type digit -> int with constructor {
+                    Success { value }
+                }
+                """);
+        writeSource(libraryInput.resolve("Kaprekar.cfun"), """
+                from /support/Result import { Success }
+                from /support/Digit import { digit }
+
+                data Kaprekar {
+                    first: digit,
+                    second: digit,
+                    third: digit,
+                    fourth: digit
+                } with constructor {
+                    Success { * { first, second, third, fourth } }
+                }
+                """);
+
+        assertSuccess(runCompileGenerate(
+                libraryInput,
+                libraryOutput,
+                Optional.of(libraryLinkedOutput),
+                Optional.empty()
+        ));
+
+        var consumerInput = tempDir.resolve("typed-consumer-input");
+        var consumerOutput = tempDir.resolve("typed-consumer-output");
+        writeSource(consumerInput.resolve("Kaprekar.test.cfun"), """
+                from /support/Result import { Result }
+                from /Kaprekar import { Kaprekar }
+
+                const K1234: Result[Kaprekar] = Kaprekar { 1, 2, 3, 4 }
+                """);
+
+        var result = runCompileGenerate(
+                consumerInput,
+                consumerOutput,
+                Optional.empty(),
+                Optional.of(libraryLinkedOutput)
+        );
+
+        assertThat(result).isInstanceOf(Program.Failed.class);
+        assertThat(consumerOutput.resolve("Kaprekar_test.java")).doesNotExist();
+    }
+
     private static Program runCompileGenerate(
             Path input,
             Path output,
