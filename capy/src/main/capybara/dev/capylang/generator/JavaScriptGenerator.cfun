@@ -6095,14 +6095,18 @@ private fun java_script_imported_enum_value_binding_in_module(valueName: String,
 
 /// Finds a local function in scope, imports, or compiled modules.
 private fun java_script_find_local_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    match functions[0] with
+    java_script_find_local_function_at(name, functions, 0)
+
+/// Finds a local function from the requested index.
+private fun java_script_find_local_function_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[CompiledFunction] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if function.name == name
         then if !java_script_skip_function(function)
             then /capy/lang/Option.Some { function }
-            else java_script_find_local_function(name, functions[1:])
-        else java_script_find_local_function(name, functions[1:])
+            else java_script_find_local_function_at(name, functions, idx + 1)
+        else java_script_find_local_function_at(name, functions, idx + 1)
 
 /// Finds a function in scope, imports, or compiled modules.
 private fun java_script_find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
@@ -9184,10 +9188,14 @@ private fun java_script_schema_values_for_type(name: String, valuePrefix: String
     java_script_schema_values_for_type_named("__capy_schema_type|" + name, valuePrefix + name + "|", functions)
 
 private fun java_script_schema_values_for_type_named(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction]): JavaScriptSchemaValues =
-    match functions[0] with
+    java_script_schema_values_for_type_named_at(typeSchemaName, valuePrefix, functions, 0)
+
+/// Collects schema values from the requested index.
+private fun java_script_schema_values_for_type_named_at(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction], idx: int): JavaScriptSchemaValues =
+    match functions[idx] with
     case None -> JavaScriptSchemaValues { typeExists: false, values: [] }
     case Some { function } ->
-        let rest = java_script_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
+        let rest = java_script_schema_values_for_type_named_at(typeSchemaName, valuePrefix, functions, idx + 1)
         if java_script_compiled_schema(function)
         then JavaScriptSchemaValues {
             typeExists: if rest.typeExists then true else function.name == typeSchemaName,
@@ -9197,14 +9205,18 @@ private fun java_script_schema_values_for_type_named(typeSchemaName: String, val
 
 /// Computes value metadata for schema values.
 private fun java_script_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
-    match functions[0] with
+    java_script_schema_values_at(prefix, functions, 0)
+
+/// Computes value metadata for schema values from the requested index.
+private fun java_script_schema_values_at(prefix: String, functions: List[CompiledFunction], idx: int): List[String] =
+    match functions[idx] with
     case None -> []
     case Some { function } ->
         if java_script_compiled_schema(function)
         then if java_script_string_has_prefix(function.name, prefix)
-            then [java_script_schema_value(function)] + java_script_schema_values(prefix, functions[1:])
-            else java_script_schema_values(prefix, functions[1:])
-        else java_script_schema_values(prefix, functions[1:])
+            then [java_script_schema_value(function)] + java_script_schema_values_at(prefix, functions, idx + 1)
+            else java_script_schema_values_at(prefix, functions, idx + 1)
+        else java_script_schema_values_at(prefix, functions, idx + 1)
 
 /// Checks whether any schema helper has the requested key prefix without materializing values.
 private fun java_script_schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
@@ -9219,14 +9231,18 @@ private fun java_script_schema_value_with_prefix_exists(prefix: String, function
 
 /// Looks up optional metadata for schema value named.
 private fun java_script_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
-    match functions[0] with
+    java_script_schema_value_named_at(name, functions, 0)
+
+/// Looks up optional metadata for a schema value from the requested index.
+private fun java_script_schema_value_named_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[String] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if java_script_compiled_schema(function)
         then if function.name == name
             then /capy/lang/Option.Some { java_script_schema_value(function) }
-            else java_script_schema_value_named(name, functions[1:])
-        else java_script_schema_value_named(name, functions[1:])
+            else java_script_schema_value_named_at(name, functions, idx + 1)
+        else java_script_schema_value_named_at(name, functions, idx + 1)
 
 /// Computes value metadata for schema value.
 private fun java_script_schema_value(function: CompiledFunction): String =
@@ -9551,19 +9567,9 @@ private fun java_script_decimal_literal(source: String): String =
 
 /// Checks whether a string starts with the requested prefix.
 private fun java_script_string_has_prefix(value: String, prefix: String): bool =
-    java_script_string_has_prefix_at(value, prefix, 0)
-
-/// Checks whether a string has the requested prefix at the given index.
-private fun java_script_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
-    match prefix[idx] with
-    case None -> true
-    case Some { expected } ->
-        match value[idx] with
-        case None -> false
-        case Some { actual } ->
-            if actual == expected
-            then java_script_string_has_prefix_at(value, prefix, idx + 1)
-            else false
+    if prefix.size().value > value.size().value
+    then false
+    else value[0, prefix.size().value] == prefix
 
 /// Checks whether a string ends with the requested suffix.
 private fun java_script_string_has_suffix(value: String, suffix: String): bool =

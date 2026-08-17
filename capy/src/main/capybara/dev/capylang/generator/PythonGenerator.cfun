@@ -817,14 +817,17 @@ private fun python_native_provider_declarations_by_module_with_acc(declarations:
 
 private fun python_native_provider_add_declaration(declarationsByModule: Dict[PythonNativeProviderDeclarations], declaration: CompiledNativeProviderDeclaration): Dict[PythonNativeProviderDeclarations] =
     let moduleKey = python_native_provider_module_key(declaration.sourceModuleName, declaration.sourceModulePath)
-    let declarations = match declarationsByModule.get(moduleKey) with
-        case Some { moduleDeclarations } -> moduleDeclarations.declarations
-        case None -> python_empty_native_provider_declaration_dict()
+    let declarations = python_native_provider_declarations_for_module(declarationsByModule.get(moduleKey))
     match declarations.get(declaration.providerName) with
     case Some _ -> declarationsByModule
     case None -> declarationsByModule + (moduleKey, PythonNativeProviderDeclarations {
         declarations: declarations + (declaration.providerName, declaration)
     })
+
+private fun python_native_provider_declarations_for_module(moduleDeclarations: /capy/lang/Option[PythonNativeProviderDeclarations]): Dict[CompiledNativeProviderDeclaration] =
+    match moduleDeclarations with
+    case Some { declarations } -> declarations.declarations
+    case None -> python_empty_native_provider_declaration_dict()
 
 private fun python_native_provider_binding_dict(bindings: List[CompiledNativeProviderBinding]): Dict[CompiledNativeProviderBinding] =
     python_native_provider_binding_dict_with_acc(bindings, {:})
@@ -5289,12 +5292,16 @@ private fun python_find_local_function(name: String, functions: List[CompiledFun
 
 /// Finds a local function by name in scope, imports, or compiled modules.
 private fun python_find_local_function_by_name(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    match functions[0] with
+    python_find_local_function_by_name_at(name, functions, 0)
+
+/// Finds a local function by name from the requested index.
+private fun python_find_local_function_by_name_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[CompiledFunction] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if !python_skip_function(function) & function.name == name
         then /capy/lang/Option.Some { function }
-        else python_find_local_function_by_name(name, functions[1:])
+        else python_find_local_function_by_name_at(name, functions, idx + 1)
 
 /// Finds a local overload in scope, imports, or compiled modules.
 private fun python_find_local_overload(name: String, argumentType: String, functions: List[CompiledFunction], best: /capy/lang/Option[CompiledFunction], bestScore: int): /capy/lang/Option[CompiledFunction] =
@@ -5802,14 +5809,18 @@ private fun python_find_object_class(name: String, module: CompiledModule): /cap
 
 /// Finds an object class in functions without materializing unrelated object classes.
 private fun python_find_object_class_in_functions(name: String, functions: List[CompiledFunction], module: CompiledModule): /capy/lang/Option[PythonObjectClassBinding] =
-    match functions[0] with
+    python_find_object_class_in_functions_at(name, functions, module, 0)
+
+/// Finds an object class in functions from the requested index.
+private fun python_find_object_class_in_functions_at(name: String, functions: List[CompiledFunction], module: CompiledModule, idx: int): /capy/lang/Option[PythonObjectClassBinding] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if python_compiled_object_class_schema(function)
         then if python_compiled_object_class_name(function) == name
             then /capy/lang/Option.Some { PythonObjectClassBinding { module: module, objectClass: python_compiled_object_class(function, functions) } }
-            else python_find_object_class_in_functions(name, functions[1:], module)
-        else python_find_object_class_in_functions(name, functions[1:], module)
+            else python_find_object_class_in_functions_at(name, functions, module, idx + 1)
+        else python_find_object_class_in_functions_at(name, functions, module, idx + 1)
 
 /// Finds an object class in imports in scope, imports, or compiled modules.
 private fun python_find_object_class_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonObjectClassBinding] =
@@ -9648,10 +9659,14 @@ private fun python_schema_values_for_type(name: String, valuePrefix: String, fun
     python_schema_values_for_type_named("__capy_schema_type|" + name, valuePrefix + name + "|", functions)
 
 private fun python_schema_values_for_type_named(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction]): PythonSchemaValues =
-    match functions[0] with
+    python_schema_values_for_type_named_at(typeSchemaName, valuePrefix, functions, 0)
+
+/// Collects schema values from the requested index.
+private fun python_schema_values_for_type_named_at(typeSchemaName: String, valuePrefix: String, functions: List[CompiledFunction], idx: int): PythonSchemaValues =
+    match functions[idx] with
     case None -> PythonSchemaValues { typeExists: false, values: [] }
     case Some { function } ->
-        let rest = python_schema_values_for_type_named(typeSchemaName, valuePrefix, functions[1:])
+        let rest = python_schema_values_for_type_named_at(typeSchemaName, valuePrefix, functions, idx + 1)
         if python_compiled_schema(function)
         then PythonSchemaValues {
             typeExists: if rest.typeExists then true else function.name == typeSchemaName,
@@ -9661,14 +9676,18 @@ private fun python_schema_values_for_type_named(typeSchemaName: String, valuePre
 
 /// Computes value metadata for schema values.
 private fun python_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
-    match functions[0] with
+    python_schema_values_at(prefix, functions, 0)
+
+/// Computes value metadata for schema values from the requested index.
+private fun python_schema_values_at(prefix: String, functions: List[CompiledFunction], idx: int): List[String] =
+    match functions[idx] with
     case None -> []
     case Some { function } ->
         if python_compiled_schema(function)
         then if python_string_has_prefix(function.name, prefix)
-            then [python_schema_value(function)] + python_schema_values(prefix, functions[1:])
-            else python_schema_values(prefix, functions[1:])
-        else python_schema_values(prefix, functions[1:])
+            then [python_schema_value(function)] + python_schema_values_at(prefix, functions, idx + 1)
+            else python_schema_values_at(prefix, functions, idx + 1)
+        else python_schema_values_at(prefix, functions, idx + 1)
 
 /// Checks whether any schema helper has the requested key prefix without materializing values.
 private fun python_schema_value_with_prefix_exists(prefix: String, functions: List[CompiledFunction]): bool =
@@ -9683,14 +9702,18 @@ private fun python_schema_value_with_prefix_exists(prefix: String, functions: Li
 
 /// Looks up optional metadata for schema value named.
 private fun python_schema_value_named(name: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
-    match functions[0] with
+    python_schema_value_named_at(name, functions, 0)
+
+/// Looks up optional metadata for a schema value from the requested index.
+private fun python_schema_value_named_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[String] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if python_compiled_schema(function)
         then if function.name == name
             then /capy/lang/Option.Some { python_schema_value(function) }
-            else python_schema_value_named(name, functions[1:])
-        else python_schema_value_named(name, functions[1:])
+            else python_schema_value_named_at(name, functions, idx + 1)
+        else python_schema_value_named_at(name, functions, idx + 1)
 
 /// Computes value metadata for schema value.
 private fun python_schema_value(function: CompiledFunction): String =
@@ -9790,19 +9813,9 @@ private fun python_decimal_literal(source: String): String =
 
 /// Checks whether a string starts with the requested prefix.
 private fun python_string_has_prefix(value: String, prefix: String): bool =
-    python_string_has_prefix_at(value, prefix, 0)
-
-/// Checks whether a string has the requested prefix at the given index.
-private fun python_string_has_prefix_at(value: String, prefix: String, idx: int): bool =
-    match prefix[idx] with
-    case None -> true
-    case Some { expected } ->
-        match value[idx] with
-        case None -> false
-        case Some { actual } ->
-            if actual == expected
-            then python_string_has_prefix_at(value, prefix, idx + 1)
-            else false
+    if prefix.size().value > value.size().value
+    then false
+    else value[0, prefix.size().value] == prefix
 
 /// Checks whether a string ends with the requested suffix.
 private fun python_string_has_suffix(value: String, suffix: String): bool =
