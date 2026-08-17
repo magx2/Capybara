@@ -3853,6 +3853,11 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         );
     }
 
+    /** Parses source type syntax for compiler stages that consume parser-retained metadata. */
+    public static TypeReference parseTypeReference(String text) {
+        return typeReference(text);
+    }
+
     private static boolean hasTopLevelFunctionArrow(String text) {
         var bracketDepth = 0;
         var parenDepth = 0;

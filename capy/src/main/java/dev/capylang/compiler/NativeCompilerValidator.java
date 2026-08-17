@@ -51,6 +51,7 @@ import dev.capylang.compiler.parser.FunctionAnnotationValue.FunctionAnnotationSt
 import dev.capylang.compiler.parser.FunctionDeclaration;
 import dev.capylang.compiler.parser.FunctionParameter;
 import dev.capylang.compiler.parser.ImportDeclaration;
+import dev.capylang.compiler.parser.NativeCapybaraParser;
 import dev.capylang.compiler.parser.ObjectOrientedClass;
 import dev.capylang.compiler.parser.ObjectOrientedField;
 import dev.capylang.compiler.parser.ObjectOrientedInitBlock;
@@ -508,6 +509,16 @@ public final class NativeCompilerValidator {
         return separator < 0 ? parameter : rest.substring(0, separator);
     }
 
+    private TypeReference decodedLambdaParameterType(String parameter) {
+        var prefix = "__capy_typed_lambda|";
+        if (!parameter.startsWith(prefix)) {
+            return null;
+        }
+        var rest = parameter.substring(prefix.length());
+        var separator = rest.indexOf('|');
+        return separator < 0 ? null : NativeCapybaraParser.parseTypeReference(rest.substring(separator + 1));
+    }
+
     private void addVariableName(Set<String> variables, String name) {
         if (!name.isBlank() && !name.equals("_")) {
             variables.add(name);
@@ -593,7 +604,13 @@ public final class NativeCompilerValidator {
                 }
             }
             case LambdaExpression lambda ->
-                    validateNestedLambdaFunctionArguments(context, module, lambda.body(), types, errors);
+                    validateNestedLambdaFunctionArguments(
+                            context,
+                            module,
+                            lambda.body(),
+                            validationDeclaredLambdaTypes(lambda, types),
+                            errors
+                    );
             case ListLiteral literal -> literal.values().forEach(value ->
                     validateNestedLambdaFunctionArguments(context, module, value, types, errors));
             case MatchExpression match -> {
@@ -864,7 +881,26 @@ public final class NativeCompilerValidator {
                 continue;
             }
             if (functionTypeName(expected.name())) {
-                if (actual != null && !callableExpression(field.value(), actual)) {
+                if (field.value() instanceof LambdaExpression lambda) {
+                    validateLambdaCompatibility(
+                            context,
+                            module,
+                            lambda,
+                            expected,
+                            types,
+                            "Field `" + declaredField.name() + "` of data `" + literalTypeName + "`",
+                            errors
+                    );
+                } else if (field.value() instanceof FunctionReferenceExpression reference) {
+                    validateFunctionReferenceCompatibility(
+                            context,
+                            module,
+                            reference,
+                            expected,
+                            "Field `" + declaredField.name() + "` of data `" + literalTypeName + "`",
+                            errors
+                    );
+                } else if (actual != null && !callableExpression(field.value(), actual)) {
                     errors.add(error(
                             module,
                             field.location(),
@@ -988,6 +1024,47 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors
     ) {
         if (function.returnType().name().isBlank()) {
+            return;
+        }
+        if (function.body() instanceof LambdaExpression lambda) {
+            if (functionTypeName(function.returnType().name())) {
+                validateLambdaCompatibility(
+                        context,
+                        module,
+                        lambda,
+                        function.returnType(),
+                        parameterTypes(function),
+                        "Function `" + localFunctionDisplayName(function.name()) + "`",
+                        errors
+                );
+            } else {
+                errors.add(error(
+                        module,
+                        function.location(),
+                        "Function `" + localFunctionDisplayName(function.name()) + "` returns a lambda, but declares `"
+                                + displayType(function.returnType()) + "`."
+                ));
+            }
+            return;
+        }
+        if (function.body() instanceof FunctionReferenceExpression reference) {
+            if (functionTypeName(function.returnType().name())) {
+                validateFunctionReferenceCompatibility(
+                        context,
+                        module,
+                        reference,
+                        function.returnType(),
+                        "Function `" + localFunctionDisplayName(function.name()) + "`",
+                        errors
+                );
+            } else {
+                errors.add(error(
+                        module,
+                        function.location(),
+                        "Function `" + localFunctionDisplayName(function.name())
+                                + "` returns a function reference, but declares `" + displayType(function.returnType()) + "`."
+                ));
+            }
             return;
         }
         var actual = validationExpressionType(context, module, function.body(), parameterTypes(function));
@@ -1234,6 +1311,10 @@ public final class NativeCompilerValidator {
                 yield localType == null ? context.constantType(module, variable.name()) : localType;
             }
             case FunctionCallExpression call -> {
+                var callableType = types.get(call.name());
+                if (callableType != null && functionTypeName(callableType.name())) {
+                    yield functionTypeReturnType(callableType);
+                }
                 var function = context.functionDeclaration(module, call.name(), call.arguments().size());
                 if (function != null) {
                     yield function.returnType();
@@ -1258,13 +1339,39 @@ public final class NativeCompilerValidator {
             Map<String, TypeReference> types
     ) {
         var receiverType = validationExpressionType(context, module, access.receiver(), types);
-        if (receiverType == null || receiverType.arguments().isEmpty()) {
+        if (receiverType == null) {
             return null;
         }
         var receiverName = unqualified(receiverType.name());
         if (access.name().equals("value")
-                && Set.of("Cons", "Some", "Success").contains(receiverName)) {
+                && Set.of("Cons", "Some", "Success").contains(receiverName)
+                && !receiverType.arguments().isEmpty()) {
             return receiverType.arguments().getFirst();
+        }
+        var owner = context.dataDeclarationOwner(module, receiverName);
+        if (owner != null) {
+            var declaration = context.localDataDeclaration(owner, receiverName);
+            var field = declaration.fields().stream()
+                    .filter(candidate -> candidate.name().equals(access.name()))
+                    .findFirst()
+                    .orElse(null);
+            if (field != null) {
+                var bindings = new LinkedHashMap<String, TypeReference>();
+                for (var index = 0;
+                     index < declaration.parameters().size() && index < receiverType.arguments().size();
+                     index++) {
+                    bindings.put(declaration.parameters().get(index), receiverType.arguments().get(index));
+                }
+                return context.substituteTypeParameters(field.typeReference(), bindings);
+            }
+        }
+        var linkedFields = context.linkedDataFields(module, receiverName);
+        if (linkedFields != null) {
+            return linkedFields.stream()
+                    .filter(field -> field.name().equals(access.name()))
+                    .map(LinkedDataField::typeReference)
+                    .findFirst()
+                    .orElse(null);
         }
         return null;
     }
@@ -1344,6 +1451,13 @@ public final class NativeCompilerValidator {
         }
         var mapperTypes = validationLambdaTypes(mapper, validationIterableElementType(receiverType), types);
         var mappedType = validationExpressionType(context, module, mapper.body(), mapperTypes);
+        if (!mapper.parameters().isEmpty()
+                && decodedLambdaParameterType(mapper.parameters().getFirst()) == null
+                && mapper.body() instanceof FieldAccessExpression) {
+            // Keep untyped collection lambdas on the validator's conservative inference path. Resolving a user-data
+            // field here can make legacy collection pipelines appear more specific than the linked program metadata.
+            mappedType = null;
+        }
         return mappedType == null ? null : new TypeReference("Seq", List.of(mappedType));
     }
 
@@ -1468,9 +1582,26 @@ public final class NativeCompilerValidator {
     ) {
         var mapperTypes = new LinkedHashMap<>(types);
         if (lambda.parameters().size() == 1) {
-            mapperTypes.put(decodedLambdaParameterName(lambda.parameters().getFirst()), valueType);
+            var parameter = lambda.parameters().getFirst();
+            var declaredType = decodedLambdaParameterType(parameter);
+            mapperTypes.put(decodedLambdaParameterName(parameter), declaredType == null ? valueType : declaredType);
         }
         return mapperTypes;
+    }
+
+    private Map<String, TypeReference> validationDeclaredLambdaTypes(
+            LambdaExpression lambda,
+            Map<String, TypeReference> types
+    ) {
+        var lambdaTypes = new LinkedHashMap<>(types);
+        for (var parameter : lambda.parameters()) {
+            var name = decodedLambdaParameterName(parameter);
+            var declaredType = decodedLambdaParameterType(parameter);
+            if (!name.equals("_") && declaredType != null) {
+                lambdaTypes.put(name, declaredType);
+            }
+        }
+        return lambdaTypes;
     }
 
     private void validateNestedLambdaCall(
@@ -1491,11 +1622,57 @@ public final class NativeCompilerValidator {
         }
         var function = context.functionDeclaration(module, call.name(), call.arguments().size());
         if (function == null) {
+            var callableType = types.get(call.name());
+            if (callableType != null && functionTypeName(callableType.name())) {
+                validateFunctionValueCall(context, module, call, callableType, types, errors);
+            }
             return;
         }
         for (var index = 0; index < call.arguments().size(); index++) {
-            var inferred = validationExpressionType(context, module, call.arguments().get(index), types);
+            var argument = call.arguments().get(index);
             var expected = function.parameters().get(index).typeReference();
+            if (argument instanceof LambdaExpression lambda) {
+                if (!functionTypeName(expected.name())) {
+                    errors.add(error(
+                            module,
+                            lambda.location(),
+                            "Argument " + (index + 1) + " of function `" + call.name()
+                                    + "` requires `" + displayType(expected) + "`, but a lambda was provided."
+                    ));
+                } else {
+                    validateLambdaCompatibility(
+                            context,
+                            module,
+                            lambda,
+                            expected,
+                            types,
+                            "Argument " + (index + 1) + " of function `" + call.name() + "`",
+                            errors
+                    );
+                }
+                continue;
+            }
+            if (argument instanceof FunctionReferenceExpression reference) {
+                if (!functionTypeName(expected.name())) {
+                    errors.add(error(
+                            module,
+                            reference.location(),
+                            "Argument " + (index + 1) + " of function `" + call.name()
+                                    + "` requires `" + displayType(expected) + "`, but a function reference was provided."
+                    ));
+                } else {
+                    validateFunctionReferenceCompatibility(
+                            context,
+                            module,
+                            reference,
+                            expected,
+                            "Argument " + (index + 1) + " of function `" + call.name() + "`",
+                            errors
+                    );
+                }
+                continue;
+            }
+            var inferred = validationExpressionType(context, module, argument, types);
             if (inferred != null && distinctSequenceListMismatch(expected, inferred)) {
                 errors.add(error(
                         module,
@@ -1532,6 +1709,192 @@ public final class NativeCompilerValidator {
                             + displayType(actual) + "`, but `" + displayType(expected) + "` is required."
             ));
         }
+    }
+
+    private void validateFunctionValueCall(
+            Context context,
+            ParsedModule module,
+            FunctionCallExpression call,
+            TypeReference callableType,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var parameters = functionTypeParameters(callableType);
+        if (parameters.size() != call.arguments().size()) {
+            errors.add(error(
+                    module,
+                    call.location(),
+                    "Function value `" + call.name() + "` expects " + parameters.size()
+                            + " argument(s), but " + call.arguments().size() + " were provided."
+            ));
+            return;
+        }
+        for (var index = 0; index < parameters.size(); index++) {
+            var actual = validationExpressionType(context, module, call.arguments().get(index), types);
+            if (actual != null && !returnTypeAssignable(context, module, parameters.get(index), actual)) {
+                errors.add(error(
+                        module,
+                        call.location(),
+                        "Argument " + (index + 1) + " of function value `" + call.name() + "` has type `"
+                                + displayType(actual) + "`, but `" + displayType(parameters.get(index))
+                                + "` is required."
+                ));
+            }
+        }
+    }
+
+    private void validateLambdaCompatibility(
+            Context context,
+            ParsedModule module,
+            LambdaExpression lambda,
+            TypeReference expected,
+            Map<String, TypeReference> outerTypes,
+            String subject,
+            List<CompilerError> errors
+    ) {
+        var expectedParameters = functionTypeParameters(expected);
+        if (lambda.parameters().size() != expectedParameters.size()) {
+            errors.add(error(
+                    module,
+                    lambda.location(),
+                    subject + " expects callable type `" + displayType(expected) + "`, but the lambda declares "
+                            + lambda.parameters().size() + " parameter(s)."
+            ));
+            return;
+        }
+        var lambdaTypes = new LinkedHashMap<>(outerTypes);
+        for (var index = 0; index < lambda.parameters().size(); index++) {
+            var parameter = lambda.parameters().get(index);
+            var contextual = expectedParameters.get(index);
+            var declared = decodedLambdaParameterType(parameter);
+            if (declared != null && !returnTypeAssignable(context, module, declared, contextual)) {
+                errors.add(error(
+                        module,
+                        lambda.location(),
+                        subject + " expects parameter " + (index + 1) + " to accept `" + displayType(contextual)
+                                + "`, but the lambda declares `" + displayType(declared) + "`."
+                ));
+            }
+            var name = decodedLambdaParameterName(parameter);
+            if (!name.equals("_")) {
+                lambdaTypes.put(name, declared == null ? contextual : declared);
+            }
+        }
+        var actualReturn = validationExpressionType(context, module, lambda.body(), lambdaTypes);
+        var expectedReturn = functionTypeReturnType(expected);
+        if (actualReturn != null && !returnTypeAssignable(context, module, expectedReturn, actualReturn)) {
+            errors.add(error(
+                    module,
+                    lambda.location(),
+                    subject + " expects the lambda to return `" + displayType(expectedReturn)
+                            + "`, but it returns `" + displayType(actualReturn) + "`."
+            ));
+        }
+    }
+
+    private void validateFunctionReferenceCompatibility(
+            Context context,
+            ParsedModule module,
+            FunctionReferenceExpression reference,
+            TypeReference expected,
+            String subject,
+            List<CompilerError> errors
+    ) {
+        var expectedParameters = functionTypeParameters(expected);
+        var function = context.functionDeclaration(module, reference.name(), expectedParameters.size());
+        if (function == null) {
+            return;
+        }
+        for (var index = 0; index < expectedParameters.size(); index++) {
+            var declared = function.parameters().get(index).typeReference();
+            if (!returnTypeAssignable(context, module, declared, expectedParameters.get(index))) {
+                errors.add(error(
+                        module,
+                        reference.location(),
+                        subject + " expects parameter " + (index + 1) + " to accept `"
+                                + displayType(expectedParameters.get(index)) + "`, but function `" + reference.name()
+                                + "` declares `" + displayType(declared) + "`."
+                ));
+                return;
+            }
+        }
+        var expectedReturn = functionTypeReturnType(expected);
+        if (!returnTypeAssignable(context, module, expectedReturn, function.returnType())) {
+            errors.add(error(
+                    module,
+                    reference.location(),
+                    subject + " expects return type `" + displayType(expectedReturn) + "`, but function `"
+                            + reference.name() + "` returns `" + displayType(function.returnType()) + "`."
+            ));
+        }
+    }
+
+    private List<TypeReference> functionTypeParameters(TypeReference functionType) {
+        var arrow = topLevelFunctionArrow(functionType.name());
+        if (arrow < 0) {
+            return List.of();
+        }
+        var text = functionType.name().substring(0, arrow).trim();
+        if (text.equals("()")) {
+            return List.of();
+        }
+        if (text.startsWith("(") && text.endsWith(")")) {
+            text = text.substring(1, text.length() - 1);
+        }
+        return splitFunctionTypeParameters(text);
+    }
+
+    private TypeReference functionTypeReturnType(TypeReference functionType) {
+        var arrow = topLevelFunctionArrow(functionType.name());
+        return arrow < 0
+                ? new TypeReference("any", List.of())
+                : NativeCapybaraParser.parseTypeReference(functionType.name().substring(arrow + 2));
+    }
+
+    private int topLevelFunctionArrow(String text) {
+        var brackets = 0;
+        var parentheses = 0;
+        for (var index = 0; index < text.length() - 1; index++) {
+            var current = text.charAt(index);
+            if (current == '[') {
+                brackets++;
+            } else if (current == ']') {
+                brackets--;
+            } else if (current == '(') {
+                parentheses++;
+            } else if (current == ')') {
+                parentheses--;
+            } else if (current == '=' && text.charAt(index + 1) == '>' && brackets == 0 && parentheses == 0) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private List<TypeReference> splitFunctionTypeParameters(String text) {
+        var parameters = new ArrayList<TypeReference>();
+        var brackets = 0;
+        var parentheses = 0;
+        var start = 0;
+        for (var index = 0; index <= text.length(); index++) {
+            if (index == text.length()
+                    || (text.charAt(index) == ',' && brackets == 0 && parentheses == 0)) {
+                parameters.add(NativeCapybaraParser.parseTypeReference(text.substring(start, index)));
+                start = index + 1;
+                continue;
+            }
+            var current = text.charAt(index);
+            if (current == '[') {
+                brackets++;
+            } else if (current == ']') {
+                brackets--;
+            } else if (current == '(') {
+                parentheses++;
+            } else if (current == ')') {
+                parentheses--;
+            }
+        }
+        return List.copyOf(parameters);
     }
 
     private boolean compatibleFunctionArgument(TypeReference expected, TypeReference actual) {
@@ -1931,7 +2294,15 @@ public final class NativeCompilerValidator {
                     validateExpression(context, module, index.endIndex(), errors);
                 }
             }
-            case LambdaExpression lambda -> validateExpression(context, module, lambda.body(), errors);
+            case LambdaExpression lambda -> {
+                for (var parameter : lambda.parameters()) {
+                    var declaredType = decodedLambdaParameterType(parameter);
+                    if (declaredType != null) {
+                        validateTypeReference(context, module, declaredType, List.of(), errors, lambda.location());
+                    }
+                }
+                validateExpression(context, module, lambda.body(), errors);
+            }
             case ListLiteral literal -> literal.values().forEach(value -> validateExpression(context, module, value, errors));
             case MatchExpression match -> {
                 validateExpression(context, module, match.value(), errors);
@@ -2428,6 +2799,10 @@ public final class NativeCompilerValidator {
         }
 
         private boolean symbolExists(String path, String name) {
+            var currentModule = currentParsedModule(path);
+            if (currentModule != null) {
+                return symbolsByModule.get(currentModule).contains(name);
+            }
             if (stdlibImport(path)) {
                 var linked = linkedModule(path);
                 if (linked != null) {
@@ -3260,16 +3635,24 @@ public final class NativeCompilerValidator {
         }
 
         private ParsedModule parsedModule(String path) {
-            for (var module : modules) {
-                if (parsedModuleMatches(path, module)) {
-                    return module;
-                }
+            var current = currentParsedModule(path);
+            if (current != null) {
+                return current;
             }
             if (libraryModule(path)) {
                 for (var module : previouslyValidatedModules) {
                     if (parsedModuleMatches(path, module)) {
                         return module;
                     }
+                }
+            }
+            return null;
+        }
+
+        private ParsedModule currentParsedModule(String path) {
+            for (var module : modules) {
+                if (parsedModuleMatches(path, module)) {
+                    return module;
                 }
             }
             return null;

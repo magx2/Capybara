@@ -4,6 +4,8 @@ import dev.capylang.cli.Capy;
 import dev.capylang.compiler.BackendCompilationContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -21,9 +23,137 @@ import javax.tools.ToolProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@ResourceLock(Resources.SYSTEM_ERR)
 class JavaGenerationDiagnosticsIntegrationTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void generatesTypedLambdasWithUserDefinedAndGenericTypesForEveryBackend() throws Exception {
+        var source = writeSource("sample/TypedLambdaModels.cfun", """
+                data User { name: String }
+                data Box[T] { value: T }
+                data UserMapper { transform: User => User }
+                data NamedAccount { name: String }
+                data AnonymousAccount {}
+                union Account = NamedAccount | AnonymousAccount
+                enum Status { READY, DONE }
+                type user_id -> int
+
+                fun apply_int(transform: int => int, value: int): int = transform(value)
+
+                fun mapped_int(value: int): int = apply_int(item: int => item + 1, value)
+
+                fun apply_string(transform: String => String, value: String): String = transform(value)
+
+                fun mapped_string(value: String): String =
+                    apply_string(item: String => item + "!", value)
+
+                fun apply_user(transform: User => User, user: User): User = transform(user)
+
+                fun identity_user(user: User): User = user
+
+                fun mapped_user(user: User): User =
+                    apply_user(value: User => User { name: value.name + "!" }, user)
+
+                fun referenced_user(user: User): User = apply_user(:identity_user, user)
+
+                fun user_factory(): User => User = value: User => value
+
+                fun user_mapper(): UserMapper = UserMapper { transform: value: User => value }
+
+                fun User.map_name(transform: String => String): User = User { name: transform(this.name) }
+
+                fun mapped_user_method(user: User): User =
+                    user.map_name(value: String => value + "!")
+
+                fun nested_user(user: User): User =
+                    apply_user(value: User => apply_user(inner: User => inner, value), user)
+
+                fun apply_account(transform: Account => Account, account: Account): Account = transform(account)
+
+                fun mapped_account(account: Account): Account =
+                    apply_account(value: Account => value, account)
+
+                fun apply_status(transform: Status => Status, status: Status): Status = transform(status)
+
+                fun mapped_status(status: Status): Status = apply_status(value: Status => value, status)
+
+                fun apply_id(transform: user_id => user_id, value: user_id): user_id = transform(value)
+
+                fun mapped_id(value: user_id): user_id = apply_id(item: user_id => item, value)
+
+                fun map_box(transform: T => T, box: Box[T]): Box[T] = Box { transform(box.value) }
+
+                fun apply_generic(transform: T => T, value: T): T = transform(value)
+
+                fun mapped_generic(value: T): T = apply_generic(item: T => item, value)
+
+                fun mapped_box(box: Box[User]): Box[User] =
+                    map_box(value: User => User { name: value.name }, box)
+
+                fun choose_user(transform: (User, User, User) => User, first: User, second: User, third: User): User =
+                    transform(first, second, third)
+
+                fun chosen_user(first: User, second: User, third: User): User =
+                    choose_user((left, _, _) => left, first, second, third)
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+        assertThat(generatedPath(source))
+                .content()
+                .contains("record User(")
+                .contains("interface Account")
+                .contains("java.util.function.Function<java.lang.Object, java.lang.Object>")
+                .contains("__CapyFunction3<java.lang.Object")
+                .doesNotContain("__capy_typed_lambda|");
+        assertJavaCompiles(generatedPath(source));
+
+        assertThat(compileGenerateStderr("javascript")).isEmpty();
+        assertThat(generatedPath(source, ".js"))
+                .content()
+                .doesNotContain("__capy_typed_lambda|");
+
+        assertThat(compileGenerateStderr("python")).isEmpty();
+        assertThat(generatedPath(source, ".py"))
+                .content()
+                .doesNotContain("__capy_typed_lambda|");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"java", "javascript", "python"})
+    void rejectsIncompatibleTypedLambdasAndFunctionReferencesBeforeGeneration(String outputType) throws Exception {
+        var source = writeSource("sample/InvalidTypedLambda.cfun", """
+                data User { name: String }
+                data UserMapper { transform: User => User }
+
+                fun apply_user(transform: User => User, user: User): User = transform(user)
+
+                fun string_identity(value: String): String = value
+
+                fun bad_parameter(user: User): User =
+                    apply_user(value: String => User { name: value }, user)
+
+                fun bad_return(user: User): User =
+                    apply_user(value: User => value.name, user)
+
+                fun bad_reference(user: User): User = apply_user(:string_identity, user)
+
+                fun bad_field(): UserMapper =
+                    UserMapper { transform: value: String => User { name: value } }
+                """);
+
+        assertThat(compileGenerateStderr(outputType))
+                .contains("expects parameter 1 to accept `User`, but the lambda declares `String`")
+                .contains("expects the lambda to return `User`, but it returns `String`")
+                .contains("expects parameter 1 to accept `User`, but function `string_identity` declares `String`")
+                .contains("Field `transform` of data `UserMapper` expects parameter 1 to accept `User`, but the lambda declares `String`");
+        assertThat(generatedPath(source, switch (outputType) {
+            case "javascript" -> ".js";
+            case "python" -> ".py";
+            default -> ".java";
+        })).doesNotExist();
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"java", "javascript", "python"})
@@ -223,7 +353,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(generatedPath(source))
                 .content()
-                .contains("flatMap((__) -> next)")
+                .contains("flatMap((__capy_ignored_0) -> next)")
                 .doesNotContain("Unsupported CFUN expression at");
     }
 
@@ -1163,7 +1293,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
         } finally {
             System.setErr(originalError);
         }
-        return buffer.toString(StandardCharsets.UTF_8);
+        return normalizedDiagnostics(buffer);
     }
 
     private String compileGenerateWithTestsStderr() {
@@ -1192,7 +1322,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
         } finally {
             System.setErr(originalError);
         }
-        return buffer.toString(StandardCharsets.UTF_8);
+        return normalizedDiagnostics(buffer);
+    }
+
+    private String normalizedDiagnostics(ByteArrayOutputStream buffer) {
+        var diagnostics = buffer.toString(StandardCharsets.UTF_8).replace("\r\n", "\n");
+        return diagnostics.isBlank() ? "" : diagnostics.stripTrailing() + "\n";
     }
 
     private Path writeSource(String relativePath, String source) throws IOException {

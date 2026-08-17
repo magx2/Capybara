@@ -1445,7 +1445,7 @@ private fun static_imports(imports: List[CompiledImportDeclaration], module: Com
     case None -> ""
     case Some { declaration } ->
         let className = imported_module_class(module, declaration.modulePath)
-        if declaration.qualified | stdlib_import(declaration.modulePath)
+        if declaration.qualified | (stdlib_import(declaration.modulePath) & !stdlib_import(module.path))
         then static_imports(imports[1:], module, allModules)
         else match find_module_by_class(className, allModules) with
             case Some { importedModule } ->
@@ -1586,7 +1586,7 @@ private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], mo
 
 /// Formats Java source text for a constant after its type has already been resolved.
 private fun java_constant_with_type(constant: CompiledFunction, type: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "    " + constant_java_visibility(constant) + "static final " + java_type(type) + " " + java_identifier(constant.name)
+    "    " + constant_java_visibility(constant) + "static final " + top_level_java_type(type, module, allModules) + " " + java_identifier(constant.name)
     + " = " + expression_code(constant.body, env, type, module, allModules) + ";" + newline()
 
 /// Computes constant metadata for type.
@@ -3015,7 +3015,7 @@ private fun option_pipe_receiver(left: CompiledExpression, leftType: CompiledTyp
 /// Emits generated code for option pipe.
 private fun option_pipe_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = option_pipe_value_type(binary.left, leftType, env, module, allModules)
-    let receiverCode = "((java.util.Optional<" + boxed_java_type(valueType) + ">) __capy_optional_value("
+    let receiverCode = "((java.util.Optional<" + top_level_boxed_java_type(valueType, module, allModules) + ">) __capy_optional_value("
         + expression_code(binary.left, env, leftType, module, allModules)
         + "))"
     match binary.right with
@@ -3975,14 +3975,14 @@ private fun partial_placeholder_expression(expression: CompiledExpression): bool
 private fun partial_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let names = partial_placeholder_names(call.arguments, env)
     let type = partial_expected_type(expectedType, partial_function_call_type(call, env, module, allModules))
-    "((" + boxed_java_type(type) + ") (" + partial_lambda_parameters(names)
+    "((" + top_level_boxed_java_type(type, module, allModules) + ") (" + partial_lambda_parameters(names)
         + " -> " + partial_function_call_body_code(call, names, env, module, allModules) + "))"
 
 /// Emits generated code for partial method call.
 private fun partial_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let names = partial_placeholder_names(call.arguments, env)
     let type = partial_expected_type(expectedType, partial_method_call_type(call, env, module, allModules))
-    "((" + boxed_java_type(type) + ") (" + partial_lambda_parameters(names)
+    "((" + top_level_boxed_java_type(type, module, allModules) + ") (" + partial_lambda_parameters(names)
         + " -> " + partial_method_call_body_code(call, names, env, module, allModules) + "))"
 
 /// Computes the compiled type for partial expected.
@@ -4323,7 +4323,7 @@ private fun partial_extension_argument_code(code: String, declaredType: Compiled
 /// Emits generated code for function reference.
 private fun function_reference_code(reference: CompiledFunctionReferenceExpression, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function_type(expectedType)
-    then "((" + boxed_java_type(expectedType) + ") (" + typed_function_reference_lambda_code(reference, expectedType, module, allModules) + "))"
+    then "((" + top_level_boxed_java_type(expectedType, module, allModules) + ") (" + typed_function_reference_lambda_code(reference, expectedType, module, allModules) + "))"
     else function_reference_lambda_code(reference, function_reference_parameter_type(reference, module, allModules), function_reference_type(reference, module, allModules), module, allModules)
 
 /// Emits generated code for typed function reference lambda.
@@ -6896,7 +6896,7 @@ private fun supplier_lambda_expression_code(lambda: CompiledLambdaExpression, en
 private fun typed_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let parameters = function_type_parameters(expectedType)
     let lambdaEnv = declared_typed_lambda_env(lambda, parameters, env)
-    "((" + boxed_java_type(expectedType) + ") ("
+    "((" + top_level_boxed_java_type(expectedType, module, allModules) + ") ("
         + lambda_parameters(lambda.parameters)
         + " -> "
         + expression_code(lambda.body, lambdaEnv, function_type_return_type(expectedType), module, allModules)
@@ -7018,7 +7018,22 @@ private fun tuple_lambda_binding_statements(parameters: List[String], types: Lis
 private fun lambda_parameters(parameters: List[String]): String =
     if parameters.is_empty()
     then "()"
-    else "(" + java_identifier_list(decoded_lambda_parameter_names(parameters)) + ")"
+    else "(" + lambda_parameter_list(parameters, 0) + ")"
+
+/// Formats lambda parameters with unique names for repeated discard placeholders.
+private fun lambda_parameter_list(parameters: List[String], idx: int): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        let name = decoded_lambda_parameter_name(parameter)
+        java_identifier(if name == "_" then "__capy_ignored_" + idx else name)
+            + lambda_parameter_tail(parameters[1:], idx + 1)
+
+/// Formats the remaining lambda parameters.
+private fun lambda_parameter_tail(parameters: List[String], idx: int): String =
+    if parameters.is_empty()
+    then ""
+    else ", " + lambda_parameter_list(parameters, idx)
 
 /// Collects lambda environmentironment for compiler processing.
 private fun lambda_env(parameters: List[String], env: List[JavaBinding]): List[JavaBinding] =
@@ -7562,8 +7577,8 @@ private fun seq_data_literal(literal: CompiledDataLiteral, expectedType: Compile
 private fun seq_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let valueType = first_type_argument(expectedType)
     if type_unqualified_name(literal.typeName) == "End"
-    then "((capy.collection.Seq<" + top_level_boxed_java_type(valueType, module, allModules) + ">) (capy.collection.Seq<?>) capy.collection.Seq.End.INSTANCE)"
-    else "new capy.collection.Seq.Cons<" + top_level_boxed_java_type(valueType, module, allModules) + "> ("
+    then "capy.collection.Seq.<" + top_level_boxed_java_type(valueType, module, allModules) + ">toSeq(java.util.List.of())"
+    else "__capy_seq_cons("
         + expression_code(data_constructor_argument_value(literal.fields, "value", "$0"), env, valueType, module, allModules)
         + ", "
         + expression_code(data_constructor_argument_value(literal.fields, "rest", "$1"), env, supplier_type(seq_type(valueType)), module, allModules)
@@ -8383,7 +8398,7 @@ private fun match_expression_code(matchExpression: CompiledMatchExpression, env:
     let valueCode = expression_code(matchExpression.value, env, valueType, module, allModules)
     let matchValueName = "__capy_match_value_" + matchExpression.location.line + "_" + matchExpression.location.column
     let cases = ordered_match_cases(matchExpression.cases)
-    "((java.util.function.Supplier<" + boxed_java_type(expectedType) + ">) () -> {" + newline()
+    "((java.util.function.Supplier<" + top_level_boxed_java_type(expectedType, module, allModules) + ">) () -> {" + newline()
     + "            " + top_level_java_type(valueType, module, allModules) + " " + matchValueName + " = " + valueCode + ";" + newline()
     + match_case_statements(cases, matchValueName, valueType, env, expectedType, module, allModules, "            ")
     + "            return unsupported(\"match\");" + newline()
@@ -11491,13 +11506,35 @@ private fun schema_field_type_name(value: String): String =
 /// Resolves type metadata for schema type reference.
 private fun schema_type_reference(value: String): CompiledTypeReference =
     let trimmed = value.trim()
-    let bracket = first_index_of(trimmed, "[", 0)
-    if bracket < 0
+    if schema_top_level_function_arrow(trimmed, 0, 0, 0)
     then CompiledTypeReference { name: trimmed, arguments: [] }
-    else CompiledTypeReference {
-        name: trimmed[0, bracket],
-        arguments: schema_type_arguments(trimmed[bracket + 1, trimmed.size().value - 1])
-    }
+    else
+        let bracket = first_index_of(trimmed, "[", 0)
+        if bracket < 0
+        then CompiledTypeReference { name: trimmed, arguments: [] }
+        else CompiledTypeReference {
+            name: trimmed[0, bracket],
+            arguments: schema_type_arguments(trimmed[bracket + 1, trimmed.size().value - 1])
+        }
+
+/// Detects a function arrow outside generic brackets and grouping parentheses.
+private fun schema_top_level_function_arrow(value: String, idx: int, bracketDepth: int, parenDepth: int): bool =
+    if idx + 1 >= value.size().value
+    then false
+    else match value[idx] with
+        case None -> false
+        case Some { char } ->
+            match value[idx + 1] with
+            case Some { next } ->
+                if char == "=" & next == ">" & bracketDepth == 0 & parenDepth == 0
+                then true
+                else schema_top_level_function_arrow(
+                    value,
+                    idx + 1,
+                    if char == "[" then bracketDepth + 1 else if char == "]" then bracketDepth - 1 else bracketDepth,
+                    if char == "(" then parenDepth + 1 else if char == ")" then parenDepth - 1 else parenDepth
+                )
+            case None -> false
 
 /// Formats schema type arguments for generated emission.
 private fun schema_type_arguments(value: String): List[CompiledTypeReference] =
@@ -13517,6 +13554,10 @@ private fun top_level_java_functional_type(type: CompiledTypeReference, module: 
     then "java.util.function.Function<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
     else if parameters.size().value == 2
     then "java.util.function.BiFunction<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 1), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
+    else if parameters.size().value == 3
+    then "__CapyFunction3<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 1), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 2), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
+    else if parameters.size().value == 4
+    then "__CapyFunction4<" + top_level_boxed_java_type(function_type_parameter_at(parameters, 0), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 1), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 2), module, allModules) + ", " + top_level_boxed_java_type(function_type_parameter_at(parameters, 3), module, allModules) + ", " + top_level_boxed_java_type(returnType, module, allModules) + ">"
     else "java.lang.Object"
 
 /// Computes the compiled type for top level generic argument Java.
@@ -14165,7 +14206,8 @@ private fun java_helpers(module: CompiledModule): String =
 
 /// Emits Java runtime helpers for sequence operations absent from the shipped Seq interface.
 private fun java_seq_helpers(): String =
-    "    private static <T> capy.collection.Seq<T> __capy_seq_rest(capy.collection.Seq<T> sequence) {\n        java.util.List<T> values = sequence.asList();\n        return capy.collection.Seq.toSeq(values.subList(java.lang.Math.min(1, values.size()), values.size()));\n    }\n\n"
+    "    private static <T> capy.collection.Seq<T> __capy_seq_cons(T value, java.util.function.Supplier<capy.collection.Seq<T>> rest) {\n        java.util.List<T> values = new java.util.ArrayList<>();\n        values.add(value);\n        values.addAll(rest.get().asList());\n        return capy.collection.Seq.toSeq(values);\n    }\n\n"
+        + "    private static <T> capy.collection.Seq<T> __capy_seq_rest(capy.collection.Seq<T> sequence) {\n        java.util.List<T> values = sequence.asList();\n        return capy.collection.Seq.toSeq(values.subList(java.lang.Math.min(1, values.size()), values.size()));\n    }\n\n"
         + "    private static <T> capy.collection.Seq<T> __capy_seq_append(capy.collection.Seq<T> sequence, T value) {\n        java.util.List<T> values = new java.util.ArrayList<>(sequence.asList());\n        values.add(value);\n        return capy.collection.Seq.toSeq(values);\n    }\n\n"
         + "    private static <T> capy.collection.Seq<T> __capy_seq_concat(capy.collection.Seq<T> left, capy.collection.Seq<T> right) {\n        java.util.List<T> values = new java.util.ArrayList<>(left.asList());\n        values.addAll(right.asList());\n        return capy.collection.Seq.toSeq(values);\n    }\n\n"
 
@@ -14186,7 +14228,7 @@ private fun java_deep_equal_helper(): String =
 
 /// Emits Java runtime support for assertions represented as generated data values.
 private fun java_assert_helper(): String =
-    "    private static java.lang.Object __capy_assert_value(java.lang.Object assertion) {\n        return assertion instanceof capy.test.Assert.DataAssert generated ? generated.value() : __capy_data_field(assertion, \"value\");\n    }\n\n    private static java.lang.Object __capy_assert_equal(java.lang.Object assertion, java.lang.Object expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, __capy_deep_equal(actual, expected), \"Expected \" + actual + \" to be equal to \" + expected, \"Assert.is_equal_to\");\n    }\n\n    private static java.lang.Object __capy_assert_boolean(java.lang.Object assertion, boolean expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, java.util.Objects.equals(actual, expected), \"Expected bool \" + actual + \" to be equal to \" + expected, expected ? \"Assert.is_true\" : \"Assert.is_false\");\n    }\n\n    private static java.lang.Object __capy_append_assertion(java.lang.Object assertion, boolean result, java.lang.String message, java.lang.String type) {\n        java.util.List<java.util.function.Supplier<capy.test.Assert.Assertion>> assertions = new java.util.ArrayList<>();\n        if (assertion instanceof capy.test.Assert existing) {\n            assertions.addAll(existing.assertions());\n        }\n        java.lang.Object value = __capy_assert_value(assertion);\n        assertions.add(() -> new capy.test.Assert.Assertion(result, message, type));\n        return new capy.test.Assert.DataAssert(java.util.List.copyOf(assertions), value);\n    }\n\n"
+    "    private static java.lang.Object __capy_assert_value(java.lang.Object assertion) {\n        return __capy_data_field(assertion, \"value\");\n    }\n\n    private static java.lang.Object __capy_assert_equal(java.lang.Object assertion, java.lang.Object expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, __capy_deep_equal(actual, expected), \"Expected \" + actual + \" to be equal to \" + expected, \"Assert.is_equal_to\");\n    }\n\n    private static java.lang.Object __capy_assert_boolean(java.lang.Object assertion, boolean expected) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, java.util.Objects.equals(actual, expected), \"Expected bool \" + actual + \" to be equal to \" + expected, expected ? \"Assert.is_true\" : \"Assert.is_false\");\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private static java.lang.Object __capy_append_assertion(java.lang.Object assertion, boolean result, java.lang.String message, java.lang.String type) {\n        java.util.List<java.util.function.Supplier<java.lang.Object>> assertions = new java.util.ArrayList<>();\n        java.lang.Object existing = __capy_data_field(assertion, \"assertions\");\n        if (existing instanceof java.util.List<?> values) {\n            assertions.addAll((java.util.List<java.util.function.Supplier<java.lang.Object>>) (java.util.List<?>) values);\n        }\n        java.lang.Object value = __capy_assert_value(assertion);\n        assertions.add(() -> __capy_data(\"Assertion\", java.util.Map.ofEntries(java.util.Map.entry(\"result\", result), java.util.Map.entry(\"message\", message), java.util.Map.entry(\"type\", type))));\n        return __capy_data(\"DataAssert\", java.util.Map.ofEntries(java.util.Map.entry(\"assertions\", java.util.List.copyOf(assertions)), java.util.Map.entry(\"value\", value)));\n    }\n\n"
         + "    private static java.lang.Object __capy_invoke_constructor(java.lang.String className, java.lang.String typeName, java.lang.Object... arguments) {\n        try {\n            java.lang.reflect.Method[] methods = java.lang.Class.forName(className).getMethods();\n            java.lang.Object[] prepared = arguments.clone();\n            for (int index = 0; index < prepared.length; index++) {\n                if (prepared[index] instanceof java.util.Map<?, ?>) {\n                    continue;\n                }\n                java.lang.reflect.Method converter = null;\n                for (java.lang.reflect.Method candidate : methods) {\n                    if (java.lang.reflect.Modifier.isStatic(candidate.getModifiers()) && candidate.getName().startsWith(\"__capy_constructor_\") && !candidate.getName().startsWith(\"__capy_constructor_\" + typeName + \"__\") && candidate.getParameterCount() == 1 && __capy_reflection_argument_matches(candidate.getParameterTypes()[0], prepared[index])) {\n                        if (converter != null) {\n                            converter = null;\n                            break;\n                        }\n                        converter = candidate;\n                    }\n                }\n                if (converter != null) {\n                    java.lang.Object converted = converter.invoke(null, prepared[index]);\n                    if (__capy_result_is_error(converted)) {\n                        return converted;\n                    }\n                    java.lang.String converterName = converter.getName();\n                    int start = \"__capy_constructor_\".length();\n                    int end = converterName.indexOf(\"__\", start);\n                    prepared[index] = __capy_constructor_value(converterName.substring(start, end), __capy_result_success_value(converted));\n                }\n            }\n            for (java.lang.reflect.Method method : methods) {\n                if (java.lang.reflect.Modifier.isStatic(method.getModifiers()) && method.getName().startsWith(\"__capy_constructor_\" + typeName + \"__\") && method.getParameterCount() == prepared.length) {\n                    return __capy_constructor_result(typeName, method.invoke(null, prepared));\n                }\n            }\n            throw new java.lang.IllegalStateException(\"Imported constructor for `\" + typeName + \"` is unavailable in `\" + className + \"`\");\n        } catch (java.lang.reflect.InvocationTargetException exception) {\n            java.lang.Throwable cause = exception.getCause();\n            if (cause instanceof java.lang.RuntimeException runtimeException) {\n                throw runtimeException;\n            }\n            throw new java.lang.IllegalStateException(\"Imported constructor for `\" + typeName + \"` failed\", cause);\n        } catch (java.lang.ReflectiveOperationException exception) {\n            throw new java.lang.IllegalStateException(\"Cannot invoke imported constructor for `\" + typeName + \"`\", exception);\n        }\n    }\n\n    private static boolean __capy_reflection_argument_matches(java.lang.Class<?> parameterType, java.lang.Object argument) {\n        if (argument == null) {\n            return !parameterType.isPrimitive();\n        }\n        if (!parameterType.isPrimitive()) {\n            return parameterType.isInstance(argument);\n        }\n        return (parameterType == int.class && argument instanceof java.lang.Integer) || (parameterType == long.class && argument instanceof java.lang.Long) || (parameterType == float.class && argument instanceof java.lang.Float) || (parameterType == double.class && argument instanceof java.lang.Double) || (parameterType == byte.class && argument instanceof java.lang.Byte) || (parameterType == boolean.class && argument instanceof java.lang.Boolean) || (parameterType == char.class && argument instanceof java.lang.Character) || (parameterType == short.class && argument instanceof java.lang.Short);\n    }\n\n"
 
 /// Emits Java runtime support for assertions against Result error metadata.
@@ -14194,7 +14236,7 @@ private fun java_assert_result_helper(): String =
     "    private static java.lang.Object __capy_assert_fails_with_kind(java.lang.Object assertion, java.lang.String expectedKind, java.lang.String expectedMessage) {\n        java.lang.Object actual = __capy_assert_value(assertion);\n        boolean error = __capy_result_is_error(actual);\n        boolean kindMatches = error && __capy_deep_equal(__capy_data_field(actual, \"kind\"), expectedKind);\n        boolean messageMatches = expectedMessage == null || (error && __capy_deep_equal(__capy_data_field(actual, \"message\"), expectedMessage));\n        return __capy_append_assertion(assertion, kindMatches && messageMatches, \"Expected \" + actual + \" to fail with kind \" + expectedKind, \"Assert.fails_with_kind\");\n    }\n\n"
         + "    private static java.lang.Object __capy_assert_result_succeeds(java.lang.Object assertion) {\n        java.lang.Object result = __capy_assert_value(assertion);\n        return __capy_append_assertion(assertion, __capy_result_is_success(result), \"Expected Result to succeed but was \" + result, \"ResultAssert.succeeds\");\n    }\n\n"
         + "    private static java.lang.Object __capy_assert_result_succeeds(java.lang.Object assertion, java.lang.Object expected) {\n        java.lang.Object result = __capy_assert_value(assertion);\n        java.lang.Object actual = __capy_result_is_success(result) ? __capy_result_success_value(result) : result;\n        return __capy_append_assertion(assertion, __capy_result_is_success(result) && __capy_deep_equal(actual, expected), \"Expected Result to succeed with \" + expected + \" but was \" + actual, \"ResultAssert.succeeds\");\n    }\n\n"
-        + "    private static java.lang.Object __capy_assert_result_succeeds_with(java.lang.Object assertion, java.util.function.Function<java.lang.Object, java.lang.Object> check) {\n        java.lang.Object result = __capy_assert_value(assertion);\n        java.lang.Object nested = __capy_result_is_success(result) ? check.apply(__capy_result_success_value(result)) : null;\n        boolean passed = __capy_result_is_success(result) && nested instanceof capy.test.Assert nestedAssert && nestedAssert.succeeded();\n        return __capy_append_assertion(assertion, passed, \"Expected Result success assertion to pass but was \" + result, \"ResultAssert.succeeds\");\n    }\n\n"
+        + "    private static java.lang.Object __capy_assert_result_succeeds_with(java.lang.Object assertion, java.util.function.Function<java.lang.Object, java.lang.Object> check) {\n        java.lang.Object result = __capy_assert_value(assertion);\n        java.lang.Object nested = __capy_result_is_success(result) ? check.apply(__capy_result_success_value(result)) : null;\n        boolean passed = __capy_result_is_success(result) && __capy_assert_succeeded(nested);\n        return __capy_append_assertion(assertion, passed, \"Expected Result success assertion to pass but was \" + result, \"ResultAssert.succeeds\");\n    }\n\n    private static boolean __capy_assert_succeeded(java.lang.Object assertion) {\n        java.lang.Object raw = assertion == null ? null : __capy_data_field(assertion, \"assertions\");\n        if (!(raw instanceof java.util.List<?> assertions)) {\n            return false;\n        }\n        for (java.lang.Object value : assertions) {\n            java.lang.Object evaluated = value instanceof java.util.function.Supplier<?> supplier ? supplier.get() : value;\n            if (!java.lang.Boolean.TRUE.equals(__capy_data_field(evaluated, \"result\"))) {\n                return false;\n            }\n        }\n        return true;\n    }\n\n"
 
 /// Emits Java runtime helper source for pow helpers.
 private fun java_pow_helpers(): String =
