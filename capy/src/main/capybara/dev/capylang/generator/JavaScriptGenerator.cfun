@@ -107,7 +107,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
 
 /// Emits JavaScript runtime support source for runtime symbols.
 private fun java_script_runtime_symbols(): String =
-    JAVA_SCRIPT_RUNTIME_SYMBOLS
+    JAVA_SCRIPT_RUNTIME_SYMBOLS + ", __capy_dynamic_map, __capy_dynamic_flat_map"
 
 private fun java_script_runtime_import_symbols(module: CompiledModule): String =
     let excluded = java_script_runtime_excluded_symbols(module)
@@ -283,6 +283,8 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_result_flat_map",
         "__capy_result_reduce",
         "__capy_result_recover",
+        "__capy_dynamic_map",
+        "__capy_dynamic_flat_map",
         "__capy_constructor_result",
         "__capy_primitive_constructor_result",
         "__capy_constructor_pipeline",
@@ -1944,7 +1946,7 @@ private fun java_script_expression_code(expression: CompiledExpression, env: Lis
     case CompiledFieldAccessExpression access ->
         if java_script_enum_static_field_access(access, env, module, allModules)
         then java_script_enum_static_field_access_code(access, module, allModules)
-        else if access.name == "value" & java_script_type_unqualified_name(java_script_expression_type(access.receiver, env, module, allModules)) == "Seq"
+        else if access.name == "value" & java_script_seq_node_type(java_script_type_unqualified_name(java_script_expression_type(access.receiver, env, module, allModules)))
         then "__capy_seq_first_value(" + java_script_expression_code(access.receiver, env, module, allModules) + ")"
         else "__capy_get_field(" + java_script_expression_code(access.receiver, env, module, allModules) + ", " + java_script_string_literal(access.name) + ")"
     case CompiledReduceExpression reduce -> java_script_reduce_expression_code(reduce, env, module, allModules)
@@ -2278,6 +2280,22 @@ private fun java_script_result_pipe_helper(operator: String): String =
     if operator == "|*"
     then "__capy_result_flat_map"
     else "__capy_result_map"
+
+/// Checks whether an unknown receiver needs runtime map or flat-map dispatch.
+private fun java_script_dynamic_map_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+    receiverType == java_script_unknown_type()
+        & (call.name == "map" | call.name == "flat_map" | call.name == "flatMap")
+        & java_script_single_callable_argument(call.arguments)
+
+/// Emits a runtime-dispatched map or flat-map call.
+private fun java_script_dynamic_map_method_call_code(call: CompiledMethodCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let helper = if call.name == "flat_map" | call.name == "flatMap" then "__capy_dynamic_flat_map" else "__capy_dynamic_map"
+    helper
+        + "("
+        + java_script_expression_code(call.receiver, env, module, allModules)
+        + ", "
+        + java_script_first_method_argument_code(call.arguments, env, module, allModules)
+        + ")"
 
 /// Emits JavaScript code for result callable.
 private fun java_script_result_callable_code(receiver: CompiledExpression, mapper: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -2673,7 +2691,7 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
         let emptyArguments = call.arguments.is_empty()
         let oneArgument = java_script_one_method_argument(call.arguments)
         let twoArguments = java_script_two_method_arguments(call.arguments)
-        if call.name == "rest" & emptyArguments & receiverBaseType == "Seq"
+        if call.name == "rest" & emptyArguments & java_script_seq_node_type(receiverBaseType)
         then "__capy_seq_rest(" + receiver + ")"
         else if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
         then "__capy_enum_name(" + receiver + ")"
@@ -2718,6 +2736,8 @@ private fun java_script_method_call_code(call: CompiledMethodCallExpression, env
             & java_script_single_callable_argument(call.arguments)
             & java_script_result_pipe_receiver_type(receiverType)
         then java_script_result_pipe_code(java_script_result_map_method_binary(call), env, module, allModules)
+        else if java_script_dynamic_map_method_call(call, receiverType)
+        then java_script_dynamic_map_method_call_code(call, env, module, allModules)
         else if java_script_collection_method_name(call.name) & java_script_single_callable_argument(call.arguments) & java_script_collection_pipe_receiver_type(receiverType)
         then java_script_collection_method_call_code(call, env, module, allModules)
         else if java_script_collection_reduce_method_call_with_receiver_type(call, receiverType)
@@ -4197,7 +4217,7 @@ private fun java_script_data_constructor_binding_in_imports(typeName: String, im
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if !declaration.qualified & !java_script_stdlib_import(declaration.modulePath) & java_script_import_includes_name(typeName, declaration)
+        if !declaration.qualified & java_script_import_includes_name(typeName, declaration)
         then match java_script_find_imported_module(declaration, module, allModules) with
             case Some { importedModule } ->
                 match java_script_data_constructor_function(typeName, importedModule) with
@@ -4366,7 +4386,9 @@ private fun java_script_data_literal_expression_type(literal: CompiledDataLitera
     else
         let declaredTypeName = java_script_data_literal_declared_type_name(literal.typeName)
         let constructorTypes = java_script_data_constructor_type_names(declaredTypeName, module, allModules)
-        if constructorTypes.is_empty()
+        if java_script_primitive_backed_type(declaredTypeName, module, allModules)
+        then "Result"
+        else if constructorTypes.is_empty()
         then declaredTypeName
         else if java_script_data_constructor_pipeline_returns_result(constructorTypes, module, allModules)
         then "Result"
@@ -4504,6 +4526,10 @@ private fun java_script_built_in_sequence_receiver_type(receiverType: String): b
         | baseType == "String"
         | baseType == "Tuple"
         | baseType == "List"
+
+/// Checks whether a type is the sequence union or its non-empty variant.
+private fun java_script_seq_node_type(typeName: String): bool =
+    typeName == "Seq" | typeName == "Cons"
 
 /// Emits JavaScript code for user defined index.
 private fun java_script_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5061,7 +5087,7 @@ private fun java_script_field_access_type(access: CompiledFieldAccessExpression,
         let receiverTypeKey = java_script_expression_type_key(access.receiver, env, module, allModules)
         let receiverType = java_script_type_key_base(receiverTypeKey)
         if access.name == "value"
-            & receiverType == "Seq"
+            & java_script_seq_node_type(receiverType)
             & java_script_type_key_has_argument(receiverTypeKey)
         then java_script_type_key_argument(receiverTypeKey)
         else if receiverType == java_script_unknown_type()
@@ -5120,7 +5146,7 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
         let emptyArguments = call.arguments.is_empty()
         let oneArgument = java_script_one_method_argument(call.arguments)
         let twoArguments = java_script_two_method_arguments(call.arguments)
-        if call.name == "rest" & emptyArguments & receiverBaseType == "Seq"
+        if call.name == "rest" & emptyArguments & java_script_seq_node_type(receiverBaseType)
         then receiverType
         else if call.name == "name" & emptyArguments & java_script_enum_name_receiver_type(receiverType, module, allModules)
         then "String"
@@ -5147,6 +5173,8 @@ private fun java_script_method_call_expression_type(call: CompiledMethodCallExpr
         then "Effect"
         else if (call.name == "map" | call.name == "flat_map" | call.name == "flatMap") & java_script_single_callable_argument(call.arguments) & java_script_result_pipe_receiver_type(receiverType)
         then "Result"
+        else if java_script_dynamic_map_method_call(call, receiverType)
+        then java_script_unknown_type()
         else if call.name == "is_empty" & emptyArguments & java_script_collection_receiver_type(receiverType)
         then "bool"
         else if call.name == "get" & (oneArgument | twoArguments) & java_script_collection_get_receiver_type(receiverBaseType) & java_script_collection_get_arity(receiverBaseType, call.arguments)
@@ -7299,6 +7327,8 @@ private fun java_script_collection_runtime_code(): String =
     + "function __capy_option_or_else(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Some')) return __capy_match_binding(value, 'value', 0); if (__capy_data_is(value, 'None')) return __capy_unsafe_run(fallback); return __capy_unsupported('option or_else'); }" + java_script_newline()
     + "function __capy_result_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) return __capy_data('Success', Object.fromEntries([['value', __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0)))]])); return __capy_unsupported('result map'); }" + java_script_newline()
     + "function __capy_result_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return value; if (__capy_data_is(value, 'Success')) { const mapped = __capy_unsafe_run(mapper(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(mapped, 'Error') || __capy_data_is(mapped, 'Success')) return mapped; } return __capy_unsupported('result flat_map'); }" + java_script_newline()
+    + "function __capy_dynamic_map(value, mapper) { value = __capy_unsafe_run(value); if (value instanceof Effect || value instanceof Async) return value.map(mapper); if (__capy_data_is(value, 'Error') || __capy_data_is(value, 'Success')) return __capy_result_map(value, mapper); if (__capy_data_is(value, 'None') || __capy_data_is(value, 'Some')) return __capy_option_map(value, mapper); return __capy_seq_map(value, mapper); }" + java_script_newline()
+    + "function __capy_dynamic_flat_map(value, mapper) { value = __capy_unsafe_run(value); if (value instanceof Effect || value instanceof Async) return value.flat_map(mapper); if (__capy_data_is(value, 'Error') || __capy_data_is(value, 'Success')) return __capy_result_flat_map(value, mapper); if (__capy_data_is(value, 'None') || __capy_data_is(value, 'Some')) return __capy_option_flat_map(value, mapper); return __capy_seq_flat_map(value, mapper); }" + java_script_newline()
     + "function __capy_result_reduce(value, on_success, on_error) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return __capy_unsafe_run(on_success(__capy_match_binding(value, 'value', 0))); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(on_error(value)); return __capy_unsupported('result reduce'); }" + java_script_newline()
     + "function __capy_result_recover(value, recover, preserve_success) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Success')) return preserve_success ? value : __capy_match_binding(value, 'value', 0); if (__capy_data_is(value, 'Error')) return __capy_unsafe_run(recover(value)); return __capy_unsupported('result recover'); }" + java_script_newline()
     + "function __capy_result_or_else(value, fallback) { value = __capy_unsafe_run(value); if (__capy_data_is(value, 'Error')) return fallback; if (__capy_data_is(value, 'Success')) return __capy_match_binding(value, 'value', 0); return __capy_unsupported('result or_else'); }" + java_script_newline()
@@ -7591,10 +7621,12 @@ private fun java_script_test_gather_calls_for_module(functions: List[CompiledFun
 /// Emits JavaScript expression text for test gather call for function.
 private fun java_script_test_gather_call_for_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function.name == "tests"
-    then "    files.push(...__capy_gather_module("
-        + java_script_string_literal(java_script_relative_require_path("capy/test/CapyTestRuntime", java_script_module_path(module)))
-        + "));"
-        + java_script_newline()
+    then if java_script_test_function_gatherable(function)
+        then "    files.push(...__capy_gather_module("
+            + java_script_string_literal(java_script_relative_require_path("capy/test/CapyTestRuntime", java_script_module_path(module)))
+            + "));"
+            + java_script_newline()
+        else ""
     else ""
 
 /// Checks whether module can be included in generated test gathering.

@@ -10,7 +10,9 @@ import dev.capylang.generator.JavaGenerator;
 import dev.capylang.generator.JavaScriptGenerator;
 import dev.capylang.generator.PythonGenerator;
 import dev.capylang.compiler.CapybaraCompiler;
+import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
+import dev.capylang.compiler.LinkedJsonCodec;
 import dev.capylang.compiler.NativeProviderManifest;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -19,6 +21,7 @@ import capy.lang.Either;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,6 +90,24 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectUndefinedMethodOnMappedResultDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                extensionMethodReceiverModules("""
+                        const K1234: Result[Kaprekar] = Success { Kaprekar { 1234 } }
+
+                        fun broken(): bool = K1234.map(k => k.to_string()).contains("1234")
+                        """),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `contains` is not defined for receiver type `Result[String]`.");
+    }
+
+    @Test
     void shouldKeepPrimitiveConstructionWithoutValidatorUnwrapped() {
         compileProgram(List.of(rawModule("TimeUnit", "", """
                 type second -> long
@@ -103,6 +124,7 @@ class CompilationTest {
                         data Kaprekar { value: int }
 
                         fun Kaprekar.diff(): Kaprekar = this
+                        fun Kaprekar.to_string(): String = "1234"
                         """),
                 rawModule("Kaprekar.test", "", """
                         from /Kaprekar import { Kaprekar }
@@ -296,23 +318,26 @@ class CompilationTest {
     }
 
     @Test
-    void shouldGenerateImportedPrimitiveConstantsForEveryBackend() {
-        var libraries = compileProgram(List.of(rawModule("Primitives", "/capy/lang", """
-                type digit -> int
-                const ONE_DIGIT: digit = digit! { 1 }
-                const NINE_DIGIT: digit = digit! { 9 }
-                const MAX_INT_VALUE: int = 2147483647
-                const MAX_LONG_VALUE: long = 9223372036854775807L
-                """)));
+    void shouldGenerateImportedPrimitiveConstantsForEveryBackend() throws Exception {
+        var resource = CompilationTest.class.getResourceAsStream("/capy/lang/Primitives.json");
+        if (resource == null) {
+            fail("Missing bundled /capy/lang/Primitives.json");
+        }
+        var primitives = LinkedJsonCodec.read(
+                new String(resource.readAllBytes(), StandardCharsets.UTF_8),
+                CompiledModule.class
+        );
+        assertThat(primitives.visiblePrimitiveBackedTypes()).containsKey("digit");
         var compilation = CapybaraCompiler.compile(
                 List.of(rawModule("main", "", """
-                from /capy/lang/Primitives import { ONE_DIGIT, NINE_DIGIT, MAX_INT_VALUE, MAX_LONG_VALUE }
+                from /capy/lang/Primitives import { digit, ONE_DIGIT, NINE_DIGIT, MAX_INT_VALUE, MAX_LONG_VALUE }
 
                 fun digits(): List[digit] = [ONE_DIGIT, NINE_DIGIT]
+                fun render(value: digit): String = value.to_string()
                 fun max_int(): int = MAX_INT_VALUE
                 fun max_long(): long = MAX_LONG_VALUE
                 """)),
-                new LinkedHashSet<>(libraries.modules()),
+                new LinkedHashSet<>(List.of(primitives)),
                 emptyNativeProviders(),
                 emptyNativeProviders()
         ).unsafeRun();
@@ -328,6 +353,7 @@ class CompilationTest {
                 .code();
         assertThat(javaCode)
                 .contains("return java.util.List.of(1, 9);")
+                .contains("java.lang.String.valueOf(value)")
                 .contains("return 2147483647;")
                 .contains("return 9223372036854775807L;")
                 .doesNotContain("java.util.List.of(ONE_DIGIT, NINE_DIGIT)");
@@ -338,10 +364,10 @@ class CompilationTest {
                 .orElseThrow()
                 .code();
         assertThat(javaScriptCode)
-                .contains("return [1, 9];")
-                .contains("return 2147483647;")
-                .contains("return 9223372036854775807n;")
-                .doesNotContain("return [ONE_DIGIT, NINE_DIGIT];");
+                .contains("return __capy_to_string(value);")
+                .contains("ONE_DIGIT__")
+                .contains("NINE_DIGIT__")
+                .doesNotContain("value.to_string()");
 
         var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
                 .filter(module -> module.relativePath().equals("main.py"))
@@ -349,10 +375,10 @@ class CompilationTest {
                 .orElseThrow()
                 .code();
         assertThat(pythonCode)
-                .contains("return [1, 9]")
-                .contains("return 2147483647")
-                .contains("return 9223372036854775807")
-                .doesNotContain("return [ONE_DIGIT, NINE_DIGIT]");
+                .contains("return __capy_to_string(value)")
+                .contains(".ONE_DIGIT")
+                .contains(".NINE_DIGIT")
+                .doesNotContain("value.to_string()");
     }
 
     @Test
@@ -417,6 +443,47 @@ class CompilationTest {
 
                 fun valid(value: int): Seq[int] =
                     Cons { value: value, rest: () => End {} }
+                """)));
+    }
+
+    @Test
+    void shouldRejectBroaderLocalFunctionReturnTypeDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Main", "", """
+                        union Seq[T] = Cons[T] | End
+                        data Cons[T] { value: T, rest: () => Seq[T] }
+                        data End {}
+                        data Kaprekar {}
+
+                        fun find_kaprekar_sequence(start: Kaprekar): Cons[Kaprekar] =
+                            fun find_kaprekar_sequence_full(next: Kaprekar): Seq[Kaprekar] =
+                                Cons { value: next, rest: () => End {} }
+                            ---
+                            find_kaprekar_sequence_full(start)
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Function `find_kaprekar_sequence` returns `Seq[Kaprekar]`, "
+                        + "but declares `Cons[Kaprekar]`.");
+    }
+
+    @Test
+    void shouldAcceptNarrowerLocalFunctionReturnTypeForUnionDuringCompilation() {
+        compileProgram(List.of(rawModule("Main", "", """
+                union Seq[T] = Cons[T] | End
+                data Cons[T] { value: T, rest: () => Seq[T] }
+                data End {}
+
+                fun valid(start: int): Seq[int] =
+                    fun singleton(next: int): Cons[int] =
+                        Cons { value: next, rest: () => End {} }
+                    ---
+                    singleton(start)
                 """)));
     }
 
@@ -764,6 +831,9 @@ class CompilationTest {
 
                 fun typed_pair(values: Dict[int]): Dict[String] =
                     values | (key: String, value: int) => key + value
+
+                fun entries(values: Dict[int]): List[Tuple[String, int]] =
+                    values.entries()
                 """;
         var program = compileProgram(List.of(rawModule("TypedLambda", "/sample/app", source, SourceKind.FUNCTIONAL)));
 
@@ -777,6 +847,7 @@ class CompilationTest {
         assertThat(code).contains("value + \"!\"");
         assertThat(code).contains("java.lang.String key");
         assertThat(code).contains("int value");
+        assertThat(code).contains(".entrySet().stream().map(__capy_entry ->");
     }
 
     @Test
@@ -906,7 +977,7 @@ class CompilationTest {
                 .contains("import static sample.lib.Ordering.GREATER;")
                 .contains(".compareTo(")
                 .contains("capy.lang.Ordering.EQUAL")
-                .contains("import static capy.collection.Seq.*;")
+                .contains("capy.collection.Seq.Seq_T__drop_until__1_0")
                 .contains("__capy_result_or_")
                 .contains("flatMap(")
                 .contains("supplier.get()")
@@ -973,6 +1044,7 @@ class CompilationTest {
                 import /capy/lang/Effect
                 import /capy/io/Console
                 import /capy/lang/Primitives
+                from /capy/collection/Seq import { Cons, Seq }
                 from /capy/lang/Option import { Some, None }
                 import /capy/lang/Async
                 import /capy/lang/System
@@ -1063,7 +1135,7 @@ class CompilationTest {
                 .contains("java.lang.Integer.toString(value)")
                 .contains("return __capy_error(value);")
                 .contains("dev.capylang.PathUtil.fromString(value)")
-                .contains("return capy.io.IO.exists(")
+                .contains("return capy.io.IO.exists__")
                 .contains("return capy.collection.Seq.toSeq(values);")
                 .doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
 
@@ -1128,7 +1200,11 @@ class CompilationTest {
         assertThat(code).contains("__capy_parse_int(value)");
         assertThat(code).contains("capy.lang.Async.start(capy.lang.Effect.delay(");
         assertThat(code).contains("java.lang.String.valueOf(");
-        assertThat(code).contains("__capy_data_field(left, \"value\")");
+        assertThat(code)
+                .contains("public static int add__")
+                .contains("(int left, int right)")
+                .contains("return (left + right);")
+                .doesNotContain("__capy_data_field(left, \"value\")");
     }
 
     @Test
@@ -1386,6 +1462,12 @@ class CompilationTest {
                     case Success { value } -> (value | item => item.to_string()).as_list()
                     case Error _ -> []
 
+                fun render_cons(result: Cons[Item]): String =
+                    result.value.to_string()
+
+                fun cons_rest(result: Cons[Item]): Seq[Item] =
+                    result.rest()
+
                 fun first_or_zero(values: List[int]): int =
                     match values[0] with
                     case Some { value } -> value
@@ -1396,6 +1478,11 @@ class CompilationTest {
                 """;
         var program = compileProgram(List.of(
                 rawModule("Result", "/capy/lang", resultSource, SourceKind.FUNCTIONAL),
+                rawModule("Seq", "/capy/collection", """
+                        data End {}
+                        data Cons[T] { value: T, rest: () => Seq[T] }
+                        union Seq[T] = End | Cons[T]
+                        """, SourceKind.FUNCTIONAL),
                 rawModule("Digit", "/sample", digitSource, SourceKind.FUNCTIONAL),
                 rawModule("UseDigit", "/sample", consumerSource, SourceKind.FUNCTIONAL)
         ));
@@ -1428,6 +1515,8 @@ class CompilationTest {
                 .contains("return __capy_parse_int(value)")
                 .contains(" = sample.Digit.Item_to_string__")
                 .contains("Item_to_string__")
+                .contains("__capy_seq_first_value(result)")
+                .contains("return __capy_seq_rest(result)")
                 .contains("__capy_index(values, 0)")
                 .doesNotContain("Effect_pure")
                 .doesNotContain("Console_println")
@@ -1463,14 +1552,19 @@ class CompilationTest {
                 .contains("return println(value)")
                 .contains("return __capy_parse_int(value)")
                 .contains("Item_to_string__")
+                .contains("__capy_seq_first_value(result)")
+                .contains("return __capy_seq_rest(result)")
+                .contains("__capy_dynamic_flat_map(int_result")
+                .contains("__capy_result_map(__capy_primitive_constructor_result")
                 .contains("(__capy_size(acc) === 0)")
-                .doesNotContain("__capy_import_capy_lang_Effect")
-                .doesNotContain("__capy_import_capy_io_Console")
-                .doesNotContain("__capy_import_capy_lang_Primitives")
+                .contains("__capy_import_capy_lang_Effect")
+                .contains("__capy_import_capy_io_Console")
+                .contains("__capy_import_capy_lang_Primitives")
                 .doesNotContain("Effect_pure")
                 .doesNotContain("Console_println")
                 .doesNotContain("Primitives_to_int")
                 .doesNotContain("item.to_string(")
+                .doesNotContain("result.rest(")
                 .doesNotContain("acc.is_empty(");
         assertThat(javaScriptDigitCode)
                 .contains("return __capy_to_string(this_)")
@@ -1478,8 +1572,38 @@ class CompilationTest {
                 .contains("\"__capy_constructor_digit");
         assertThat(javaScriptRuntimeCode)
                 .contains("function __capy_primitive_constructor_result(value)")
+                .contains("function __capy_dynamic_map(value, mapper)")
+                .contains("function __capy_dynamic_flat_map(value, mapper)")
                 .contains("String.fromCharCode(10)")
                 .doesNotContain("split(/\\\n");
+    }
+
+    @Test
+    void shouldLowerImportedStandardPrimitiveConstructorAsResultInJavaScript() {
+        var source = """
+                from /capy/lang/Primitives import { digit }
+                from /capy/lang/Result import { Result }
+
+                fun increment_digit(value: int): Result[int] =
+                    digit { value }.map(digit => digit + 1)
+                """;
+        var program = compileProgram(List.of(rawModule(
+                "StandardPrimitive",
+                "/sample/app",
+                source,
+                SourceKind.FUNCTIONAL
+        )));
+
+        var code = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/StandardPrimitive.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("__capy_result_map(__capy_primitive_constructor_result(require(\"../../capy/lang/Primitives\")[\"__capy_constructor_digit")
+                .doesNotContain("__capy_result_map(value,")
+                .doesNotContain("__capy_get_field(value, 'value').map(");
     }
 
     @Test
@@ -1637,7 +1761,9 @@ class CompilationTest {
         var consumerSource = """
                 from /capy/lang/Program import { * }
 
-                fun fail(): Program = Failed { exit_code: 1 }
+                fun fail(): Program =
+                    let exit_code: failed_exit_code = failed_exit_code! { 1 }
+                    Failed { exit_code }
                 """;
         var program = compileProgram(List.of(
                 rawModule("Program", "/capy/lang", programSource, SourceKind.FUNCTIONAL),
@@ -1658,7 +1784,9 @@ class CompilationTest {
 
         assertThat(programCode).contains("    public record Failed(int exit_code) {}");
         assertThat(programCode).doesNotContain("record failed_exit_code");
-        assertThat(consumerCode).contains("new capy.lang.Program.Failed(1)");
+        assertThat(consumerCode)
+                .contains("int exit_code = 1;")
+                .contains("new capy.lang.Program.Failed(exit_code)");
     }
 
     @Test

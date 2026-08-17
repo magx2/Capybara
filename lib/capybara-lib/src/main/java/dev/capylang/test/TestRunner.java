@@ -215,6 +215,9 @@ public class TestRunner {
     }
 
     private static Object asTestFile(Object value) {
+        if (value instanceof CapyTest.TestFile) {
+            return value;
+        }
         if (value instanceof Map<?, ?> map && "TestFile".equals(map.get("__type"))) {
             return value;
         }

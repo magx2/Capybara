@@ -86,7 +86,7 @@ public final class NativeCompilerValidator {
     );
     private static final Map<String, Set<String>> JAVA_SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
             Map.entry("Effect", Set.of("map", "flat_map", "start")),
-            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "or_else", "or")),
+            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "recover", "or_else", "or")),
             Map.entry("Option", Set.of("map", "filter", "flat_map", "or_else", "or")),
             Map.entry("Async", Set.of("join", "map", "flat_map", "`|`", "`|*`")),
             Map.entry("List", Set.of(
@@ -100,6 +100,12 @@ public final class NativeCompilerValidator {
             "nothing", "String", "List", "Set", "Dict", "Tuple", "Option", "Result", "Either",
             "Effect", "Program", "Assert", "TestFile", "TestCase", "Seq", "Regex", "Match",
             "Path", "Ordering", "size", "index"
+    );
+    private static final Map<String, Set<String>> STANDARD_METHODS_BY_RECEIVER = Map.ofEntries(
+            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "recover", "or_else", "or")),
+            Map.entry("Option", Set.of("map", "filter", "flat_map", "reduce", "or_else", "or")),
+            Map.entry("Effect", Set.of("map", "flat_map", "start")),
+            Map.entry("Async", Set.of("join", "map", "flat_map"))
     );
 
     public List<CompilerError> validate(
@@ -257,7 +263,7 @@ public final class NativeCompilerValidator {
         }
         validateFunctionAnnotations(context, module, function, errors, nativeProviderKeys);
         validateExpression(context, module, function.body(), errors);
-        validateDistinctCollectionReturnType(context, module, function, errors);
+        validateFunctionReturnType(context, module, function, errors);
         validateNestedLambdaFunctionArguments(
                 context,
                 module,
@@ -722,7 +728,24 @@ public final class NativeCompilerValidator {
             return;
         }
         var receiverTypes = context.extensionMethodReceiverTypes(module, methodName, arity);
-        if (receiverTypes.isEmpty() || receiverTypes.contains(unqualified(receiverType.name()))) {
+        var receiverName = unqualified(receiverType.name());
+        if (receiverTypes.contains(receiverName)) {
+            return;
+        }
+        var standardMethods = STANDARD_METHODS_BY_RECEIVER.get(receiverName);
+        if (standardMethods != null && standardMethods.contains(methodName)) {
+            return;
+        }
+        if (receiverTypes.isEmpty() && standardMethods != null) {
+            errors.add(error(
+                    module,
+                    location,
+                    "Method `" + methodName + "` is not defined for receiver type `"
+                            + displayType(receiverType) + "`."
+            ));
+            return;
+        }
+        if (receiverTypes.isEmpty()) {
             return;
         }
         var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, receiverTypes);
@@ -958,23 +981,107 @@ public final class NativeCompilerValidator {
                 || (inferredType != null && functionTypeName(inferredType.name()));
     }
 
-    private void validateDistinctCollectionReturnType(
+    private void validateFunctionReturnType(
             Context context,
             ParsedModule module,
             FunctionDeclaration function,
             List<CompilerError> errors
     ) {
+        if (function.returnType().name().isBlank()) {
+            return;
+        }
         var actual = validationExpressionType(context, module, function.body(), parameterTypes(function));
-        if (actual == null || !distinctSequenceListMismatch(function.returnType(), actual)) {
+        if (actual == null || returnTypeAssignable(context, module, function.returnType(), actual)) {
+            return;
+        }
+        if (!distinctSequenceListMismatch(function.returnType(), actual)
+                && !definiteNestedTypeMismatch(function.returnType(), actual)
+                && !returnTypeAssignable(context, module, actual, function.returnType())) {
+            return;
+        }
+        if (!distinctSequenceListMismatch(function.returnType(), actual)) {
+            errors.add(error(
+                    module,
+                    function.location(),
+                    "Function `" + localFunctionDisplayName(function.name()) + "` returns `"
+                            + displayType(actual) + "`, but declares `"
+                            + displayType(function.returnType()) + "`."
+            ));
             return;
         }
         errors.add(error(
                 module,
                 function.location(),
-                "Function `" + function.name() + "` returns `" + displayType(actual)
+                "Function `" + localFunctionDisplayName(function.name()) + "` returns `" + displayType(actual)
                         + "`, but declares `" + displayType(function.returnType())
                         + "`; use an explicit `to_seq` or `as_list` conversion."
         ));
+    }
+
+    private boolean returnTypeAssignable(
+            Context context,
+            ParsedModule module,
+            TypeReference expected,
+            TypeReference actual
+    ) {
+        return returnTypeAssignable(context, module, expected, actual, new HashSet<>());
+    }
+
+    private boolean returnTypeAssignable(
+            Context context,
+            ParsedModule module,
+            TypeReference expected,
+            TypeReference actual,
+            Set<String> visited
+    ) {
+        var expectedName = nominalTypeName(expected.name());
+        var actualName = nominalTypeName(actual.name());
+        if (expectedName.isBlank()
+                || actualName.isBlank()
+                || expectedName.equals("any")
+                || actualName.equals("any")
+                || isSingleLetterGeneric(expectedName)
+                || isSingleLetterGeneric(actualName)) {
+            return true;
+        }
+        if (expectedName.equals("int") && Set.of("size", "index").contains(actualName)) {
+            return true;
+        }
+        if (expectedName.equals(actualName)) {
+            if (expected.arguments().isEmpty() || actual.arguments().isEmpty()) {
+                return true;
+            }
+            if (expected.arguments().size() != actual.arguments().size()) {
+                return false;
+            }
+            for (var index = 0; index < expected.arguments().size(); index++) {
+                if (!returnTypeAssignable(
+                        context,
+                        module,
+                        expected.arguments().get(index),
+                        actual.arguments().get(index),
+                        visited
+                )) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        var key = displayType(expected) + "<-" + displayType(actual);
+        if (!visited.add(key)) {
+            return false;
+        }
+        try {
+            for (var parent : context.directParentTypes(module, actual)) {
+                if (returnTypeAssignable(context, module, expected, parent, visited)) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            visited.remove(key);
+        }
     }
 
     private void validateDistinctCollectionBinding(
@@ -1274,6 +1381,17 @@ public final class NativeCompilerValidator {
         }
         if (receiverName.equals("Seq") && call.name().equals("as_list") && call.arguments().isEmpty()) {
             return new TypeReference("List", receiverType.arguments());
+        }
+        if (!STANDARD_METHODS_BY_RECEIVER.getOrDefault(receiverName, Set.of()).contains(call.name())) {
+            var extensionReturnType = context.extensionMethodReturnType(
+                    module,
+                    receiverName,
+                    call.name(),
+                    call.arguments().size()
+            );
+            if (extensionReturnType != null) {
+                return extensionReturnType;
+            }
         }
         if (call.arguments().size() != 1
                 || !(call.arguments().getFirst() instanceof LambdaExpression mapper)
@@ -1607,6 +1725,10 @@ public final class NativeCompilerValidator {
     ) {
         return inferJavaBackendExpressionType(call.receiver(), types).flatMap(type -> {
             var receiverType = unqualified(type.name());
+            var standardMethods = STANDARD_METHODS_BY_RECEIVER.get(receiverType);
+            if (standardMethods != null && !standardMethods.contains(call.name())) {
+                return java.util.Optional.empty();
+            }
             var supportedMethods = JAVA_SUPPORTED_METHODS_BY_RECEIVER.get(receiverType);
             if (supportedMethods == null || supportedMethods.contains(call.name())) {
                 return java.util.Optional.empty();
@@ -2306,6 +2428,12 @@ public final class NativeCompilerValidator {
         }
 
         private boolean symbolExists(String path, String name) {
+            if (stdlibImport(path)) {
+                var linked = linkedModule(path);
+                if (linked != null) {
+                    return linkedSymbolExists(linked, name);
+                }
+            }
             var module = parsedModule(path);
             if (module != null) {
                 return symbolsByModule.get(module).contains(name);
@@ -2526,6 +2654,109 @@ public final class NativeCompilerValidator {
             return receiverTypes;
         }
 
+        private TypeReference extensionMethodReturnType(
+                ParsedModule module,
+                String receiverType,
+                String methodName,
+                int arity
+        ) {
+            var local = parsedExtensionMethodReturnType(module, null, receiverType, methodName, arity);
+            if (local != null) {
+                return local;
+            }
+            TypeReference match = null;
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                var imported = importedModule == null
+                        ? null
+                        : parsedExtensionMethodReturnType(
+                                importedModule,
+                                declaration,
+                                receiverType,
+                                methodName,
+                                arity
+                        );
+                if (imported == null) {
+                    var linkedModule = linkedModule(declaration.modulePath());
+                    imported = linkedModule == null
+                            ? null
+                            : linkedExtensionMethodReturnType(
+                                    declaration,
+                                    linkedModule,
+                                    receiverType,
+                                    methodName,
+                                    arity
+                            );
+                }
+                if (imported == null) {
+                    continue;
+                }
+                if (match != null && !match.equals(imported)) {
+                    return null;
+                }
+                match = imported;
+            }
+            return match;
+        }
+
+        private TypeReference parsedExtensionMethodReturnType(
+                ParsedModule module,
+                ImportDeclaration declaration,
+                String receiverType,
+                String methodName,
+                int arity
+        ) {
+            for (var definition : module.definitions()) {
+                if (!(definition instanceof FunctionDefinition function)
+                        || function.function().parameters().size() != arity
+                        || (declaration != null && function.function().visibility().equals("private"))) {
+                    continue;
+                }
+                var owner = extensionMethodReceiverType(function.function().name(), methodName);
+                if (receiverType.equals(owner) && (declaration == null || importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                ))) {
+                    return function.function().returnType();
+                }
+            }
+            return null;
+        }
+
+        private TypeReference linkedExtensionMethodReturnType(
+                ImportDeclaration declaration,
+                CompiledModule module,
+                String receiverType,
+                String methodName,
+                int arity
+        ) {
+            for (var function : module.functions()) {
+                if (function.parameters().size() != arity || function.visibility().equals("private")) {
+                    continue;
+                }
+                var owner = extensionMethodReceiverType(function.name(), methodName);
+                if (receiverType.equals(owner) && importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                )) {
+                    return parsedTypeReference(function.returnType());
+                }
+            }
+            return null;
+        }
+
+        private TypeReference parsedTypeReference(CompiledTypeReference reference) {
+            return new TypeReference(
+                    reference.name(),
+                    reference.arguments().stream().map(this::parsedTypeReference).toList()
+            );
+        }
+
         private void collectParsedExtensionMethodReceiverTypes(
                 ParsedModule module,
                 ImportDeclaration declaration,
@@ -2665,6 +2896,149 @@ public final class NativeCompilerValidator {
                 }
             }
             return null;
+        }
+
+        private List<TypeReference> directParentTypes(ParsedModule module, TypeReference actual) {
+            var parents = new LinkedHashSet<TypeReference>();
+            collectParsedParentTypes(module, actual, parents);
+            for (var declaration : module.imports()) {
+                var actualName = unqualified(actual.name());
+                if (declaration.qualified()
+                        || declaration.excludedNames().contains(actualName)
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(actualName))) {
+                    continue;
+                }
+                var imported = parsedModule(declaration.modulePath());
+                if (imported != null) {
+                    collectParsedParentTypes(imported, actual, parents);
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked != null) {
+                    collectLinkedParentTypes(linked, actual, parents);
+                }
+            }
+            return List.copyOf(parents);
+        }
+
+        private void collectParsedParentTypes(
+                ParsedModule module,
+                TypeReference actual,
+                Set<TypeReference> parents
+        ) {
+            var actualName = unqualified(actual.name());
+            for (var definition : module.definitions()) {
+                if (definition instanceof TypeDeclaration type) {
+                    for (var variant : type.variants()) {
+                        if (!unqualified(variant.name()).equals(actualName)) {
+                            continue;
+                        }
+                        var bindings = new LinkedHashMap<String, TypeReference>();
+                        bindTypeParameters(variant, actual, bindings);
+                        parents.add(new TypeReference(
+                                type.name(),
+                                type.parameters().stream()
+                                        .map(parameter -> bindings.getOrDefault(
+                                                parameter,
+                                                new TypeReference(parameter, List.of())
+                                        ))
+                                        .toList()
+                        ));
+                    }
+                }
+                if (definition instanceof DataDeclaration data && data.name().equals(actualName)) {
+                    var bindings = new LinkedHashMap<String, TypeReference>();
+                    for (var index = 0;
+                         index < data.parameters().size() && index < actual.arguments().size();
+                         index++) {
+                        bindings.put(data.parameters().get(index), actual.arguments().get(index));
+                    }
+                    for (var parent : data.parents()) {
+                        parents.add(substituteTypeParameters(parent.typeReference(), bindings));
+                    }
+                }
+            }
+        }
+
+        private void bindTypeParameters(
+                TypeReference template,
+                TypeReference actual,
+                Map<String, TypeReference> bindings
+        ) {
+            if (isSingleLetterGeneric(template.name())) {
+                bindings.put(template.name(), actual);
+                return;
+            }
+            if (!unqualified(template.name()).equals(unqualified(actual.name()))
+                    || template.arguments().size() != actual.arguments().size()) {
+                return;
+            }
+            for (var index = 0; index < template.arguments().size(); index++) {
+                bindTypeParameters(template.arguments().get(index), actual.arguments().get(index), bindings);
+            }
+        }
+
+        private TypeReference substituteTypeParameters(
+                TypeReference type,
+                Map<String, TypeReference> bindings
+        ) {
+            var replacement = bindings.get(type.name());
+            if (replacement != null) {
+                return replacement;
+            }
+            return new TypeReference(
+                    type.name(),
+                    type.arguments().stream()
+                            .map(argument -> substituteTypeParameters(argument, bindings))
+                            .toList()
+            );
+        }
+
+        private void collectLinkedParentTypes(
+                CompiledModule module,
+                TypeReference actual,
+                Set<TypeReference> parents
+        ) {
+            var actualName = unqualified(actual.name());
+            if (!hasLinkedSchema(module, "__capy_schema_type|" + actualName)) {
+                return;
+            }
+            var prefix = "__capy_schema_parent|" + actualName + "|";
+            for (var function : module.functions()) {
+                if (!function.name().startsWith(prefix)
+                        || !(function.body() instanceof CompiledExpression.CompiledStringLiteral schema)) {
+                    continue;
+                }
+                var parent = schemaTypeReference(schema.value());
+                if (parent.arguments().isEmpty() && !actual.arguments().isEmpty()) {
+                    parent = new TypeReference(parent.name(), actual.arguments());
+                }
+                parents.add(parent);
+            }
+        }
+
+        private TypeReference schemaTypeReference(String value) {
+            var bracket = value.indexOf('[');
+            if (bracket < 0 || !value.endsWith("]")) {
+                return new TypeReference(value, List.of());
+            }
+            var arguments = new ArrayList<TypeReference>();
+            var argumentsSource = value.substring(bracket + 1, value.length() - 1);
+            var depth = 0;
+            var start = 0;
+            for (var index = 0; index <= argumentsSource.length(); index++) {
+                if (index == argumentsSource.length()
+                        || (argumentsSource.charAt(index) == ',' && depth == 0)) {
+                    arguments.add(schemaTypeReference(argumentsSource.substring(start, index)));
+                    start = index + 1;
+                    continue;
+                }
+                if (argumentsSource.charAt(index) == '[') {
+                    depth++;
+                } else if (argumentsSource.charAt(index) == ']') {
+                    depth--;
+                }
+            }
+            return new TypeReference(value.substring(0, bracket), List.copyOf(arguments));
         }
 
         private boolean privateType(ParsedModule module, String name) {

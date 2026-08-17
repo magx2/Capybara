@@ -146,11 +146,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     values |* value.to_string()
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/PipeFailure.cfun` at 2:4 in function `broken`: "
-                        + "operator `|*` requires a lambda or function reference on its right-hand side; "
-                        + "found a method call. No Java source was written for this module.");
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Operator `|*` requires a lambda or function reference on its right-hand side; "
+                        + "found a method call.");
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -484,7 +483,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
-    void wrapsPrimitiveLiteralForPrimitiveBackedDataField() throws Exception {
+    void rejectsPrimitiveLiteralForPrimitiveBackedDataFieldDuringCompilation() throws Exception {
         var source = writeSource("sample/PrimitiveBackedField.cfun", """
                 from /capy/lang/Result import { Success }
 
@@ -497,14 +496,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 const CODE: Code = Code! { value: 6 }
                 """);
 
-        assertThat(compileGenerateStderr()).isEmpty();
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Field `value` of data `Code` has type `int`, but requires primitive-backed type `digit`")
+                .contains("construct `digit` explicitly and unwrap its `Result` before constructing `Code`");
 
-        var generated = generatedPath(source);
-        assertThat(generated)
-                .content()
-                .contains("__capy_data(\"digit\", java.util.Map.ofEntries(java.util.Map.entry(\"value\", 6)))")
-                .doesNotContain("Unsupported CFUN expression at");
-        assertJavaCompiles(generated);
+        assertThat(generatedPath(source)).doesNotExist();
     }
 
     @Test
@@ -607,8 +604,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("__capy_parse_int")
                 .contains("sample.Digit.")
                 .contains("java.lang.Object digit =")
-                .contains("__capy_list_append(((java.util.List<java.lang.Object>) acc_list), ((java.lang.Object) digit))")
-                .doesNotContain("int digit =")
+                .contains("__capy_list_append(((java.util.List<java.lang.Integer>) acc_list), ((java.lang.Integer) digit))")
                 .doesNotContain("__capy_list_append(acc_list, ((java.lang.Integer) __capy_data_field(digit")
                 .doesNotContain("Unsupported CFUN expression at");
     }
@@ -649,7 +645,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(compileGenerateStderr()).isEqualTo("""
                 Compilation failed with 1 error(s):
-                /sample/StringMethodFailure.cfun:4:4: Method `not_a_java_method` on `Result` is not supported by the Java backend.
+                /sample/StringMethodFailure.cfun:4:4: Method `not_a_java_method` is not defined for receiver type `Result[int]`.
                 """);
 
         assertThat(generatedPath(source)).doesNotExist();
@@ -914,6 +910,88 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesResultAssertSucceedsAndDiscoversTheTestForEveryBackend() throws Exception {
+        writeSource("sample/ResultValue.cfun", """
+                from /capy/lang/Result import { Result, Success }
+
+                fun value(): Result[String] = Success { "1234" }
+                """);
+        var testSource = writeTestSource("sample/ResultValue.test.cfun", """
+                from /sample/ResultValue import { value }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/sample/ResultValue.cfun", [
+                        test("result succeeds", () =>
+                            assert_that(value().map(item => item)).succeeds("1234")
+                        )
+                    ])
+                """);
+
+        assertThat(compileGenerateWithTestsStderr("java")).isEmpty();
+        assertThat(generatedTestPath(testSource))
+                .content()
+                .contains("__capy_assert_result_succeeds(")
+                .doesNotContain(").succeeds(");
+        assertJavaCompiles(
+                generatedPath(inputDir().resolve("sample/ResultValue.cfun")),
+                generatedTestPath(testSource)
+        );
+
+        assertThat(compileGenerateWithTestsStderr("javascript")).isEmpty();
+        assertThat(generatedTestPath(testSource, ".js"))
+                .content()
+                .contains(".succeeds(\"1234\")");
+        assertThat(testOutputDir().resolve("capy/test/CapyTestRuntime.js"))
+                .content()
+                .contains("__capy_gather_module(\"../../sample/ResultValue.test\")");
+
+        assertThat(compileGenerateWithTestsStderr("python")).isEmpty();
+        assertThat(generatedTestPath(testSource, ".py"))
+                .content()
+                .contains(".succeeds(\"1234\")");
+        assertThat(testOutputDir().resolve("capy/test/CapyTestRuntime.py"))
+                .content()
+                .contains("_gather_module(\"sample.ResultValue.test\")");
+    }
+
+    @Test
+    void specializesImportedGenericFunctionResultsForChainedMethodsInEveryBackend() throws Exception {
+        var boxSource = writeSource("sample/GenericBox.cfun", """
+                data Box[T] { value: T }
+
+                fun box(value: T): Box[T] = Box { value }
+
+                fun Box[T].unwrap(): T = this.value
+                """);
+        var consumerSource = writeSource("sample/UseGenericBox.cfun", """
+                from /sample/GenericBox import { Box, box }
+
+                fun text(): String = box("generic").unwrap()
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+        assertThat(generatedPath(consumerSource))
+                .content()
+                .contains("GenericBox.Box_T__unwrap__")
+                .doesNotContain(".unwrap(");
+        assertJavaCompiles(generatedPath(boxSource), generatedPath(consumerSource));
+
+        assertThat(compileGenerateStderr("javascript")).isEmpty();
+        assertThat(generatedPath(consumerSource, ".js"))
+                .content()
+                .contains("Box_T__unwrap__")
+                .doesNotContain(".unwrap(");
+
+        assertThat(compileGenerateStderr("python")).isEmpty();
+        assertThat(generatedPath(consumerSource, ".py"))
+                .content()
+                .contains("Box_T__unwrap__")
+                .doesNotContain(".unwrap(");
+    }
+
+    @Test
     void generatesImportedBinaryExtensionOperatorInTestModule() throws Exception {
         var mainSource = writeSource("sample/ComparableValue.cfun", """
                 data Value { number: int }
@@ -977,8 +1055,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(compileGenerateWithTestsStderr()).isEmpty();
         assertThat(generatedPath(mainSource))
                 .content()
-                .contains("Map.entry(\"first\", __capy_data(\"digit\"")
-                .contains("Map.entry(\"fourth\", __capy_data(\"digit\"");
+                .contains("Map.entry(\"first\", 1)")
+                .contains("Map.entry(\"fourth\", 4)");
         assertThat(generatedTestPath(testSource))
                 .content()
                 .doesNotContain("unsupported(\"match\")");

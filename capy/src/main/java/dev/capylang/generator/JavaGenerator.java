@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
 public final class JavaGenerator {
     private static final ThreadLocal<CompiledProgram> MAIN_PROGRAM_CONTEXT = new ThreadLocal<>();
+    private static final String PRIMITIVE_SCHEMA_PREFIX = "__capy_schema_primitive|";
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Pattern UNSUPPORTED_FUNCTION = Pattern.compile(
             "throw new UnsupportedOperationException\\(\\\"Unsupported CFUN expression at (\\d+):(\\d+)\\\"\\);"
@@ -95,7 +96,7 @@ public final class JavaGenerator {
         );
     }
 
-    private static Map<String, Object> withBundledImportModules(Map<String, Object> program) {
+    static Map<String, Object> withBundledImportModules(Map<String, Object> program) {
         var modules = new ArrayList<>(list(program.get("modules")));
         var knownModules = new LinkedHashSet<String>();
         var pendingImports = new ArrayDeque<String>();
@@ -119,12 +120,67 @@ public final class JavaGenerator {
             enqueueImports(generatedModule, pendingImports);
         }
 
-        if (modules.size() == list(program.get("modules")).size()) {
+        var linkedModules = withBundledPrimitiveSchemaFunctions(modules);
+        if (modules.size() == list(program.get("modules")).size() && linkedModules.equals(modules)) {
             return program;
         }
         var enriched = new LinkedHashMap<>(program);
-        enriched.put("modules", List.copyOf(modules));
+        enriched.put("modules", linkedModules);
         return Collections.unmodifiableMap(enriched);
+    }
+
+    private static List<Object> withBundledPrimitiveSchemaFunctions(List<Object> modules) {
+        var modulesByPath = new LinkedHashMap<String, Map<String, Object>>();
+        modules.stream().map(JavaGenerator::dataMap).forEach(module ->
+                modulesByPath.put(moduleImportPath(module), module)
+        );
+        return modules.stream().map(value -> {
+            var module = dataMap(value);
+            var functions = new ArrayList<>(list(module.get("functions")));
+            var functionNames = new LinkedHashSet<String>();
+            functions.stream().map(JavaGenerator::dataMap)
+                    .map(function -> string(function.get("name")))
+                    .forEach(functionNames::add);
+            for (var importValue : list(module.get("imports"))) {
+                var declaration = dataMap(importValue);
+                if (Boolean.TRUE.equals(declaration.get("qualified"))) {
+                    continue;
+                }
+                var importedModule = modulesByPath.get(normalizeModuleImportPath(
+                        string(declaration.get("modulePath"))
+                ));
+                if (importedModule == null) {
+                    continue;
+                }
+                for (var functionValue : list(importedModule.get("functions"))) {
+                    var function = dataMap(functionValue);
+                    var functionName = string(function.get("name"));
+                    if (!functionName.startsWith(PRIMITIVE_SCHEMA_PREFIX)) {
+                        continue;
+                    }
+                    var typeName = functionName.substring(PRIMITIVE_SCHEMA_PREFIX.length());
+                    if (importIncludesName(declaration, typeName) && functionNames.add(functionName)) {
+                        functions.add(functionValue);
+                    }
+                }
+            }
+            if (functions.size() == list(module.get("functions")).size()) {
+                return value;
+            }
+            var linked = new LinkedHashMap<>(module);
+            linked.put("functions", List.copyOf(functions));
+            return (Object) Collections.unmodifiableMap(linked);
+        }).toList();
+    }
+
+    private static boolean importIncludesName(Map<String, Object> declaration, String name) {
+        var excluded = list(declaration.get("excludedNames")).stream().map(JavaGenerator::string).toList();
+        if (Boolean.TRUE.equals(declaration.get("wildcard"))) {
+            return !excluded.contains(name);
+        }
+        return list(declaration.get("importedNames")).stream()
+                .map(JavaGenerator::string)
+                .anyMatch(name::equals);
     }
 
     private static void enqueueImports(Map<String, Object> module, ArrayDeque<String> pendingImports) {

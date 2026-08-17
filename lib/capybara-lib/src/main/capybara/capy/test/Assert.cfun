@@ -1401,7 +1401,7 @@ fun assert_that(value: Dict[T]): DictAssert[T] = DictAssert { value: value, asse
 /// Starts an assertion chain for a sequence value.
 fun assert_that(value: Seq[T]): SeqAssert[T] = SeqAssert { value: value, assertions: [] }
 /// Starts an option assertion chain.
-fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] }
+fun assert_that(value: Option[T]): OptionAssert[T] = OptionAssert { value: value, assertions: [] }
 /// Starts a result assertion chain.
 ///
 /// Example:
@@ -1410,6 +1410,6 @@ fun assert_that(value: Option[T]) = OptionAssert { value: value, assertions: [] 
 ///     assert_that(user.name).is_equal_to("Ada")
 /// )
 /// ```
-fun assert_that(value: Result[T]) = ResultAssert { value: value, assertions: [] }
+fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value: value, assertions: [] }
 /// Starts a data assertion chain using data equality or containment checks.
 fun assert_that(value: data) = DataAssert { value: value, assertions: [] }

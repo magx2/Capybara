@@ -9,7 +9,9 @@ public final class JavaScriptGenerator {
     }
 
     public static GeneratedProgram javaScriptGenerator(CompiledProgram program) {
-        var compiledProgram = JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program));
+        var compiledProgram = JavaGenerator.withBundledImportModules(
+                JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program))
+        );
         var generated = JavaGenerator.dataMap(
                 GeneratedJavaScriptGenerator.java_script_generator__76_0(compiledProgram)
         );
