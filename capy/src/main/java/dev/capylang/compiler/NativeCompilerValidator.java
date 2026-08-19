@@ -115,6 +115,7 @@ public final class NativeCompilerValidator {
             NativeProviderManifest nativeProviders
     ) {
         var context = new Context(modules, libraryModules);
+        VALIDATED_MODULES.get().clear();
         var errors = new ArrayList<CompilerError>();
         validateImports(context, errors);
         validateDefinitions(context, errors);
@@ -2799,19 +2800,15 @@ public final class NativeCompilerValidator {
         }
 
         private boolean symbolExists(String path, String name) {
-            var currentModule = currentParsedModule(path);
-            if (currentModule != null) {
-                return symbolsByModule.get(currentModule).contains(name);
+            var parsed = parsedModule(path);
+            if (parsed != null) {
+                return symbolsByModule.get(parsed).contains(name);
             }
             if (stdlibImport(path)) {
                 var linked = linkedModule(path);
                 if (linked != null) {
                     return linkedSymbolExists(linked, name);
                 }
-            }
-            var module = parsedModule(path);
-            if (module != null) {
-                return symbolsByModule.get(module).contains(name);
             }
             var linked = linkedModule(path);
             if (linked != null) {

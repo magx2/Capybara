@@ -296,15 +296,16 @@ class CompilationTest {
     }
 
     @Test
-    void shouldRejectUnknownExplicitStandardLibraryImports() {
+    void shouldRejectUnknownExplicitStandardLibraryImports() throws Exception {
         var libraries = compileProgram(List.of(rawModule("Primitives", "/capy/lang", """
                 const ZERO_DIGIT: int = 0
+                const CURRENT_BUILD_ONLY: int = 1
                 """)));
         var result = CapybaraCompiler.compile(
                 List.of(rawModule("main", "", """
-                        from /capy/lang/Primitives import { ZERO_DIGIT, ONE }
+                        from /capy/lang/Primitives import { ZERO_DIGIT, CURRENT_BUILD_ONLY, ONE }
 
-                        fun zero(): int = ZERO_DIGIT
+                        fun total(): int = ZERO_DIGIT + CURRENT_BUILD_ONLY
                         """)),
                 new LinkedHashSet<>(libraries.modules()),
                 emptyNativeProviders(),
@@ -314,7 +315,50 @@ class CompilationTest {
         assertThat(result).isInstanceOf(Either.Right.class);
         assertThat(((Either.Right<?, ?>) result).value().toString())
                 .contains("Module `/capy/lang/Primitives` does not export `ONE`.")
-                .doesNotContain("does not export `ZERO_DIGIT`");
+                .doesNotContain("does not export `ZERO_DIGIT`")
+                .doesNotContain("does not export `CURRENT_BUILD_ONLY`");
+
+        var resource = CompilationTest.class.getResourceAsStream("/capy/lang/Primitives.json");
+        if (resource == null) {
+            fail("Missing bundled /capy/lang/Primitives.json");
+        }
+        var bundledPrimitives = LinkedJsonCodec.read(
+                new String(resource.readAllBytes(), StandardCharsets.UTF_8),
+                CompiledModule.class
+        );
+        var bundledResult = CapybaraCompiler.compile(
+                List.of(rawModule("bundled", "", """
+                        from /capy/lang/Primitives import { digit }
+
+                        fun identity(value: digit): digit = value
+                        """)),
+                new LinkedHashSet<>(List.of(bundledPrimitives)),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(bundledResult).isInstanceOf(Either.Left.class);
+    }
+
+    @Test
+    void shouldValidateWildcardExclusionsAgainstCurrentStandardLibrarySources() {
+        var libraries = compileProgram(List.of(rawModule("CurrentAssert", "/capy/test", """
+                fun fail(message: String): String = message
+                fun pass(message: String): String = message
+                """)));
+
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("main", "", """
+                        from /capy/test/CurrentAssert import { * } except { fail }
+
+                        fun success(): String = pass("ok")
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Left.class);
     }
 
     @Test
@@ -848,6 +892,138 @@ class CompilationTest {
         assertThat(code).contains("java.lang.String key");
         assertThat(code).contains("int value");
         assertThat(code).contains(".entrySet().stream().map(__capy_entry ->");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TypedLambda.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(pythonCode)
+                .contains("return list(values.items())")
+                .doesNotContain("values.entries()");
+    }
+
+    @Test
+    void shouldGenerateStandardLibraryExtensionCallsForPython() {
+        var program = compileProgram(List.of(
+                rawModule("TimeUnit", "/capy/lang", """
+                        from /capy/lang/Option import { * }
+                        from /capy/lang/Result import { * }
+
+                        type nano_second -> long
+                        type normalized -> String with constructor { Success { value.to_upper_case() } }
+                        const NORMALIZED: normalized = normalized! { "d" }
+
+                        data Time { hour: int }
+                        data ValueAssert { value: any }
+                        data TimeAssert { value: Time }
+                        data ResultAssert[T] { value: Result[T] }
+                        data OptionAssert[T] { value: Option[T] }
+                        data Sized {}
+                        enum Ordering { EQUAL }
+
+                        fun nano_second.to_nano_seconds(): nano_second = this
+                        fun assert_that(value: any): ValueAssert = ValueAssert { value }
+                        fun assert_that(value: Time): TimeAssert = TimeAssert { value }
+                        fun assert_that(value: Result[T]): ResultAssert[T] = ResultAssert { value }
+                        fun assert_that(value: Option[T]): OptionAssert[T] = OptionAssert { value }
+                        fun TimeAssert.has_hour(hour: int): TimeAssert = this
+                        fun OptionAssert[T].contains(other: T): OptionAssert[T] = this
+                        fun ValueAssert.is_equal_to(other: any): ValueAssert = this
+                        fun Sized.size(): Time = Time { 1 }
+                        fun load(): Result[Time] = Success { Time { 1 } }
+                        fun optional(): Option[String] = Some { "value" }
+                        fun preferred(): Result[Time] = load().or({ Error { "fallback" } })
+                        fun fallback_chain(): Result[Time] = Error { "first" }.or({
+                            let loaded <- load()
+                            Success { loaded }
+                        })
+                        fun selected(value: Option[Time]): Result[Time] =
+                            let fallback <- load()
+                            match value with
+                            case Some { selected } -> selected
+                            case None -> Error { "missing" }
+                        """),
+                rawModule("TimeUnitTest", "/sample/app", """
+                        from /capy/lang/TimeUnit import { * }
+
+                        fun convert(): nano_second = nano_second { 2L }.to_nano_seconds()
+                        fun assert_time(value: Time): TimeAssert = assert_that(value).has_hour(1)
+                        fun assert_time_result(): ResultAssert[Time] = assert_that(load()).succeeds(time => assert_that(time).has_hour(1))
+                        fun assert_option(): OptionAssert[String] = assert_that(optional()).contains("value")
+                        fun assert_enum(value: Ordering): ValueAssert = assert_that(value).is_equal_to(value)
+                        fun equal(): Ordering = Ordering.EQUAL
+                        fun sized(value: Sized): Time = value.size()
+                        fun upper(value: String): String = value.to_upper_case()
+                        fun compare_strings(left: String, right: String): Ordering = left.compare(right)
+                        fun unsafe_normalized(): normalized = normalized! { "d" }
+                        fun windows_path(): String = "D:\\\\repos"
+                        fun json_literal(): String = "{\\\"foo\\\":\\\"boo\\\"}"
+                        fun unicode_null(): String = '\\u0000'
+                        fun nested(left: Option[String], right: Option[String]): int =
+                            match left with
+                            case None ->
+                                match right with
+                                case None -> 0
+                                case Some -> 1
+                            case Some ->
+                                match right with
+                                case None -> 2
+                                case Some -> 3
+                        fun classify(value: Option[String]): int =
+                            match value with
+                            case Some { "0" } -> 0
+                            case Some -> 1
+                            case None -> 2
+                        fun retain_ordering(value: Ordering): Ordering =
+                            match value with
+                            case EQUAL -> EQUAL
+                            case ordering -> ordering
+                        """)
+        ));
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TimeUnitTest.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        var pythonLibraryCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("capy/lang/TimeUnit.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(pythonLibraryCode)
+                .contains("__capy_result_from_value(")
+                .contains("__capy_result_or(")
+                .contains(", lambda: __capy_data(\"Error\"")
+                .contains("__capy_block_bind(load__");
+        assertThat(pythonLibraryCode.indexOf("def __capy_constructor_normalized__"))
+                .isLessThan(pythonLibraryCode.indexOf("NORMALIZED = __capy_bind_value("));
+
+        assertThat(pythonCode)
+                .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).nano_second_to_nano_seconds__")
+                .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).TimeAssert_has_hour__")
+                .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).OptionAssert_T__contains__")
+                .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).ValueAssert_is_equal_to__")
+                .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).Sized_size__")
+                .contains("return __import__(\"capy.lang.TimeUnit\", fromlist=['*']).EQUAL")
+                .contains("== \"0\"")
+                .contains("str(value).translate(str.maketrans('abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'))")
+                .contains("str(left) < str(right)")
+                .contains("__capy_bind_value(__import__(\"capy.lang.TimeUnit\", fromlist=['*']).__capy_constructor_normalized__")
+                .contains("return \"D:\\\\repos\"")
+                .contains("return \"{\\\"foo\\\":\\\"boo\\\"}\"")
+                .contains("return '\\u0000'")
+                .contains("else (3 if __capy_type_matches(__capy_match_value, \"Some\")")
+                .doesNotContain("2.to_nano_seconds()")
+                .doesNotContain("StringAssert_is_equal_to__")
+                .doesNotContain("String_compare__")
+                .doesNotContain("__capy_size(value)")
+                .doesNotContain("__capy_unsupported('match')")
+                .doesNotContain("assert_that(value).has_hour(1)")
+                .doesNotContain("lambda time: assert_that(time).has_hour(1)");
     }
 
     @Test

@@ -7625,7 +7625,7 @@ private fun java_script_test_gather_calls_for_module(functions: List[CompiledFun
 /// Emits JavaScript expression text for test gather call for function.
 private fun java_script_test_gather_call_for_function(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     if function.name == "tests"
-    then if java_script_test_function_gatherable(function)
+    then if java_script_test_function_gatherable(function) & java_script_module_gatherable(module, allModules)
         then "    files.push(...__capy_gather_module("
             + java_script_string_literal(java_script_relative_require_path("capy/test/CapyTestRuntime", java_script_module_path(module)))
             + "));"
