@@ -972,13 +972,13 @@ private fun python_return_statement(expression: CompiledExpression, env: List[Py
 private fun python_parameters(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> python_identifier(parameter.name) + python_parameter_tail(parameters[1:])
+    case Some { parameter } -> python_binding_python_name(parameter.name) + python_parameter_tail(parameters[1:])
 
 /// Formats the recursive tail segment for parameter.
 private fun python_parameter_tail(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + python_identifier(parameter.name) + python_parameter_tail(parameters[1:])
+    case Some { parameter } -> ", " + python_binding_python_name(parameter.name) + python_parameter_tail(parameters[1:])
 
 /// Creates Python name/type bindings for parameter.
 private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter]): List[PythonBinding] =
@@ -987,7 +987,7 @@ private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter
     case Some { parameter } ->
         [PythonBinding {
             name: parameter.name,
-            pythonName: python_identifier(parameter.name),
+            pythonName: python_binding_python_name(parameter.name),
             typeName: python_type_reference_key(parameter.typeReference)
         }]
             + python_parameter_bindings(parameters[1:])
@@ -3578,6 +3578,7 @@ private fun python_reserved_binding_name(name: String): bool =
         | name == "Effect"
         | name == "ValueAssert"
         | name == "CombinedAssert"
+        | name == "list"
 
 /// Computes the Python type for expression.
 private fun python_expression_type(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -5026,14 +5027,14 @@ private fun python_truthy_expression_code(expression: CompiledExpression, env: L
 private fun python_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_runtime_function(name)
     then name
-    else if python_qualified_name(name)
-    then python_qualified_function_call_name(name, module, allModules)
     else match python_find_local_function(name, module.functions) with
     case Some { function } -> python_function_name(function)
     case None ->
-        match python_find_function_binding_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
-        case None -> python_identifier(name)
+        if python_qualified_name(name)
+        then python_qualified_function_call_name(name, module, allModules)
+        else match python_find_function_binding_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
+            case None -> python_identifier(name)
 
 /// Checks whether a function matches the runtime function metadata.
 private fun python_runtime_function(name: String): bool =
@@ -7684,6 +7685,10 @@ private fun python_value_assert_extra_methods_code(): String =
     + "            result = globals()['__capy_contains'](self.value, other)" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to contain ' + repr(other), 'Assert.contains')" + python_newline()
     + python_newline()
+    + "    def does_not_contain(self, other):" + python_newline()
+    + "        result = not globals()['__capy_contains'](self.value, other)" + python_newline()
+    + "        return self._append(result, 'Expected ' + repr(self.value) + ' not to contain ' + repr(other), 'Assert.does_not_contain')" + python_newline()
+    + python_newline()
     + "    def starts_with(self, other):" + python_newline()
     + "        result = str(self.value).startswith(str(other))" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to start with ' + repr(other), 'Assert.starts_with')" + python_newline()
@@ -8049,6 +8054,8 @@ private fun python_test_runtime_collection_string_helpers_code(): String =
     + "    return right in left" + python_newline()
     + python_newline()
     + "def __capy_size(value):" + python_newline()
+    + "    if _capy_data_is(value, 'End', 'Cons'):" + python_newline()
+    + "        return sum(1 for _ in __capy_as_iterable(value))" + python_newline()
     + "    return len(value)" + python_newline()
     + python_newline()
     + "def __capy_is_empty(value):" + python_newline()
@@ -8189,6 +8196,10 @@ private fun python_test_runtime_sequence_helpers_code(): String =
     + python_newline()
     + "def __capy_seq_map(value, mapper):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()
+    + "    if _capy_data_is(value, 'End'):" + python_newline()
+    + "        return value" + python_newline()
+    + "    if _capy_data_is(value, 'Cons'):" + python_newline()
+    + "        return __capy_data('Cons', dict(value=__capy_apply_lambda(mapper, __capy_seq_first_value(value)), rest=lambda: __capy_seq_map(__capy_seq_rest(value), mapper)))" + python_newline()
     + "    if isinstance(value, dict) and '__type' not in value:" + python_newline()
     + "        return dict((key, __capy_apply_lambda(mapper, (key, item))) for key, item in value.items())" + python_newline()
     + "    return [__capy_apply_lambda(mapper, item) for item in __capy_as_iterable(value)]" + python_newline()
@@ -8450,6 +8461,12 @@ private fun python_test_runtime_type_match_helpers_code(): String =
 /// Emits Python code for test runtime pattern helpers.
 private fun python_test_runtime_pattern_helpers_code(): String =
     "def __capy_match_binding(value, name, index):" + python_newline()
+    + "    if isinstance(value, list):" + python_newline()
+    + "        if index == 0:" + python_newline()
+    + "            return value[0]" + python_newline()
+    + "        if index == 1:" + python_newline()
+    + "            return lambda: value[1:]" + python_newline()
+    + "        return value[index]" + python_newline()
     + "    if not isinstance(value, dict):" + python_newline()
     + "        return getattr(value, name)" + python_newline()
     + "    if name in value:" + python_newline()

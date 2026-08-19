@@ -315,7 +315,7 @@ fun Seq[T].zip(other: Seq[Y]): Seq[Tuple[T,Y]] =
         case Cons { v1, r1 } ->
             match other with
             case End -> End {}
-            case Cons { v2, r2 } -> Cons { (v1, v2), () => zip(r1, r2) }
+            case Cons { v2, r2 } -> Cons { (v1, v2), () => zip(r1(), r2()) }
     ---
     zip(this, other)
 

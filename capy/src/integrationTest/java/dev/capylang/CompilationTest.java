@@ -905,6 +905,36 @@ class CompilationTest {
     }
 
     @Test
+    void shouldResolveLocalFunctionsInsidePythonExtensionMethodsBeforeQualifiedCalls() {
+        var source = """
+                data Box { value: int }
+
+                fun Box.count_down(n: int): int =
+                    fun loop(current: int): int =
+                        if current <= 0 then this.value else loop(current - 1)
+                    ---
+                    loop(n)
+
+                fun Box.total(list: List[int]): int = this.value + list.size()
+                """;
+        var program = compileProgram(List.of(rawModule("LocalExtension", "/sample/app", source, SourceKind.FUNCTIONAL)));
+
+        var code = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/LocalExtension.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("def Box_count_down__local__loop__4_4__4_4(")
+                .contains("Box_count_down__local__loop__4_4__4_4(__capy_sub(current, 1))")
+                .contains("return Box_count_down__local__loop__4_4__4_4(n)")
+                .contains("def Box_total__9_0(this, _capy_list):")
+                .contains("__capy_size(_capy_list)")
+                .doesNotContain("return Box_count_down__local__loop__4_4(n)");
+    }
+
+    @Test
     void shouldGenerateStandardLibraryExtensionCallsForPython() {
         var program = compileProgram(List.of(
                 rawModule("TimeUnit", "/capy/lang", """
@@ -1703,7 +1733,12 @@ class CompilationTest {
                 .doesNotContain("__capy_seq_flat_map(int_result")
                 .doesNotContain("int_value.map(");
         assertThat(digitCode).contains("return __capy_to_string(this)");
-        assertThat(runtimeCode).contains("end=chr(10) if newline else ''");
+        assertThat(runtimeCode)
+                .contains("end=chr(10) if newline else ''")
+                .contains("def does_not_contain(self, other):")
+                .contains("rest=lambda: __capy_seq_map(__capy_seq_rest(value), mapper)")
+                .contains("return sum(1 for _ in __capy_as_iterable(value))")
+                .contains("return lambda: value[1:]");
 
         var javaScriptGenerated = JavaScriptGenerator.javaScriptGenerator(program);
         var javaScriptCode = javaScriptGenerated.modules().stream()
