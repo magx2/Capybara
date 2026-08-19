@@ -5,15 +5,12 @@ import dev.capylang.PathUtil;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Supplier;
 
 public class TestRunner {
 
@@ -257,9 +254,6 @@ public class TestRunner {
             LogType logType,
             List<Object> testFiles
     ) {
-        if (reportType == ReportType.ADOC && !supportsAdocReportType()) {
-            return invokeAdocRunTests(outputDir, logType, testFiles);
-        }
         var result = invokeGeneratedCapyTest(
                 "run_tests_and_print_summary",
                 generatedConstant(reportType.name()),
@@ -331,271 +325,6 @@ public class TestRunner {
         }
     }
 
-    private static Object invokeAdocRunTests(Path outputDir, LogType logType, List<Object> testFiles) {
-        var executedTestFiles = executeTestFiles(testFiles);
-        printTestLog(logType, executedTestFiles);
-
-        var writtenFiles = writeAdocReports(outputDir, executedTestFiles);
-        var summary = failureSummary(executedTestFiles);
-        if (!summary.isEmpty()) {
-            System.out.print(summary);
-        }
-
-        var failed = executedTestFiles.stream().anyMatch(TestRunner::testFileFailed);
-        var testRun = new LinkedHashMap<String, Object>();
-        testRun.put("__type", "TestRun");
-        testRun.put("outputs", List.of());
-        testRun.put("written_files", writtenFiles);
-        testRun.put("failure_summary", summary);
-        testRun.put("failed", failed);
-        return testRun;
-    }
-
-    private static List<Object> executeTestFiles(List<Object> testFiles) {
-        return testFiles.stream().map(testFile -> {
-            var executedCases = listField(testFile, "test_cases").stream()
-                    .map(TestRunner::executeTestCase)
-                    .toList();
-            return (Object) dataValue("TestFile", Map.of(
-                    "file_name", stringField(testFile, "file_name"),
-                    "test_cases", executedCases,
-                    "timestamp_millis", field(testFile, "timestamp_millis")
-            ));
-        }).toList();
-    }
-
-    private static Object executeTestCase(Object testCase) {
-        var start = System.nanoTime();
-        var assertionContainer = ((Supplier<?>) field(testCase, "assert_supplier")).get();
-        var assertionSuppliers = listField(assertionContainer, "assertions");
-        Object failedAssertion = null;
-        for (var value : assertionSuppliers) {
-            var assertion = ((Supplier<?>) value).get();
-            if (!Boolean.TRUE.equals(field(assertion, "result"))) {
-                failedAssertion = assertion;
-                break;
-            }
-        }
-        var result = failedAssertion == null
-                ? dataValue("Passed", Map.of())
-                : dataValue("Failed", Map.of(
-                        "message", stringField(failedAssertion, "message"),
-                        "type", stringField(failedAssertion, "type")
-                ));
-        return dataValue("TestCase", Map.of(
-                "name", stringField(testCase, "name"),
-                "result", result,
-                "assertions_count", assertionSuppliers.size(),
-                "execution_time", (System.nanoTime() - start) / 1_000_000_000.0,
-                "assert_supplier", field(testCase, "assert_supplier")
-        ));
-    }
-
-    private static Map<String, Object> dataValue(String type, Map<String, ?> fields) {
-        var value = new LinkedHashMap<String, Object>();
-        value.put("__type", type);
-        value.putAll(fields);
-        return value;
-    }
-
-    private static void printTestLog(LogType logType, List<Object> executedTestFiles) {
-        if (logType == LogType.NONE) {
-            return;
-        }
-        for (var testFile : executedTestFiles) {
-            var suiteName = stringField(testFile, "file_name");
-            System.out.println(logType == LogType.LOG
-                    ? "Test suite started: " + suiteName
-                    : "##teamcity[testSuiteStarted name='" + teamCityEscape(suiteName) + "']");
-            for (var testCase : listField(testFile, "test_cases")) {
-                var testName = stringField(testCase, "name");
-                System.out.println(logType == LogType.LOG
-                        ? "Test started: " + testName
-                        : "##teamcity[testStarted name='" + teamCityEscape(testName) + "']");
-                if (testCaseFailed(testCase)) {
-                    var message = normalizeFailureMessage(stringField(field(testCase, "result"), "message"));
-                    if (logType == LogType.LOG) {
-                        System.out.println("Test failed: " + testName);
-                        System.out.println(message);
-                    } else {
-                        System.out.println("##teamcity[testFailed name='" + teamCityEscape(testName)
-                                + "' message='assertion failed' details='" + teamCityEscape(message) + "']");
-                    }
-                }
-                System.out.println(logType == LogType.LOG
-                        ? "Test finished: " + testName
-                        : "##teamcity[testFinished name='" + teamCityEscape(testName) + "']");
-            }
-            System.out.println(logType == LogType.LOG
-                    ? "Test suite finished: " + suiteName
-                    : "##teamcity[testSuiteFinished name='" + teamCityEscape(suiteName) + "']");
-        }
-    }
-
-    private static String failureSummary(List<Object> testFiles) {
-        var failures = new StringBuilder();
-        for (var testFile : testFiles) {
-            for (var testCase : listField(testFile, "test_cases")) {
-                if (testCaseFailed(testCase)) {
-                    failures.append("  ").append(stringField(testFile, "file_name"))
-                            .append(" > ").append(stringField(testCase, "name")).append("()\n")
-                            .append(normalizeFailureMessage(stringField(field(testCase, "result"), "message")))
-                            .append("\n\n");
-                }
-            }
-        }
-        return failures.isEmpty() ? "" : "\nFailures:\n\n" + failures;
-    }
-
-    private static String teamCityEscape(String value) {
-        return value.replace("|", "||")
-                .replace("'", "|'")
-                .replace("\n", "|n")
-                .replace("\r", "|r")
-                .replace("[", "|[")
-                .replace("]", "|]");
-    }
-
-    private static List<Path> writeAdocReports(Path outputDir, List<?> testFiles) {
-        var writtenFiles = new ArrayList<Path>();
-        for (var testFile : testFiles) {
-            var relativePath = Path.of("TEST-" + adocFileName(stringField(testFile, "file_name")) + ".adoc");
-            writeTextIfChanged(outputDir.resolve(relativePath), adocReport(testFile));
-            writtenFiles.add(relativePath);
-        }
-        updateOutputManifest(outputDir, writtenFiles);
-        return List.copyOf(writtenFiles);
-    }
-
-    private static void writeTextIfChanged(Path path, String content) {
-        try {
-            Files.createDirectories(path.getParent());
-            if (!Files.exists(path) || !Files.readString(path).equals(content)) {
-                Files.writeString(path, content, StandardCharsets.UTF_8);
-            }
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("Cannot write Capybara test report `%s`".formatted(path), e);
-        }
-    }
-
-    private static void updateOutputManifest(Path outputDir, List<Path> writtenFiles) {
-        var manifest = outputDir.resolve(".capy-test-output-manifest");
-        var normalizedOutputDir = outputDir.toAbsolutePath().normalize();
-        var current = writtenFiles.stream().map(Path::toString).toList();
-        try {
-            if (Files.exists(manifest)) {
-                for (var stale : Files.readAllLines(manifest)) {
-                    if (stale.isBlank() || current.contains(stale)) {
-                        continue;
-                    }
-                    var stalePath = normalizedOutputDir.resolve(stale).normalize();
-                    if (stalePath.startsWith(normalizedOutputDir)) {
-                        Files.deleteIfExists(stalePath);
-                    }
-                }
-            }
-            writeTextIfChanged(manifest, current.isEmpty() ? "" : String.join("\n", current) + "\n");
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("Cannot update Capybara test output manifest `%s`".formatted(manifest), e);
-        }
-    }
-
-    static String adocReport(Object testFile) {
-        var testCases = listField(testFile, "test_cases");
-        var failures = (int) testCases.stream().filter(TestRunner::testCaseFailed).count();
-        var rows = new StringBuilder();
-        for (var testCase : testCases) {
-            rows.append('|').append(adocTableCell(stringField(testCase, "name"))).append('\n')
-                    .append('|').append(testCaseFailed(testCase) ? "FAIL" : "PASS").append('\n')
-                    .append('|').append(field(testCase, "assertions_count")).append('\n')
-                    .append('|').append(field(testCase, "execution_time")).append("\n\n");
-        }
-
-        var report = new StringBuilder()
-                .append("= Test results: ").append(adocInline(stringField(testFile, "file_name"))).append("\n\n")
-                .append("[cols=\"3,1,1,1\",options=\"header\"]\n")
-                .append("|===\n")
-                .append("|Test |Status |Assertions |Time (seconds)\n\n")
-                .append(rows)
-                .append("|===\n\n")
-                .append("*Tests:* ").append(testCases.size()).append(" +\n")
-                .append("*Passed:* ").append(testCases.size() - failures).append(" +\n")
-                .append("*Failed:* ").append(failures).append('\n');
-
-        var failureDetails = new StringBuilder();
-        for (var testCase : testCases) {
-            if (!testCaseFailed(testCase)) {
-                continue;
-            }
-            var result = field(testCase, "result");
-            failureDetails.append("=== ").append(adocInline(stringField(testCase, "name"))).append("\n\n")
-                    .append("*Type:* `").append(adocInline(stringField(result, "type"))).append("`\n\n")
-                    .append("[listing]\n....\n")
-                    .append(adocListing(normalizeFailureMessage(stringField(result, "message"))))
-                    .append("\n....\n\n");
-        }
-        if (!failureDetails.isEmpty()) {
-            report.append("\n== Failures\n\n").append(failureDetails);
-        }
-        return report.toString();
-    }
-
-    private static String adocFileName(String fileName) {
-        var withoutRoot = fileName.startsWith("/") ? fileName.substring(1) : fileName;
-        var flattened = withoutRoot.replace('/', '.').replace('\\', '.');
-        if (flattened.endsWith(".cfun")) {
-            return flattened.substring(0, flattened.length() - 5);
-        }
-        if (flattened.endsWith(".coo")) {
-            return flattened.substring(0, flattened.length() - 4);
-        }
-        return flattened;
-    }
-
-    private static String adocInline(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\r\n", " ")
-                .replace('\n', ' ')
-                .replace('\r', ' ')
-                .replace("{", "\\{")
-                .replace("}", "\\}");
-    }
-
-    private static String adocTableCell(String value) {
-        return adocInline(value).replace("|", "\\|");
-    }
-
-    private static String adocListing(String value) {
-        var escaped = value.replace("\n....", "\n\\....");
-        return escaped.startsWith("....") ? "\\" + escaped : escaped;
-    }
-
-    private static String normalizeFailureMessage(String message) {
-        return message.replace("\\r\\n", "\n")
-                .replace("\\n", "\n")
-                .replace("\\r", "\n")
-                .replace("\r\n", "\n")
-                .replace('\r', '\n')
-                .replace("\\t", "\t");
-    }
-
-    private static boolean testFileFailed(Object testFile) {
-        return listField(testFile, "test_cases").stream().anyMatch(TestRunner::testCaseFailed);
-    }
-
-    private static boolean testCaseFailed(Object testCase) {
-        return "Failed".equals(field(field(testCase, "result"), "__type"));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Object> listField(Object value, String name) {
-        return (List<Object>) field(value, name);
-    }
-
-    private static String stringField(Object value, String name) {
-        return String.valueOf(field(value, name));
-    }
-
     @SuppressWarnings("unchecked")
     private static Object field(Object value, String name) {
         if (value instanceof Map<?, ?> map) {
@@ -606,25 +335,6 @@ public class TestRunner {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Cannot read generated field `%s` from `%s`"
                     .formatted(name, value == null ? "null" : value.getClass().getCanonicalName()), e);
-        }
-    }
-
-    private static boolean supportsAdocReportType() {
-        try {
-            CapyTest.class.getField("ADOC");
-            return true;
-        } catch (NoSuchFieldException e) {
-            for (var nestedType : CapyTest.class.getClasses()) {
-                if (!nestedType.isEnum()) {
-                    continue;
-                }
-                for (var constant : nestedType.getEnumConstants()) {
-                    if ("ADOC".equals(((Enum<?>) constant).name())) {
-                        return true;
-                    }
-                }
-            }
-            return false;
         }
     }
 

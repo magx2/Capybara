@@ -923,9 +923,13 @@ private fun jest_duration_millis(test_file: TestFile): long =
     test_file.test_cases |> 0L, (acc, test_case) => acc + ctrf_duration_millis(test_case)
 
 private fun adoc_run_tests(test_files: List[TestFile]): List[TestOutput] =
-    (test_files | :adoc_run_test).as_list()
+    (test_files | :adoc_test_output).as_list()
 
-private fun adoc_run_test(test_file: TestFile): TestOutput =
+/// Creates the AsciiDoc output descriptor for one executed test file.
+///
+/// This is part of the generated Capybara test API, so every backend can
+/// produce the same report path, content, and failure status.
+fun adoc_test_output(test_file: TestFile): TestOutput =
     TestOutput {
         path: from_string(ADOC_PREFIX + adoc_file_name(test_file.file_name) + '.adoc'),
         content: adoc_report(test_file),

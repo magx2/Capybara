@@ -1258,12 +1258,3 @@ jar {
         exclude 'dev/capylang/test/TestSelection*.class'
     }
 }
-
-def capyJarFile = tasks.named('jar').flatMap { it.archiveFile }
-integrationTests.configure {
-    dependsOn tasks.named('jar')
-    inputs.file(capyJarFile)
-    doFirst {
-        systemProperty 'capy.jar.path', capyJarFile.get().asFile.absolutePath
-    }
-}
