@@ -735,6 +735,8 @@ private fun python_function_body(function: CompiledFunction, env: List[PythonBin
         then "    return " + python_async_native_function_body(function) + python_newline()
         else if python_clock_native_function(function, module)
         then "    return " + python_clock_native_function_body() + python_newline()
+        else if python_random_seed_native_function(function, module)
+        then "    return __capy_random_seed()" + python_newline()
         else python_return_statement(function.body, env, module, allModules, "    ", function.returnType)
 
 /// Checks whether a function is a System native runtime wrapper.
@@ -773,6 +775,13 @@ private fun python_clock_native_function(function: CompiledFunction, module: Com
 /// Emits the Clock native runtime wrapper body.
 private fun python_clock_native_function_body(): String =
     "__capy_clock_now()"
+
+/// Checks whether a function is the Random native seed provider.
+private fun python_random_seed_native_function(function: CompiledFunction, module: CompiledModule): bool =
+    module.path == "capy/lang"
+        & module.name == "Random"
+        & function.name == "seed"
+        & python_native_placeholder_function(function)
 
 /// Returns the first function parameter name.
 private fun python_first_function_parameter_name(function: CompiledFunction): String =
@@ -1100,7 +1109,11 @@ private fun python_unbound_variable_code(name: String, module: CompiledModule, a
 /// Emits Python code for binary expression.
 private fun python_binary_expression_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftType = python_expression_type(binary.left, env, module, allModules)
-    if python_result_reduce_operator_expression_with_left_type(binary, leftType)
+    if binary.operator == "=="
+    then python_equality_expression_code(binary, leftType, false, env, module, allModules)
+    else if binary.operator == "!="
+    then python_equality_expression_code(binary, leftType, true, env, module, allModules)
+    else if python_result_reduce_operator_expression_with_left_type(binary, leftType)
     then python_result_reduce_operator_code(binary, env, module, allModules)
     else if python_collection_reduce_operator_expression_with_left_type(binary, leftType)
     then python_collection_reduce_operator_code(binary, leftType, env, module, allModules)
@@ -1130,20 +1143,42 @@ private fun python_binary_expression_code(binary: CompiledBinaryExpression, env:
         + " " + python_bitwise_operator(binary.operator) + " "
         + python_expression_code(binary.right, env, module, allModules)
         + ")"
+
     else if binary.operator == "&" | binary.operator == "|"
     then "(" + python_truthy_expression_code(binary.left, env, module, allModules)
         + " " + python_boolean_operator(binary.operator) + " "
         + python_truthy_expression_code(binary.right, env, module, allModules)
         + ")"
-    else match python_binary_runtime_helper(binary.operator) with
-    case Some { helper } -> python_binary_runtime_call(helper, binary, env, module, allModules)
+    else match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } ->
+        if python_native_placeholder_function(function)
+        then python_binary_runtime_or_direct_code(binary, env, module, allModules)
+        else python_binary_extension_operator_code(function, binary, env, module, allModules)
     case None ->
-        match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
-        case Some { function } -> python_binary_extension_operator_code(function, binary, env, module, allModules)
-        case None -> "(" + python_expression_code(binary.left, env, module, allModules)
-            + " " + binary.operator + " "
-            + python_expression_code(binary.right, env, module, allModules)
-            + ")"
+        python_binary_runtime_or_direct_code(binary, env, module, allModules)
+
+/// Emits a runtime-backed binary operation, falling back to a direct Python operator.
+private fun python_binary_runtime_or_direct_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_binary_runtime_helper(binary.operator) with
+    case Some { helper } -> python_binary_runtime_call(helper, binary, env, module, allModules)
+    case None -> "(" + python_expression_code(binary.left, env, module, allModules)
+        + " " + binary.operator + " "
+        + python_expression_code(binary.right, env, module, allModules)
+        + ")"
+
+/// Emits equality while preserving user-defined equality operators.
+private fun python_equality_expression_code(binary: CompiledBinaryExpression, leftType: String, negate: bool, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_binary_extension_operator_with_left_type(binary, leftType, module, allModules) with
+    case Some { function } ->
+        if python_native_placeholder_function(function)
+        then python_deep_equality_code(binary, negate, env, module, allModules)
+        else python_binary_extension_operator_code(function, binary, env, module, allModules)
+    case None -> python_deep_equality_code(binary, negate, env, module, allModules)
+
+/// Emits structural equality with optional negation.
+private fun python_deep_equality_code(binary: CompiledBinaryExpression, negate: bool, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let equality = "__capy_deep_equal(" + python_expression_code(binary.left, env, module, allModules) + ", " + python_expression_code(binary.right, env, module, allModules) + ")"
+    if negate then "(not " + equality + ")" else equality
 
 /// Checks whether an expression has the string concat expression shape.
 private fun python_string_concat_expression(binary: CompiledBinaryExpression, leftType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1186,7 +1221,7 @@ private fun python_binary_extension_operator_code_with_left_type(binary: Compile
 /// Emits Python code for binary extension operator.
 private fun python_binary_extension_operator_code(function: CompiledFunction, binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(binary.left, env, module, allModules)
-    python_extension_method_call_name(function, receiverType, binary.operator, module, allModules)
+    python_extension_method_call_name(function, receiverType, binary.operator, 1, module, allModules)
         + "("
         + python_expression_code(binary.left, env, module, allModules)
         + python_extension_method_argument_tail([binary.right], env, module, allModules)
@@ -1276,6 +1311,8 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_io_function_call_code(stdlibCall, env, module, allModules)
     else if python_reflection_function_call(call)
     then python_reflection_function_call_code(call, env, module, allModules)
+    else if python_qualified_value_method_function_call(call, module, allModules)
+    then python_qualified_value_method_function_call_code(call, env, module, allModules)
     else match python_object_special_function_call_code(call, env, module, allModules) with
         case Some { code } -> code
         case None ->
@@ -1293,12 +1330,38 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
                     then
                         let argumentType = python_first_method_argument_type(call.arguments, env, module, allModules)
                         if argumentType == python_unknown_type()
-                        then python_function_call_name(stdlibCall.name, module, allModules)
+                        then python_function_call_name_with_arity(stdlibCall.name, call.arguments.size().value, module, allModules)
                         else match python_find_local_overload_in_module(call.name, argumentType, module, allModules) with
                         case Some { function } -> python_function_name(function)
-                        case None -> python_function_call_name(stdlibCall.name, module, allModules)
-                    else python_function_call_name(stdlibCall.name, module, allModules)
+                        case None -> python_function_call_name_with_arity(stdlibCall.name, call.arguments.size().value, module, allModules)
+                    else python_function_call_name_with_arity(stdlibCall.name, call.arguments.size().value, module, allModules)
                 resolvedName + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+
+/// Checks whether a qualified function-shaped call is actually a method call on a visible constant.
+private fun python_qualified_value_method_function_call(call: CompiledFunctionCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if !python_qualified_name(call.name)
+    then false
+    else
+        let receiverName = python_qualified_call_class_name(call.name)
+        let receiverType = python_unbound_variable_type(receiverName, module, allModules)
+        if receiverType == python_unknown_type()
+        then false
+        else match python_find_extension_method_with_receiver_type(receiverType, python_qualified_value_method_call_expression(call), module, allModules) with
+            case Some _ -> true
+            case None -> false
+
+/// Converts a qualified constant member call to the linked method-call representation.
+private fun python_qualified_value_method_call_expression(call: CompiledFunctionCallExpression): CompiledMethodCallExpression =
+    CompiledMethodCallExpression {
+        receiver: CompiledVariableExpression { name: python_qualified_call_class_name(call.name), location: call.location },
+        name: python_qualified_call_member(call.name),
+        arguments: call.arguments,
+        location: call.location
+    }
+
+/// Emits a qualified constant member call through ordinary method dispatch.
+private fun python_qualified_value_method_function_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    python_method_call_code(python_qualified_value_method_call_expression(call), env, module, allModules)
 
 /// Normalizes a function qualified through an imported standard-library module.
 private fun python_normalized_stdlib_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): CompiledFunctionCallExpression =
@@ -1411,6 +1474,10 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         then python_async_pipe_code(python_async_map_method_binary(call), env, module, allModules)
         else if python_result_assertion_succeeds_call(call)
         then python_result_assertion_succeeds_call_code(call, receiver, env, module, allModules)
+        else if python_assert_state_method_call(call)
+        then if call.name == "failed"
+            then "__capy_assert_failed(" + receiver + ")"
+            else "(not __capy_assert_failed(" + receiver + "))"
         else if python_result_method_call(call, receiverType)
         then python_result_method_call_code(call, env, module, allModules)
         else if python_option_method_call(call, receiverType)
@@ -1444,7 +1511,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         else if python_seq_as_list_call(call)
         then "__capy_as_list(" + receiver + ")"
         else if python_seq_first_call(call, receiverType)
-        then "__capy_index(__capy_as_list(" + receiver + "), 0)"
+        then "__capy_seq_first(" + receiver + ")"
         else if python_collection_predicate_call(call, receiverType)
         then python_collection_predicate_call_code(call, env, module, allModules)
         else if python_primitive_conversion_method_call(call, receiverType, module, allModules)
@@ -1468,6 +1535,9 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
                         then python_function_call_name("to_json", module, allModules) + "(" + receiver + ")"
                         else if python_unknown_builtin_method_call(call, receiverType)
                         then python_unknown_builtin_method_code(call, receiver)
+                        else if receiverType == python_unknown_type()
+                        then "__capy_dynamic_method(" + receiver + ", " + python_string_literal(call.name)
+                            + python_extension_method_argument_tail(call.arguments, env, module, allModules) + ")"
                         else receiver + "." + python_method_name(call.name)
                             + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
@@ -1477,6 +1547,7 @@ private fun python_builtin_size_method_call(call: CompiledMethodCallExpression, 
     call.name == "size"
         & call.arguments.is_empty()
         & (typeName == python_string_type()
+            | typeName == "char"
             | typeName == python_list_type()
             | typeName == python_set_type()
             | typeName == python_dict_type()
@@ -1493,6 +1564,10 @@ private fun python_unknown_builtin_method_code(call: CompiledMethodCallExpressio
     if call.name == "is_empty"
     then "__capy_is_empty(" + receiver + ")"
     else python_string_parse_helper(call.name) + "(" + receiver + ")"
+
+/// Checks whether a call queries the accumulated assertion state.
+private fun python_assert_state_method_call(call: CompiledMethodCallExpression): bool =
+    call.arguments.is_empty() & (call.name == "failed" | call.name == "succeeded")
 
 /// Checks whether an unresolved derived JSON method can delegate to the imported data converter.
 private fun python_derived_to_json_method_call(call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -2120,15 +2195,19 @@ private fun python_result_error_callable_code(mapper: CompiledExpression, env: L
 /// Emits Python code for extension method call.
 private fun python_extension_method_call_code(function: CompiledFunction, call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = python_expression_type(call.receiver, env, module, allModules)
-    python_extension_method_call_name(function, receiverType, call.name, module, allModules)
+    python_extension_method_call_name(function, receiverType, call.name, call.arguments.size().value, module, allModules)
         + "("
         + python_expression_code(call.receiver, env, module, allModules)
         + python_extension_method_argument_tail(call.arguments, env, module, allModules)
         + ")"
 
 /// Computes the declaring-module-qualified Python name for an extension method call.
-private fun python_extension_method_call_name(function: CompiledFunction, receiverType: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    match python_find_extension_method_binding_in_scope(receiverType, methodName, module, allModules) with
+private fun python_extension_method_call_name(function: CompiledFunction, receiverType: String, methodName: String, argumentCount: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let binding =
+        if python_function_first_parameter_callable(function)
+        then python_find_extension_method_binding_in_scope_with_lambda_argument(python_extension_owner_type(receiverType), methodName, module, allModules)
+        else python_find_extension_method_binding_in_scope_with_arity(python_extension_owner_type(receiverType), methodName, argumentCount, module, allModules)
+    match binding with
     case Some { binding } ->
         if binding.moduleName == module.name & binding.modulePath == module.path
         then python_function_name(binding.function)
@@ -2547,12 +2626,15 @@ private fun python_to_string_method_call(call: CompiledMethodCallExpression, rec
 
 /// Checks whether a type can use the Python runtime string conversion helper.
 private fun python_to_string_receiver_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    typeName == "char"
-        | typeName == python_bool_type()
-        | typeName == python_int_type()
-        | typeName == python_long_type()
-        | typeName == python_float_type()
-        | typeName == python_double_type()
+    let unqualifiedTypeName = python_type_unqualified_name(typeName)
+    unqualifiedTypeName == "char"
+        | unqualifiedTypeName == python_unknown_type()
+        | python_generic_type_parameter(unqualifiedTypeName)
+        | unqualifiedTypeName == python_bool_type()
+        | unqualifiedTypeName == python_int_type()
+        | unqualifiedTypeName == python_long_type()
+        | unqualifiedTypeName == python_float_type()
+        | unqualifiedTypeName == python_double_type()
         | python_primitive_backed_type(typeName, module, allModules)
 
 /// Checks whether method metadata matches the string method call rule.
@@ -2563,6 +2645,7 @@ private fun python_string_method_call(call: CompiledMethodCallExpression, receiv
 /// Checks whether a type reference matches the string method receiver type rule.
 private fun python_string_method_receiver_type(name: String, typeName: String): bool =
     typeName == python_string_type()
+        | (typeName == "char" & name == "compare")
         | (name == "is_empty" & !(typeName ? "Assert"))
         | (typeName == python_unknown_type() & python_string_only_method(name))
 
@@ -3219,7 +3302,7 @@ private fun python_seq_node_type(typeName: String): bool =
 private fun python_user_defined_index_code(index: CompiledIndexExpression, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match python_find_extension_method_in_scope(receiverType, "get", module, allModules) with
     case Some { function } ->
-        python_extension_method_call_name(function, receiverType, "get", module, allModules)
+        python_extension_method_call_name(function, receiverType, "get", 1, module, allModules)
             + "("
             + python_expression_code(index.receiver, env, module, allModules)
             + python_index_argument_tail(index, env, module, allModules)
@@ -4184,6 +4267,8 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
         then python_option_type()
         else if python_dynamic_map_method_call(call, receiverType)
         then python_unknown_type()
+        else if python_assert_state_method_call(call)
+        then python_bool_type()
         else if python_assert_method(call.name)
         then if receiverType == python_unknown_type() then python_assert_type() else receiverType
         else match python_find_object_method_with_receiver_type(call, receiverType, allModules) with
@@ -4792,6 +4877,7 @@ private fun python_collection_pipe_receiver_type(type: String): bool =
         | baseType == python_set_type()
         | baseType == python_string_type()
         | baseType == python_seq_type()
+        | python_seq_node_type(baseType)
         | baseType == python_dict_type()
 
 /// Computes the Python type for collection pipe result.
@@ -4915,6 +5001,8 @@ private fun python_native_collection_method_call_with_receiver_type(call: Compil
         then call.arguments.is_empty()
         else if call.name == "contains"
         then python_one_method_argument(call.arguments)
+        else if call.name == "to_list"
+        then call.arguments.is_empty()
         else false
     else if receiverType == python_dict_type()
     then if call.name == "is_empty"
@@ -4950,7 +5038,9 @@ private fun python_list_native_method_call_code(call: CompiledMethodCallExpressi
 private fun python_set_native_method_call_code(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if call.name == "is_empty"
     then "__capy_is_empty(" + receiver + ")"
-    else "__capy_contains(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else if call.name == "contains"
+    then "__capy_contains(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
+    else "__capy_set_values(" + receiver + ")"
 
 /// Emits Python code for dict native method call.
 private fun python_dict_native_method_call_code(call: CompiledMethodCallExpression, receiver: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -4975,7 +5065,7 @@ private fun python_native_collection_method_call_type(call: CompiledMethodCallEx
         then python_list_type()
         else python_option_type()
     else if receiverType == python_set_type()
-    then python_bool_type()
+    then if call.name == "to_list" then python_list_type() else python_bool_type()
     else if receiverType == python_dict_type()
     then if call.name == "is_empty" | call.name == "contains_key"
         then python_bool_type()
@@ -5025,7 +5115,7 @@ private fun python_truthy_expression_code(expression: CompiledExpression, env: L
 
 /// Computes the Python name for function call.
 private fun python_function_call_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if python_runtime_function(name)
+    if python_runtime_function(name) & name != "fail"
     then name
     else match python_find_local_function(name, module.functions) with
     case Some { function } -> python_function_name(function)
@@ -5035,6 +5125,19 @@ private fun python_function_call_name(name: String, module: CompiledModule, allM
         else match python_find_function_binding_in_imports(name, module.imports, module, allModules) with
             case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
             case None -> python_identifier(name)
+
+/// Computes the Python name for a call while preserving source overload arity.
+private fun python_function_call_name_with_arity(name: String, argumentCount: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if python_runtime_function(name) & name != "fail"
+    then name
+    else match python_find_function_with_arity(name, argumentCount, module.functions) with
+    case Some { function } -> python_function_name(function)
+    case None ->
+        if python_qualified_name(name)
+        then python_qualified_function_call_name_with_arity(name, argumentCount, module, allModules)
+        else match python_find_function_binding_in_imports_with_arity(name, argumentCount, module.imports, module, allModules) with
+            case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
+            case None -> python_function_call_name(name, module, allModules)
 
 /// Checks whether a function matches the runtime function metadata.
 private fun python_runtime_function(name: String): bool =
@@ -5226,6 +5329,19 @@ private fun python_qualified_function_call_name(name: String, module: CompiledMo
     case Some { binding } -> python_module_import_expression(binding.module) + "." + python_function_name(binding.function)
     case None -> python_identifier(name)
 
+/// Computes an arity-compatible qualified function call name.
+private fun python_qualified_function_call_name_with_arity(name: String, argumentCount: int, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let idx = python_last_dot_index(name)
+    match python_find_module_by_path(python_qualified_call_module_path_at(name, idx, module), allModules) with
+    case Some { targetModule } -> python_qualified_function_call_name_with_arity_in_module(name, idx, argumentCount, targetModule, module, allModules)
+    case None -> python_qualified_function_call_name(name, module, allModules)
+
+/// Computes an arity-compatible qualified call once its target module is known.
+private fun python_qualified_function_call_name_with_arity_in_module(name: String, idx: int, argumentCount: int, targetModule: CompiledModule, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match python_find_function_with_arity(python_qualified_call_member_at(name, idx), argumentCount, targetModule.functions) with
+    case Some { function } -> python_module_import_expression(targetModule) + "." + python_function_name(function)
+    case None -> python_qualified_function_call_name(name, module, allModules)
+
 /// Emits Python import source for module import expression.
 private fun python_module_import_expression(module: CompiledModule): String =
     "__import__(" + python_string_literal(python_module_import_name(module)) + ", fromlist=['*'])"
@@ -5388,6 +5504,17 @@ private fun python_find_function(name: String, functions: List[CompiledFunction]
         if python_callable_function(function) & function.name == name
         then /capy/lang/Option.Some { function }
         else python_find_function(name, functions[1:])
+
+/// Finds a callable function by source name and argument count.
+private fun python_find_function_with_arity(name: String, argumentCount: int, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
+    match functions[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { function } ->
+        if python_callable_function(function)
+            & function.name == name
+            & function.parameters.size().value == argumentCount
+        then /capy/lang/Option.Some { function }
+        else python_find_function_with_arity(name, argumentCount, functions[1:])
 
 /// Checks whether a function matches the callable function metadata.
 private fun python_callable_function(function: CompiledFunction): bool =
@@ -5601,6 +5728,27 @@ private fun python_find_constant(name: String, functions: List[CompiledFunction]
 /// Finds a function binding in imports in scope, imports, or compiled modules.
 private fun python_find_function_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
     python_find_binding_in_imports(name, imports, module, allModules, false)
+
+/// Finds an arity-compatible callable function in unqualified imports.
+private fun python_find_function_binding_in_imports_with_arity(name: String, argumentCount: int, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if declaration.qualified | !python_import_includes_name(name, declaration)
+        then python_find_function_binding_in_imports_with_arity(name, argumentCount, imports[1:], module, allModules)
+        else python_find_function_binding_in_import_with_arity(name, argumentCount, declaration, imports[1:], module, allModules)
+
+/// Finds an arity-compatible callable binding in one import declaration.
+private fun python_find_function_binding_in_import_with_arity(name: String, argumentCount: int, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> python_find_function_binding_in_imported_module_with_arity(name, argumentCount, importedModule, rest, module, allModules)
+    case None -> python_find_function_binding_in_imports_with_arity(name, argumentCount, rest, module, allModules)
+
+/// Finds an arity-compatible callable binding in a resolved imported module.
+private fun python_find_function_binding_in_imported_module_with_arity(name: String, argumentCount: int, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[PythonQualifiedFunctionBinding] =
+    match python_find_function_with_arity(name, argumentCount, importedModule.functions) with
+    case Some { function } -> /capy/lang/Option.Some { PythonQualifiedFunctionBinding { module: importedModule, function: function } }
+    case None -> python_find_function_binding_in_imports_with_arity(name, argumentCount, rest, module, allModules)
 
 /// Finds a binding in imports in scope, imports, or compiled modules.
 private fun python_find_binding_in_imports(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], constant: bool): /capy/lang/Option[PythonQualifiedFunctionBinding] =
@@ -6186,13 +6334,62 @@ private fun python_find_extension_method(call: CompiledMethodCallExpression, env
 private fun python_find_extension_method_with_receiver_type(receiverType: String, call: CompiledMethodCallExpression, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     if receiverType == python_unknown_type()
     then /capy/lang/Option.None {}
-    else python_find_extension_method_in_scope(receiverType, call.name, module, allModules)
+    else if python_first_method_argument_lambda(call.arguments)
+    then match python_find_extension_method_binding_in_scope_with_lambda_argument(python_extension_owner_type(receiverType), call.name, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding.function }
+        case None -> python_find_extension_method_in_scope_with_arity(python_extension_owner_type(receiverType), call.name, call.arguments.size().value, module, allModules)
+    else python_find_extension_method_in_scope_with_arity(python_extension_owner_type(receiverType), call.name, call.arguments.size().value, module, allModules)
+
+/// Checks whether the first source method argument is a lambda.
+private fun python_first_method_argument_lambda(arguments: List[CompiledExpression]): bool =
+    match arguments[0] with
+    case Some { argument } -> python_lambda_expression(argument)
+    case None -> false
+
+/// Checks whether an expression is a lambda.
+private fun python_lambda_expression(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case _ -> false
 
 /// Finds a binary extension operator with left type in scope, imports, or compiled modules.
 private fun python_find_binary_extension_operator_with_left_type(binary: CompiledBinaryExpression, leftType: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
     if leftType == python_unknown_type()
     then /capy/lang/Option.None {}
-    else python_find_extension_method_in_scope(leftType, binary.operator, module, allModules)
+    else python_find_extension_method_in_scope_with_arity(python_extension_owner_type(leftType), binary.operator, 1, module, allModules)
+
+/// Normalizes concrete lazy sequence node types to their extension-method owner.
+private fun python_extension_owner_type(receiverType: String): String =
+    if python_seq_node_type(python_type_unqualified_name(receiverType))
+    then python_seq_type()
+    else receiverType
+
+/// Finds an arity-compatible extension method in the current scope.
+private fun python_find_extension_method_in_scope_with_arity(ownerName: String, methodName: String, argumentCount: int, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
+    match python_find_extension_method_binding_in_scope_with_arity(ownerName, methodName, argumentCount, module, allModules) with
+    case Some { binding } -> /capy/lang/Option.Some { binding.function }
+    case None -> /capy/lang/Option.None {}
+
+/// Finds an arity-compatible extension method together with its declaring module.
+private fun python_find_extension_method_binding_in_scope_with_arity(ownerName: String, methodName: String, argumentCount: int, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_method_function_binding_with_arity(ownerName, methodName, argumentCount, module.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None ->
+        match python_find_extension_method_binding_in_imports_with_arity(ownerName, methodName, argumentCount, module.imports, module, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> python_find_primitive_backed_proxy_binding_with_arity(ownerName, methodName, argumentCount, module)
+
+/// Finds a callable-argument extension method together with its declaring module.
+private fun python_find_extension_method_binding_in_scope_with_lambda_argument(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_method_function_binding_with_lambda_argument(ownerName, methodName, module.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> python_find_extension_method_binding_in_imports_with_lambda_argument(ownerName, methodName, module.imports, module, allModules)
+
+/// Finds an arity-compatible primitive-backed proxy method.
+private fun python_find_primitive_backed_proxy_binding_with_arity(ownerName: String, methodName: String, argumentCount: int, module: CompiledModule): /capy/lang/Option[CompiledFunctionBinding] =
+    match module.visiblePrimitiveBackedTypes.get(python_method_owner_base_name(ownerName)) with
+    case None -> /capy/lang/Option.None {}
+    case Some { primitiveBackedType } -> python_find_method_function_binding_with_arity(primitiveBackedType.backingType.name, methodName, argumentCount, primitiveBackedType.proxiedFunctions)
 
 /// Finds an extension method in scope in scope, imports, or compiled modules.
 private fun python_find_extension_method_in_scope(ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -6233,6 +6430,32 @@ private fun python_find_method_function_binding(ownerName: String, methodName: S
         then /capy/lang/Option.Some { binding }
         else python_find_method_function_binding(ownerName, methodName, bindings[1:])
 
+/// Finds an origin-preserving linked method binding with matching source argument count.
+private fun python_find_method_function_binding_with_arity(ownerName: String, methodName: String, argumentCount: int, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if python_method_function_matches(ownerName, methodName, binding.function)
+            & binding.function.parameters.size().value == argumentCount
+        then /capy/lang/Option.Some { binding }
+        else python_find_method_function_binding_with_arity(ownerName, methodName, argumentCount, bindings[1:])
+
+/// Finds an origin-preserving method binding whose first argument is callable.
+private fun python_find_method_function_binding_with_lambda_argument(ownerName: String, methodName: String, bindings: List[CompiledFunctionBinding]): /capy/lang/Option[CompiledFunctionBinding] =
+    match bindings[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { binding } ->
+        if python_method_function_matches(ownerName, methodName, binding.function)
+            & python_function_first_parameter_callable(binding.function)
+        then /capy/lang/Option.Some { binding }
+        else python_find_method_function_binding_with_lambda_argument(ownerName, methodName, bindings[1:])
+
+/// Checks whether a function's first source parameter is callable.
+private fun python_function_first_parameter_callable(function: CompiledFunction): bool =
+    match function.parameters[0] with
+    case Some { parameter } -> parameter.typeReference.name ? "=>"
+    case None -> false
+
 /// Checks whether method function matches the requested declaration, type, or name.
 private fun python_method_function_matches(ownerName: String, methodName: String, function: CompiledFunction): bool =
     if python_skip_function(function)
@@ -6262,6 +6485,52 @@ private fun python_find_extension_method_binding_in_imports(ownerName: String, m
                 | python_import_includes_name(python_method_owner_base_name(ownerName), declaration))
         then python_find_extension_method_binding_in_import(ownerName, methodName, imports[1:], declaration, module, allModules)
         else python_find_extension_method_binding_in_imports(ownerName, methodName, imports[1:], module, allModules)
+
+/// Finds an arity-compatible imported extension method and its declaring module.
+private fun python_find_extension_method_binding_in_imports_with_arity(ownerName: String, methodName: String, argumentCount: int, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified
+            & ((declaration.wildcard & !python_string_list_contains(methodName, declaration.excludedNames))
+                | python_import_includes_name(python_method_owner_base_name(ownerName), declaration))
+        then python_find_extension_method_binding_in_import_with_arity(ownerName, methodName, argumentCount, declaration, imports[1:], module, allModules)
+        else python_find_extension_method_binding_in_imports_with_arity(ownerName, methodName, argumentCount, imports[1:], module, allModules)
+
+/// Finds an arity-compatible extension binding in one import declaration.
+private fun python_find_extension_method_binding_in_import_with_arity(ownerName: String, methodName: String, argumentCount: int, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> python_find_extension_method_binding_in_imported_module_with_arity(ownerName, methodName, argumentCount, importedModule, rest, module, allModules)
+    case None -> python_find_extension_method_binding_in_imports_with_arity(ownerName, methodName, argumentCount, rest, module, allModules)
+
+/// Finds an arity-compatible extension binding in a resolved imported module.
+private fun python_find_extension_method_binding_in_imported_module_with_arity(ownerName: String, methodName: String, argumentCount: int, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_method_function_binding_with_arity(ownerName, methodName, argumentCount, importedModule.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> python_find_extension_method_binding_in_imports_with_arity(ownerName, methodName, argumentCount, rest, module, allModules)
+
+/// Finds a callable-argument imported extension method and its declaring module.
+private fun python_find_extension_method_binding_in_imports_with_lambda_argument(ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match imports[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { declaration } ->
+        if !declaration.qualified
+            & ((declaration.wildcard & !python_string_list_contains(methodName, declaration.excludedNames))
+                | python_import_includes_name(python_method_owner_base_name(ownerName), declaration))
+        then python_find_extension_method_binding_in_import_with_lambda_argument(ownerName, methodName, declaration, imports[1:], module, allModules)
+        else python_find_extension_method_binding_in_imports_with_lambda_argument(ownerName, methodName, imports[1:], module, allModules)
+
+/// Finds a callable-argument extension binding in one import declaration.
+private fun python_find_extension_method_binding_in_import_with_lambda_argument(ownerName: String, methodName: String, declaration: CompiledImportDeclaration, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_imported_module(declaration, module, allModules) with
+    case Some { importedModule } -> python_find_extension_method_binding_in_imported_module_with_lambda_argument(ownerName, methodName, importedModule, rest, module, allModules)
+    case None -> python_find_extension_method_binding_in_imports_with_lambda_argument(ownerName, methodName, rest, module, allModules)
+
+/// Finds a callable-argument extension binding in a resolved imported module.
+private fun python_find_extension_method_binding_in_imported_module_with_lambda_argument(ownerName: String, methodName: String, importedModule: CompiledModule, rest: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
+    match python_find_method_function_binding_with_lambda_argument(ownerName, methodName, importedModule.functionBindings) with
+    case Some { binding } -> /capy/lang/Option.Some { binding }
+    case None -> python_find_extension_method_binding_in_imports_with_lambda_argument(ownerName, methodName, rest, module, allModules)
 
 /// Finds an extension method in import in scope, imports, or compiled modules.
 private fun python_find_extension_method_in_import(ownerName: String, methodName: String, rest: List[CompiledImportDeclaration], declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -6392,6 +6661,8 @@ private fun python_function_name(function: CompiledFunction): String =
     then "tests"
     else if function.name == "main"
     then "main"
+    else if function.name ? "__local__"
+    then python_identifier(function.name)
     else python_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
 
 /// Computes the Python name for method.
@@ -6477,7 +6748,8 @@ private fun python_test_runtime_header_code(): String =
     + "import time" + python_newline()
     + "import traceback" + python_newline()
     + python_newline()
-    + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_bind_value', '__capy_block_bind', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_fold', '__capy_as_list', '__capy_seq_first_value', '__capy_seq_rest', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_option_or', '__capy_option_or_else', '__capy_result_from_value', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_dynamic_map', '__capy_dynamic_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', '__capy_assert_failed', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '__capy_random_seed', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_dynamic_method', '__capy_bind_value', '__capy_block_bind', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_values', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_fold', '__capy_as_list', '__capy_seq_first_value', '__capy_seq_rest', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_option_or', '__capy_option_or_else', '__capy_result_from_value', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_dynamic_map', '__capy_dynamic_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
+    + "__all__.append('__capy_seq_first')" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -6902,6 +7174,12 @@ private fun python_test_runtime_assert_code(): String =
     + "def assert_that(value):" + python_newline()
     + "    return ValueAssert(value)" + python_newline()
     + python_newline()
+    + "def __capy_assert_failed(value):" + python_newline()
+    + "    if hasattr(value, 'failed'):" + python_newline()
+    + "        return bool(value.failed())" + python_newline()
+    + "    assertions = value.get('assertions', []) if isinstance(value, dict) else []" + python_newline()
+    + "    return any(not bool((item() if callable(item) else item).get('result', False)) for item in assertions)" + python_newline()
+    + python_newline()
     + "def fail(message):" + python_newline()
     + "    return ValueAssert(None, [lambda: dict(result=False, message=str(message), type='fail')])" + python_newline()
     + python_newline()
@@ -6965,6 +7243,9 @@ private fun python_test_runtime_numeric_value_code(): String =
     + "            return -9223372036854775808" + python_newline()
     + "        return int(value)" + python_newline()
     + "    return __capy_long(value)" + python_newline()
+    + python_newline()
+    + "def __capy_random_seed():" + python_newline()
+    + "    return __capy_long(time.time_ns())" + python_newline()
     + python_newline()
     + "def __capy_success(value):" + python_newline()
     + "    return __capy_data('Success', dict(value=value))" + python_newline()
@@ -7653,13 +7934,10 @@ private fun python_test_runtime_gather_code(modules: List[CompiledModule]): Stri
 /// Emits Python code for value assert extra methods.
 private fun python_value_assert_extra_methods_code(): String =
     "    def is_empty(self):" + python_newline()
-    + "        if _capy_data_is(self.value, 'None'):" + python_newline()
-    + "            result = True" + python_newline()
-    + "        else:" + python_newline()
-    + "            try:" + python_newline()
-    + "                result = len(self.value) == 0" + python_newline()
-    + "            except TypeError:" + python_newline()
-    + "                result = False" + python_newline()
+    + "        try:" + python_newline()
+    + "            result = globals()['__capy_is_empty'](self.value)" + python_newline()
+    + "        except TypeError:" + python_newline()
+    + "            result = False" + python_newline()
     + "        return self._append(result, 'Expected ' + repr(self.value) + ' to be empty', 'Assert.is_empty')" + python_newline()
     + python_newline()
     + "    def is_zero(self):" + python_newline()
@@ -7670,6 +7948,15 @@ private fun python_value_assert_extra_methods_code(): String =
     + python_newline()
     + "    def is_greater_than(self, other):" + python_newline()
     + "        return self._append(self.value > other, 'Expected ' + repr(self.value) + ' to be greater than ' + repr(other), 'Assert.is_greater_than')" + python_newline()
+    + python_newline()
+    + "    def is_less_than(self, other):" + python_newline()
+    + "        return self._append(self.value < other, 'Expected ' + repr(self.value) + ' to be less than ' + repr(other), 'Assert.is_less_than')" + python_newline()
+    + python_newline()
+    + "    def is_greater_or_equals_than(self, other):" + python_newline()
+    + "        return self._append(self.value >= other, 'Expected ' + repr(self.value) + ' to be greater than or equal to ' + repr(other), 'Assert.is_greater_or_equals_than')" + python_newline()
+    + python_newline()
+    + "    def is_less_or_equals_than(self, other):" + python_newline()
+    + "        return self._append(self.value <= other, 'Expected ' + repr(self.value) + ' to be less than or equal to ' + repr(other), 'Assert.is_less_or_equals_than')" + python_newline()
     + python_newline()
     + "    def is_between(self, start, end):" + python_newline()
     + "        return self._append(self.value >= start and self.value <= end, 'Expected ' + repr(self.value) + ' to be between ' + repr(start) + ' and ' + repr(end), 'Assert.is_between')" + python_newline()
@@ -7746,6 +8033,47 @@ private fun python_runtime_data_helpers_code(): String =
     + "    if fields:" + python_newline()
     + "        return value[fields[0]]" + python_newline()
     + "    return value" + python_newline()
+    + python_newline()
+    + "def __capy_dynamic_method(value, name, *args):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    type_name = __capy_value_type_name(value.get('__type', '')) if isinstance(value, dict) else ''" + python_newline()
+    + "    if name == 'size' and not args:" + python_newline()
+    + "        return __capy_size(value)" + python_newline()
+    + "    if name == 'is_empty' and not args:" + python_newline()
+    + "        return __capy_is_empty(value)" + python_newline()
+    + "    if name == 'to_string' and not args:" + python_newline()
+    + "        return __capy_to_string(value)" + python_newline()
+    + "    if name == 'compare' and len(args) == 1:" + python_newline()
+    + "        ordering = __import__('capy.lang.Ordering', fromlist=['*'])" + python_newline()
+    + "        return ordering.LESS if str(value) < str(args[0]) else (ordering.GREATER if str(value) > str(args[0]) else ordering.EQUAL)" + python_newline()
+    + "    if name == 'timestamp' and not args and type_name == 'DateTime':" + python_newline()
+    + "        return __capy_date_time_timestamp(value)" + python_newline()
+    + "    if name == 'to_iso_8601' and not args:" + python_newline()
+    + "        if type_name == 'Date':" + python_newline()
+    + "            return __capy_date_to_iso_8601(value)" + python_newline()
+    + "        if type_name == 'Time':" + python_newline()
+    + "            return __capy_time_to_iso_8601(value)" + python_newline()
+    + "        if type_name == 'DateTime':" + python_newline()
+    + "            return __capy_date_time_to_iso_8601(value)" + python_newline()
+    + "        if type_name in ('Duration', 'DateDuration', 'WeekDuration'):" + python_newline()
+    + "            return __capy_duration_to_iso_8601(value)" + python_newline()
+    + "    if name in ('years', 'months', 'days', 'hours', 'minutes', 'seconds') and not args and type_name in ('Duration', 'DateDuration', 'WeekDuration'):" + python_newline()
+    + "        return globals()['__capy_duration_' + name](value)" + python_newline()
+    + "    if name in ('with_kind', 'with_message') and len(args) == 1 and isinstance(value, dict):" + python_newline()
+    + "        result = dict(value)" + python_newline()
+    + "        result['kind' if name == 'with_kind' else 'message'] = args[0]" + python_newline()
+    + "        return result" + python_newline()
+    + "    if name == 'take' and len(args) == 1 and type_name in ('Cons', 'End'):" + python_newline()
+    + "        result = []" + python_newline()
+    + "        current = value" + python_newline()
+    + "        while len(result) < int(args[0]) and _capy_data_is(current, 'Cons'):" + python_newline()
+    + "            result.append(__capy_seq_first_value(current))" + python_newline()
+    + "            current = __capy_seq_rest(current)" + python_newline()
+    + "        return result" + python_newline()
+    + "    if name == 'first' and not args and type_name in ('Cons', 'End'):" + python_newline()
+    + "        return __capy_some(__capy_seq_first_value(value)) if type_name == 'Cons' else __capy_none()" + python_newline()
+    + "    method = getattr(value, name)" + python_newline()
+    + "    return method(*args)" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime reflection.
@@ -8051,6 +8379,10 @@ private fun python_test_runtime_collection_string_helpers_code(): String =
     + "        return any(__capy_deep_equal(item, right) for item in __capy_set_values(left))" + python_newline()
     + "    if isinstance(left, (list, tuple)):" + python_newline()
     + "        return any(__capy_deep_equal(item, right) for item in left)" + python_newline()
+    + "    if _capy_data_is(left, 'End'):" + python_newline()
+    + "        return False" + python_newline()
+    + "    if _capy_data_is(left, 'Cons'):" + python_newline()
+    + "        return any(__capy_deep_equal(item, right) for item in __capy_seq_iter(left))" + python_newline()
     + "    return right in left" + python_newline()
     + python_newline()
     + "def __capy_size(value):" + python_newline()
@@ -8059,6 +8391,10 @@ private fun python_test_runtime_collection_string_helpers_code(): String =
     + "    return len(value)" + python_newline()
     + python_newline()
     + "def __capy_is_empty(value):" + python_newline()
+    + "    if _capy_data_is(value, 'End', 'None'):" + python_newline()
+    + "        return True" + python_newline()
+    + "    if _capy_data_is(value, 'Cons'):" + python_newline()
+    + "        return False" + python_newline()
     + "    return len(value) == 0" + python_newline()
     + python_newline()
     + "def __capy_string_trim(value):" + python_newline()
@@ -8156,6 +8492,12 @@ private fun python_test_runtime_iterable_helpers_code(): String =
     + python_newline()
     + "def to_seq(value):" + python_newline()
     + "    return __capy_as_list(value)" + python_newline()
+    + python_newline()
+    + "def __capy_seq_first(value):" + python_newline()
+    + "    value = _unsafe_run(value)" + python_newline()
+    + "    if isinstance(value, list):" + python_newline()
+    + "        return __capy_some(value[0]) if value else __capy_none()" + python_newline()
+    + "    return __capy_some(__capy_seq_first_value(value)) if _capy_data_is(value, 'Cons') else __capy_none()" + python_newline()
     + python_newline()
     + "def __capy_seq_first_value(value):" + python_newline()
     + "    value = _unsafe_run(value)" + python_newline()

@@ -926,12 +926,12 @@ class CompilationTest {
                 .code();
 
         assertThat(code)
-                .contains("def Box_count_down__local__loop__4_4__4_4(")
-                .contains("Box_count_down__local__loop__4_4__4_4(__capy_sub(current, 1))")
-                .contains("return Box_count_down__local__loop__4_4__4_4(n)")
+                .contains("def Box_count_down__local__loop__4_4(")
+                .contains("Box_count_down__local__loop__4_4(__capy_sub(current, 1))")
+                .contains("return Box_count_down__local__loop__4_4(n)")
                 .contains("def Box_total__9_0(this, _capy_list):")
                 .contains("__capy_size(_capy_list)")
-                .doesNotContain("return Box_count_down__local__loop__4_4(n)");
+                .doesNotContain("Box_count_down__local__loop__4_4__4_4");
     }
 
     @Test
@@ -1039,7 +1039,7 @@ class CompilationTest {
                 .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).ValueAssert_is_equal_to__")
                 .contains("__import__(\"capy.lang.TimeUnit\", fromlist=['*']).Sized_size__")
                 .contains("return __import__(\"capy.lang.TimeUnit\", fromlist=['*']).EQUAL")
-                .contains("== \"0\"")
+                .contains("__capy_deep_equal(__capy_pattern_literal_0, \"0\")")
                 .contains("str(value).translate(str.maketrans('abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'))")
                 .contains("str(left) < str(right)")
                 .contains("__capy_bind_value(__import__(\"capy.lang.TimeUnit\", fromlist=['*']).__capy_constructor_normalized__")
