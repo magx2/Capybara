@@ -7957,7 +7957,7 @@ private fun java_script_method_call_gatherable(call: CompiledMethodCallExpressio
         | call.name == "is_zero" | call.name == "is_one" | call.name == "is_empty"
         | call.name == "is_greater_than" | call.name == "is_less_than"
         | call.name == "is_greater_or_equals_than" | call.name == "is_less_or_equals_than"
-        | call.name == "is_between" | call.name == "has_size" | call.name == "contains" | call.name == "starts_with" | call.name == "does_not_start_with" | call.name == "succeeds" | call.name == "fails"
+        | call.name == "is_between" | call.name == "has_size" | call.name == "contains" | call.name == "starts_with" | call.name == "does_not_start_with" | call.name == "succeeds" | call.name == "fails" | call.name == "fails_with_kind"
         | call.name == "failed" | call.name == "succeeded"
     then java_script_expression_gatherable(call.receiver, env, module, allModules)
         & java_script_expressions_gatherable(call.arguments, env, module, allModules)

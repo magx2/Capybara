@@ -1488,7 +1488,7 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         then "__capy_to_string(" + receiver + ")"
         else if python_string_get_method_call(call, receiverType)
         then python_string_get_method_code(call, env, module, allModules)
-        else if python_string_parse_method_call(call, receiverType)
+        else if python_string_parse_method_call(call, receiverType, module, allModules)
         then python_string_parse_method_code(call, env, module, allModules)
         else if python_string_method_call(call, receiverType)
         then python_string_method_code(call, env, module, allModules)
@@ -2712,10 +2712,11 @@ private fun python_string_get_method_code(call: CompiledMethodCallExpression, en
     else "__capy_string_get(" + receiver + ", " + python_first_method_argument_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether method metadata matches the string parse method call rule.
-private fun python_string_parse_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
+private fun python_string_parse_method_call(call: CompiledMethodCallExpression, receiverType: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     call.arguments.is_empty()
         & !python_numeric_type(receiverType)
         & python_string_parse_method_name(call.name)
+        & !python_extension_method_declared_for_type(receiverType, call.name, module, allModules)
 
 /// Checks whether method metadata matches the string parse method name rule.
 private fun python_string_parse_method_name(name: String): bool =
@@ -4233,7 +4234,7 @@ private fun python_method_call_expression_type(call: CompiledMethodCallExpressio
         then python_string_type()
         else if python_string_get_method_call(call, receiverType)
         then python_string_get_method_return_type(call)
-        else if python_string_parse_method_call(call, receiverType)
+        else if python_string_parse_method_call(call, receiverType, module, allModules)
         then python_result_type()
         else if python_string_method_call(call, receiverType)
         then python_string_method_return_type(call.name)
@@ -4552,7 +4553,7 @@ private fun python_result_payload_type_from_function_call(name: String, module: 
 /// Emits Python expression text for result payload type from method call.
 private fun python_result_payload_type_from_method_call(call: CompiledMethodCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_string_parse_method_name(call.name)
-    then if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules))
+    then if python_string_parse_method_call(call, python_expression_type(call.receiver, env, module, allModules), module, allModules)
         then python_string_parse_payload_type(call.name)
         else python_unknown_type()
     else python_unknown_type()
@@ -9187,7 +9188,7 @@ private fun python_method_call_gatherable(call: CompiledMethodCallExpression, en
         else if python_string_get_method_call(call, receiverType)
         then python_expression_gatherable(call.receiver, env, module, allModules)
             & python_expressions_gatherable(call.arguments, env, module, allModules)
-        else if python_string_parse_method_call(call, receiverType)
+        else if python_string_parse_method_call(call, receiverType, module, allModules)
         then python_expression_gatherable(call.receiver, env, module, allModules)
         else if python_string_method_call(call, receiverType)
         then python_expression_gatherable(call.receiver, env, module, allModules)

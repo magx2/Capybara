@@ -1472,6 +1472,16 @@ class CompilationTest {
         assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
         assertThat(code).contains("__capy_data_field(value, \"first\")");
         assertThat(code).contains("__capy_list_get_optional(values, 0)");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/PrimitiveData.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(pythonCode)
+                .contains("diff = __capy_sub(Digits_to_int__")
+                .doesNotContain("diff = __capy_sub(__capy_parse_int(ordered)");
     }
 
     @Test

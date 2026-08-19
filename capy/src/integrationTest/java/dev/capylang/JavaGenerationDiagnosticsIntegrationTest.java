@@ -1087,6 +1087,47 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void discoversJavaScriptTestsUsingInferredExtensionReceiversAndFailureKinds() throws Exception {
+        writeSource("sample/OrderedValue.cfun", """
+                data OrderedValue { value: int }
+
+                data Value { value: int } with constructor {
+                    if value < 0
+                    then Error { kind: "value.invalid", message: "value must be non-negative" }
+                    else Success { * { value } }
+                }
+
+                private fun Value.order(): OrderedValue = OrderedValue { this.value }
+                private fun OrderedValue.to_int(): int = this.value
+                private fun OrderedValue.to_inverted_int(): int = 0 - this.value
+
+                fun Value.diff(): int =
+                    let ordered = this.order()
+                    ordered.to_int() - ordered.to_inverted_int()
+                """);
+        var testSource = writeTestSource("sample/OrderedValue.test.cfun", """
+                from /sample/OrderedValue import { Value }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/sample/OrderedValue.cfun", [
+                        test("inferred extension receiver", () => assert_that(Value! { 2 }.diff()).is_equal_to(4)),
+                        test("failure kind", () => invalid_value())
+                    ])
+
+                private fun invalid_value(): Assert =
+                    assert_that(Value { -1 }).fails_with_kind("value.invalid")
+                """);
+
+        assertThat(compileGenerateWithTestsStderr("javascript")).isEmpty();
+        assertThat(generatedTestPath(testSource, ".js")).exists();
+        assertThat(testOutputDir().resolve("capy/test/CapyTestRuntime.js"))
+                .content()
+                .contains("__capy_gather_module(\"../../sample/OrderedValue.test\")");
+    }
+
+    @Test
     void specializesImportedGenericFunctionResultsForChainedMethodsInEveryBackend() throws Exception {
         var boxSource = writeSource("sample/GenericBox.cfun", """
                 data Box[T] { value: T }
