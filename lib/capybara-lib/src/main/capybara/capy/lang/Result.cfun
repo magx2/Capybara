@@ -197,12 +197,6 @@ fun Result[T].reduce(on_success: T => R, on_error: Error => R): R = this |> (on_
 /// Reduces a Result by applying `on_success` to Success or `on_error` to Error.
 fun Result[T].reduce_left(on_success: T => R, on_error: Error => R): R = this.reduce(on_success, on_error)
 
-/// Returns the error message, or an empty string when this Result is successful.
-fun Result[T].error_message(): String =
-    match this with
-    case Success _ -> ""
-    case Error e -> e.message
-
 /// Maps an Error while preserving successful values.
 fun Result[T].map_error(map: Error => Error): Result[T] =
     match this with
@@ -216,7 +210,7 @@ fun Result[T].recover(recover: Error => T): T =
     case Error e -> recover(e)
 
 /// Recovers an Error into another Result.
-fun Result[T].recover_result(recover: Error => Result[T]): Result[T] =
+fun Result[T].recover(recover: Error => Result[T]): Result[T] =
     match this with
     case Success s -> s
     case Error e -> recover(e)

@@ -20,10 +20,16 @@ fun compute(fn: () => T): Async[T] =
 /// Waits for all asynchronous computations and preserves every Result in input order.
 fun all(tasks: List[Async[T]]): /capy/lang/Effect[List[Result[T]]] = <native>
 
+/// Waits for all asynchronous computations from a sequence and preserves every Result in input order.
+fun all(tasks: Seq[Async[T]]): /capy/lang/Effect[List[Result[T]]] = all(tasks.as_list())
+
 /// Waits for the first asynchronous computation that completes.
 ///
 /// Returns `capy.lang.async.empty` when `tasks` is empty.
 fun any(tasks: List[Async[T]]): /capy/lang/Effect[Result[T]] = <native>
+
+/// Waits for the first asynchronous computation from a sequence that completes.
+fun any(tasks: Seq[Async[T]]): /capy/lang/Effect[Result[T]] = any(tasks.as_list())
 
 /// Waits for the asynchronous computation and captures host failures as Result.Error.
 fun Async[T].join(): /capy/lang/Effect[Result[T]] = <native>

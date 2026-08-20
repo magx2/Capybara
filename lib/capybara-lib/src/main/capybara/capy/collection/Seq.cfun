@@ -213,6 +213,15 @@ fun Seq[T].`+`(other: Seq[T]): Seq[T] =
     ---
     add(this, other)
 
+/// Returns a new sequence with `value` appended.
+fun Seq[T].`+`(value: T): Seq[T] =
+    fun append(seq: Seq[T], appended: T) =
+        match seq with
+        case End -> Cons { appended, () => End {} }
+        case Cons { value, rest } -> Cons { value, () => append(rest(), appended) }
+    ---
+    append(this, value)
+
 /// Transforms each element using `map`.
 ///
 /// Example:
@@ -306,7 +315,7 @@ fun Seq[T].zip(other: Seq[Y]): Seq[Tuple[T,Y]] =
         case Cons { v1, r1 } ->
             match other with
             case End -> End {}
-            case Cons { v2, r2 } -> Cons { (v1, v2), () => zip(r1, r2) }
+            case Cons { v2, r2 } -> Cons { (v1, v2), () => zip(r1(), r2()) }
     ---
     zip(this, other)
 

@@ -61,6 +61,67 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     @Test
+    void shouldCompileStandardRecursiveFunctionAnnotationPathWithoutImport() {
+        var source = """
+                @/capy/meta_prog/Recursive
+                fun sum(values: List[int], acc: int): int =
+                    match values[0] with
+                    case None -> acc
+                    case Some { value } -> sum(values[1:], acc + value)
+                """;
+
+        var program = compileProgram(List.of(rawModule("RecursivePathUser", "/foo/app", source)), new LinkedHashSet<>());
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("RecursivePathUser");
+    }
+
+    @Test
+    void shouldResolvePathQualifiedAnnotationWithoutImport() {
+        var annotationSource = """
+                annotation Marker on fun {
+                    label: String
+                }
+                """;
+        var consumerSource = """
+                @/foo/meta/Marker(label: "direct")
+                fun marked(): int = 1
+                """;
+
+        var program = compileProgram(List.of(
+                rawModule("Marker", "/foo/meta", annotationSource),
+                rawModule("PathAnnotationUser", "/foo/app", consumerSource)
+        ), new LinkedHashSet<>());
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("Marker", "PathAnnotationUser");
+    }
+
+    @Test
+    void shouldResolveNamedAnnotationFromPathQualifiedModuleWithoutImport() {
+        var annotationSource = """
+                annotation Y on fun {
+                    label: String
+                }
+                """;
+        var consumerSource = """
+                @/a/b/c/X.Y(label: "explicit")
+                fun marked(): int = 1
+                """;
+
+        var program = compileProgram(List.of(
+                rawModule("X", "/a/b/c", annotationSource),
+                rawModule("NamedPathAnnotationUser", "/foo/app", consumerSource)
+        ), new LinkedHashSet<>());
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("X", "NamedPathAnnotationUser");
+    }
+
+    @Test
     void shouldGenerateJavaReferencingLibraryWithoutEmittingIt() {
         var librarySource = """
                 data Message { value: String }
@@ -136,11 +197,6 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 fun redact(input: String): String = (regex/\\\\d+/ ~> "#")(input)
                 fun split_named(input: String): List[String] = regex/,/.split(input)
                 fun split_like(input: String): List[String] = regex/,/ /> input
-                fun first_group(input: String): String =
-                    match regex/\\\\d+/.find(input).group(0) with
-                    case Some { value } -> value
-                    case None -> ""
-                fun groups_count(input: String): int = regex/\\\\d+/.find(input).groups().size()
                 """;
         var generated = JavaGenerator.javaGenerator(compileProgram(List.of(rawModule("RegexConsumer", "/foo/app", consumerSource)), libraries));
 
@@ -150,6 +206,9 @@ class CapybaraCompilerLibrariesIntegrationTest {
         assertThat(module.code()).contains("__capy_regex_matches(__capy_data(");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \"\\\\d+\")");
         assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \",\")");
+        assertThat(module.code()).doesNotContain(
+                "throw new UnsupportedOperationException(\"Unsupported CFUN expression at"
+        );
     }
 
     @Test

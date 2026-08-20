@@ -12,6 +12,9 @@ fun nested_effect(value: int): Effect[String] =
     let x <- pure(value)
     delay(() => "v=" + x)
 
+fun flat_mapped_effect(value: int): Effect[int] =
+    pure(value).flat_map(current => delay(() => current + 1))
+
 fun delayed_divide_by_zero(): Effect[int] =
     delay(() => 1 / 0)
 

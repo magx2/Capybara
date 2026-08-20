@@ -3,6 +3,7 @@ from /capy/collection/List import { * }
 from /capy/collection/Set import { * }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { Either, Left, Right }
+from /capy/lang/Option import { Option, Some, None }
 from /capy/lang/String import { * }
 from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
 from /dev/capylang/compiler/CompiledExpression import { CompiledBinaryExpression, CompiledBlockExpression, CompiledBoolLiteral, CompiledDataField, CompiledDataLiteral, CompiledDictEntry, CompiledDictLiteral, CompiledDoubleLiteral, CompiledExpression, CompiledFieldAccessExpression, CompiledFloatLiteral, CompiledFunctionCallExpression, CompiledFunctionReferenceExpression, CompiledIfExpression, CompiledIndexExpression, CompiledIntLiteral, CompiledLambdaExpression, CompiledLetBinding, CompiledListLiteral, CompiledLongLiteral, CompiledMatchCase, CompiledMatchExpression, CompiledMethodCallExpression, CompiledReduceExpression, CompiledSetLiteral, CompiledStringLiteral, CompiledThrowExpression, CompiledTryCatchBranch, CompiledTryCatchExpression, CompiledTupleLiteral, CompiledUnaryExpression, CompiledUnsupportedExpression, CompiledVariableExpression, CompiledWithExpression }
@@ -56,7 +57,11 @@ from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
 /// Captured placeholders and original arguments for expanding a partially applied call.
 private data CompiledPartialArguments { parameters: List[String], arguments: List[CompiledExpression] }
 /// Library import additions computed together to avoid repeated import/library scans.
-private data CompiledLibraryImports { functions: List[CompiledFunction], functionBindings: List[CompiledFunctionBinding], staticImports: List[StaticImport] }
+private data CompiledLibraryImports {
+    functions: List[CompiledFunction],
+    functionBindings: List[CompiledFunctionBinding],
+    staticImports: List[StaticImport]
+}
 /// Compiled modules accumulated by module key while preserving the historical reversed output order.
 private data CompiledModuleMergeIndex { modules: Dict[CompiledModule], order: List[String] }
 /// Imported library function and explicit static-import selection computed in one function scan.
@@ -81,6 +86,18 @@ private data CompiledRawDeriverDeclaration { name: String, methods: List[Functio
 private data CompiledNativeProviderAnnotation { found: bool, qualifier: String }
 /// Last separator positions for parsed type names.
 private data CompilerTypeNameSeparators { lastTypeSeparator: int, lastDotSeparator: int }
+/// Compiler state used while validating expressions against an output backend.
+private data BackendValidationContext {
+    moduleName: String,
+    variableTypes: Dict[CompiledTypeReference],
+    knownFunctions: Dict[bool]
+}
+/// Linked schema and lexical types used for backend-independent compiler validation.
+private data CompilerTypeValidationContext {
+    module: CompiledModule,
+    allModules: List[CompiledModule],
+    variableTypes: Dict[CompiledTypeReference]
+}
 /// Raw deriver declarations indexed once per module for derive expansion.
 private data CompiledDefinitionIndexes {
     functions: Dict[FunctionDeclaration],
@@ -129,12 +146,299 @@ private fun compiled_program(
     then Right { errors }
     else
         let libraryIndex = compiler_library_index(libraryModules)
-        Left { CompiledProgram {
-        modules: compile_modules(program.modules, program.modules, libraryIndex),
-        objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
-        nativeProviders: nativeProviders,
-        nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
-    }}
+        let compiledModules = compile_modules(program.modules, program.modules, libraryIndex)
+        let typeErrors = compiler_type_errors(compiledModules, compiledModules + libraryModules)
+        if !typeErrors.is_empty()
+        then Right { typeErrors }
+        else Left { CompiledProgram {
+            modules: compiledModules,
+            objectOrientedModules: compile_object_oriented_modules(program.modules, program.modules),
+            nativeProviders: nativeProviders,
+            nativeProviderCatalog: compile_native_provider_catalog(program.modules, nativeImplementationProviders)
+        }}
+
+/// Validates nominal data-field types after linked library schemas are available.
+private fun compiler_type_errors(modules: List[CompiledModule], allModules: List[CompiledModule]): List[CompilerError] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        compiler_module_type_errors(module.functions, CompilerTypeValidationContext {
+            module: module,
+            allModules: allModules,
+            variableTypes: {:}
+        }) + compiler_type_errors(modules[1:], allModules)
+
+/// Validates compiled function bodies with their declared parameter types.
+private fun compiler_module_type_errors(functions: List[CompiledFunction], context: CompilerTypeValidationContext): List[CompilerError] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        compiler_expression_type_errors(
+            function.body,
+            context.with(variableTypes: compiler_function_parameter_types(function.parameters, {:}))
+        )
+            + compiler_module_type_errors(functions[1:], context)
+
+/// Builds a lexical type index from compiled function parameters.
+private fun compiler_function_parameter_types(parameters: List[CompiledFunctionParameter], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> types
+    case Some { parameter } -> compiler_function_parameter_types(parameters[1:], types + (parameter.name, parameter.typeReference))
+
+/// Recursively validates primitive-backed values passed to nominal data fields.
+private fun compiler_expression_type_errors(expression: CompiledExpression, context: CompilerTypeValidationContext): List[CompilerError] =
+    match expression with
+    case CompiledBinaryExpression value ->
+        compiler_expression_type_errors(value.left, context) + compiler_expression_type_errors(value.right, context)
+    case CompiledUnaryExpression value -> compiler_expression_type_errors(value.expression, context)
+    case CompiledFunctionCallExpression value -> compiler_expression_list_type_errors(value.arguments, context)
+    case CompiledMethodCallExpression value ->
+        compiler_expression_type_errors(value.receiver, context) + compiler_expression_list_type_errors(value.arguments, context)
+    case CompiledWithExpression value ->
+        compiler_expression_type_errors(value.receiver, context) + compiler_data_field_value_type_errors(value.fields, context)
+    case CompiledLambdaExpression value -> compiler_expression_type_errors(
+        value.body,
+        context.with(variableTypes: compiler_unknown_binding_types(value.parameters, context.variableTypes))
+    )
+    case CompiledListLiteral value -> compiler_expression_list_type_errors(value.values, context)
+    case CompiledSetLiteral value -> compiler_expression_list_type_errors(value.values, context)
+    case CompiledDictLiteral value -> compiler_dict_entry_type_errors(value.entries, context)
+    case CompiledTupleLiteral value -> compiler_expression_list_type_errors(value.values, context)
+    case CompiledIndexExpression value ->
+        compiler_expression_type_errors(value.receiver, context)
+            + compiler_expression_type_errors(value.index, context)
+            + (if value.hasEndIndex then compiler_expression_type_errors(value.endIndex, context) else [])
+    case CompiledDataLiteral value ->
+        compiler_data_literal_type_errors(value, context) + compiler_data_field_value_type_errors(value.fields, context)
+    case CompiledFieldAccessExpression value -> compiler_expression_type_errors(value.receiver, context)
+    case CompiledReduceExpression value ->
+        compiler_expression_type_errors(value.receiver, context)
+            + compiler_expression_type_errors(value.initial, context)
+            + compiler_expression_type_errors(value.body, context.with(variableTypes: compiler_reduce_binding_types(value, context.variableTypes)))
+    case CompiledMatchExpression value ->
+        compiler_expression_type_errors(value.value, context) + compiler_match_case_type_errors(value.cases, context)
+    case CompiledThrowExpression value -> compiler_expression_type_errors(value.value, context)
+    case CompiledTryCatchExpression value ->
+        compiler_expression_type_errors(value.body, context) + compiler_try_catch_type_errors(value.branches, context)
+    case CompiledBlockExpression value -> compiler_block_type_errors(value.bindings, value.result, context)
+    case CompiledIfExpression value ->
+        compiler_expression_type_errors(value.condition, context)
+            + compiler_expression_type_errors(value.thenBranch, context)
+            + compiler_expression_type_errors(value.elseBranch, context)
+    case _ -> []
+
+/// Validates a list of expressions.
+private fun compiler_expression_list_type_errors(expressions: List[CompiledExpression], context: CompilerTypeValidationContext): List[CompilerError] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } -> compiler_expression_type_errors(expression, context) + compiler_expression_list_type_errors(expressions[1:], context)
+
+/// Validates nested data-field values.
+private fun compiler_data_field_value_type_errors(fields: List[CompiledDataField], context: CompilerTypeValidationContext): List[CompilerError] =
+    match fields[0] with
+    case None -> []
+    case Some { field } -> compiler_expression_type_errors(field.value, context) + compiler_data_field_value_type_errors(fields[1:], context)
+
+/// Validates dictionary key and value expressions.
+private fun compiler_dict_entry_type_errors(entries: List[CompiledDictEntry], context: CompilerTypeValidationContext): List[CompilerError] =
+    match entries[0] with
+    case None -> []
+    case Some { entry } ->
+        compiler_expression_type_errors(entry.key, context)
+            + compiler_expression_type_errors(entry.value, context)
+            + compiler_dict_entry_type_errors(entries[1:], context)
+
+/// Tracks declared block binding types while validating in source order.
+private fun compiler_block_type_errors(bindings: List[CompiledLetBinding], result: CompiledExpression, context: CompilerTypeValidationContext): List[CompilerError] =
+    match bindings[0] with
+    case None -> compiler_expression_type_errors(result, context)
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then CompiledTypeReference { name: "any", arguments: [] } else binding.typeReference
+        compiler_expression_type_errors(binding.value, context)
+            + compiler_block_type_errors(
+                bindings[1:],
+                result,
+                context.with(variableTypes: context.variableTypes + (binding.name, bindingType))
+            )
+
+/// Adds unknown lexical types for lambda parameters.
+private fun compiler_unknown_binding_types(names: List[String], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match names[0] with
+    case None -> types
+    case Some { name } ->
+        let next = if name == "_" then types else types + (backend_lambda_parameter_name(name), CompiledTypeReference { name: "any", arguments: [] })
+        compiler_unknown_binding_types(names[1:], next)
+
+/// Adds reduce accumulator/key/value bindings.
+private fun compiler_reduce_binding_types(reduce: CompiledReduceExpression, types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    let accumulatorType = match compiler_expression_type(reduce.initial, types) with
+        case Some { value } -> value
+        case None -> CompiledTypeReference { name: "any", arguments: [] }
+    let accumulatorTypes = types + (reduce.accumulatorName, accumulatorType)
+    let keyTypes = if reduce.keyName.is_empty() | reduce.keyName == "_" then accumulatorTypes else accumulatorTypes + (reduce.keyName, CompiledTypeReference { name: "any", arguments: [] })
+    if reduce.valueName.is_empty() | reduce.valueName == "_" then keyTypes else keyTypes + (reduce.valueName, CompiledTypeReference { name: "any", arguments: [] })
+
+/// Validates match branches with their lexical bindings.
+private fun compiler_match_case_type_errors(cases: List[CompiledMatchCase], context: CompilerTypeValidationContext): List[CompilerError] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } ->
+        let caseContext = context.with(variableTypes: compiler_unknown_binding_types(matchCase.bindings, context.variableTypes))
+        (if matchCase.hasLiteral then compiler_expression_type_errors(matchCase.literal, context) else [])
+            + (if matchCase.hasGuard then compiler_expression_type_errors(matchCase.guard, caseContext) else [])
+            + compiler_expression_type_errors(matchCase.body, caseContext)
+            + compiler_match_case_type_errors(cases[1:], context)
+
+/// Validates try/catch branches with their catch binding.
+private fun compiler_try_catch_type_errors(branches: List[CompiledTryCatchBranch], context: CompilerTypeValidationContext): List[CompilerError] =
+    match branches[0] with
+    case None -> []
+    case Some { branch } ->
+        compiler_expression_type_errors(
+            branch.catchBody,
+            context.with(variableTypes: context.variableTypes + (branch.catchName, CompiledTypeReference { name: "any", arguments: [] }))
+        ) + compiler_try_catch_type_errors(branches[1:], context)
+
+/// Reports primitive-backed field mismatches for one data literal using linked schema metadata.
+private fun compiler_data_literal_type_errors(literal: CompiledDataLiteral, context: CompilerTypeValidationContext): List[CompilerError] =
+    let dataType = compiler_nominal_type_name(literal.typeName)
+    match compiler_schema_type_owner(dataType, "__capy_schema_type|", context.module, context.allModules) with
+    case None -> []
+    case Some { owner } -> compiler_data_literal_field_type_errors(
+        literal.fields,
+        compiler_schema_values("__capy_schema_field|" + dataType + "|", owner.functions),
+        0,
+        dataType,
+        owner,
+        context
+    )
+
+/// Validates data literal fields against their declared primitive-backed nominal types.
+private fun compiler_data_literal_field_type_errors(fields: List[CompiledDataField], schemas: List[String], idx: int, dataType: String, owner: CompiledModule, context: CompilerTypeValidationContext): List[CompilerError] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        let rest = compiler_data_literal_field_type_errors(fields[1:], schemas, idx + 1, dataType, owner, context)
+        if field.spread
+        then rest
+        else match compiler_data_field_schema(field.name, schemas, idx) with
+            case None -> rest
+            case Some { schema } ->
+                let expected = compiler_schema_field_type(schema)
+                match compiler_schema_type_owner(expected, "__capy_schema_primitive|", owner, context.allModules) with
+                case None -> rest
+                case Some _ ->
+                    match compiler_expression_type(field.value, context.variableTypes) with
+                    case None -> rest
+                    case Some { actual } ->
+                        if compiler_nominal_type_name(actual.name) == compiler_nominal_type_name(expected)
+                        then rest
+                        else [CompilerError {
+                            message: "Field `" + compiler_schema_field_name(schema) + "` of data `" + compiler_unqualified_type_name(dataType)
+                                + "` has type `" + actual.name + "`, but requires primitive-backed type `" + expected
+                                + "`; construct `" + expected + "` explicitly and unwrap its `Result` before constructing `"
+                                + compiler_unqualified_type_name(dataType) + "`.",
+                            moduleName: backend_module_file_name(context.module),
+                            line: field.location.line,
+                            column: field.location.column
+                        }] + rest
+
+/// Selects a positional or named field schema.
+private fun compiler_data_field_schema(name: String, schemas: List[String], idx: int): Option[String] =
+    if compiler_string_has_prefix(name, "$")
+    then compiler_list_string_at(schemas, idx)
+    else compiler_named_data_field_schema(name, schemas)
+
+/// Finds a named data field schema.
+private fun compiler_named_data_field_schema(name: String, schemas: List[String]): Option[String] =
+    match schemas[0] with
+    case None -> None {}
+    case Some { schema } ->
+        if compiler_schema_field_name(schema) == name
+        then Some { schema }
+        else compiler_named_data_field_schema(name, schemas[1:])
+
+/// Returns a string list element without relying on unsupported optional indexing during self-hosting.
+private fun compiler_list_string_at(values: List[String], idx: int): Option[String] =
+    match values[0] with
+    case None -> None {}
+    case Some { value } -> if idx == 0 then Some { value } else compiler_list_string_at(values[1:], idx - 1)
+
+/// Extracts the declared field name from a schema value.
+private fun compiler_schema_field_name(schema: String): String =
+    let separator = compiler_first_index_of(schema, "|", 0)
+    if separator < 0 then schema else schema[0, separator]
+
+/// Extracts the declared field type from a schema value.
+private fun compiler_schema_field_type(schema: String): String =
+    let separator = compiler_first_index_of(schema, "|", 0)
+    if separator < 0 then "any" else schema[separator + 1, schema.size().value]
+
+/// Collects string-valued schema constants matching a key prefix.
+private fun compiler_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        let rest = compiler_schema_values(prefix, functions[1:])
+        if compiler_string_has_prefix(function.name, prefix)
+        then match function.body with
+            case CompiledStringLiteral literal -> [literal.value] + rest
+            case _ -> rest
+        else rest
+
+/// Resolves a schema type in the current module or one of its selected imports.
+private fun compiler_schema_type_owner(name: String, prefix: String, module: CompiledModule, allModules: List[CompiledModule]): Option[CompiledModule] =
+    let typeName = compiler_nominal_type_name(name)
+    if compiler_schema_function_exists(prefix + typeName, module.functions)
+    then Some { module }
+    else compiler_schema_type_owner_in_imports(typeName, prefix, module.imports, module, allModules)
+
+/// Resolves a schema owner through unqualified imports.
+private fun compiler_schema_type_owner_in_imports(name: String, prefix: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): Option[CompiledModule] =
+    match imports[0] with
+    case None -> None {}
+    case Some { declaration } ->
+        if declaration.qualified | !compiled_import_includes_name(name, declaration)
+        then compiler_schema_type_owner_in_imports(name, prefix, imports[1:], module, allModules)
+        else match find_compiled_source_import(declaration, module, allModules) with
+            case Some { importedModule } ->
+                if compiler_schema_function_exists(prefix + name, importedModule.functions)
+                then Some { importedModule }
+                else compiler_schema_type_owner_in_imports(name, prefix, imports[1:], module, allModules)
+            case None -> compiler_schema_type_owner_in_imports(name, prefix, imports[1:], module, allModules)
+
+/// Checks whether a compiled schema function exists.
+private fun compiler_schema_function_exists(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } -> if function.name == name then true else compiler_schema_function_exists(name, functions[1:])
+
+/// Infers the expression types needed for nominal field validation.
+private fun compiler_expression_type(expression: CompiledExpression, types: Dict[CompiledTypeReference]): Option[CompiledTypeReference] =
+    match expression with
+    case CompiledVariableExpression variable -> types.get(variable.name)
+    case CompiledIntLiteral _ -> Some { CompiledTypeReference { name: "int", arguments: [] } }
+    case CompiledLongLiteral _ -> Some { CompiledTypeReference { name: "long", arguments: [] } }
+    case CompiledFloatLiteral _ -> Some { CompiledTypeReference { name: "float", arguments: [] } }
+    case CompiledDoubleLiteral _ -> Some { CompiledTypeReference { name: "double", arguments: [] } }
+    case CompiledBoolLiteral _ -> Some { CompiledTypeReference { name: "bool", arguments: [] } }
+    case CompiledStringLiteral _ -> Some { CompiledTypeReference { name: "String", arguments: [] } }
+    case CompiledDataLiteral literal -> Some { CompiledTypeReference { name: literal.typeName, arguments: [] } }
+    case _ -> None {}
+
+/// Removes qualification and explicit raw-literal metadata from a nominal type name.
+private fun compiler_nominal_type_name(name: String): String =
+    let unqualified = compiler_unqualified_type_name(name)
+    if compiler_string_has_prefix(unqualified, "__capy_raw|")
+    then unqualified["__capy_raw|".size().value, unqualified.size().value]
+    else unqualified
+
+/// Removes module qualification from a compiled type name.
+private fun compiler_unqualified_type_name(name: String): String =
+    let slash = compiler_last_index_of(name, "/", 0, -1)
+    let dot = compiler_last_index_of(name, ".", 0, -1)
+    let separator = if slash > dot then slash else dot
+    if separator < 0 then name else name[separator + 1, name.size().value]
 
 private fun validate_program(
     capybaraValidator: CapybaraValidator,
@@ -148,6 +452,348 @@ private fun validate_program(
         libraryModules,
         nativeProviders
     )
+
+/// Validates a compiled program against capabilities of the selected output backend.
+fun validate_backend(program: CompiledProgram, outputType: String): Effect[List[CompilerError]] =
+    pure(
+        if outputType == "java" | outputType == "JAVA"
+        then backend_java_module_errors(
+            program.modules,
+            backend_known_function_names(program.modules, {:})
+        )
+        else []
+    )
+
+/// Collects function and imported symbol names available to backend validation.
+private fun backend_known_function_names(modules: List[CompiledModule], names: Dict[bool]): Dict[bool] =
+    match modules[0] with
+    case None -> names
+    case Some { module } ->
+        backend_known_function_names(
+            modules[1:],
+            backend_known_import_names(
+                module.imports,
+                backend_known_module_function_names(module.functions, names)
+            )
+        )
+
+/// Adds compiled function names to a backend symbol index.
+private fun backend_known_module_function_names(functions: List[CompiledFunction], names: Dict[bool]): Dict[bool] =
+    match functions[0] with
+    case None -> names
+    case Some { function } -> backend_known_module_function_names(functions[1:], names + (function.name, true))
+
+/// Adds explicitly imported names to a backend symbol index.
+private fun backend_known_import_names(imports: List[CompiledImportDeclaration], names: Dict[bool]): Dict[bool] =
+    match imports[0] with
+    case None -> names
+    case Some { declaration } ->
+        backend_known_import_names(
+            imports[1:],
+            backend_known_imported_names(declaration.importedNames, names)
+        )
+
+/// Adds one import declaration's names to a backend symbol index.
+private fun backend_known_imported_names(importedNames: List[String], names: Dict[bool]): Dict[bool] =
+    match importedNames[0] with
+    case None -> names
+    case Some { name } -> backend_known_imported_names(importedNames[1:], names + (name, true))
+
+/// Validates all compiled modules against Java backend capabilities.
+private fun backend_java_module_errors(modules: List[CompiledModule], knownFunctions: Dict[bool]): List[CompilerError] =
+    match modules[0] with
+    case None -> []
+    case Some { module } ->
+        backend_java_function_errors(
+            module.functions,
+            BackendValidationContext {
+                moduleName: backend_module_file_name(module),
+                variableTypes: {:},
+                knownFunctions: knownFunctions
+            }
+        ) + backend_java_module_errors(modules[1:], knownFunctions)
+
+/// Formats the source path used by backend compiler diagnostics.
+private fun backend_module_file_name(module: CompiledModule): String =
+    let path = normalize_module_path(module.path)
+    if path.is_empty()
+    then module.name + ".cfun"
+    else path + "/" + module.name + ".cfun"
+
+/// Validates compiled function bodies against Java backend capabilities.
+private fun backend_java_function_errors(functions: List[CompiledFunction], context: BackendValidationContext): List[CompilerError] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        let parameterTypes = backend_parameter_variable_types(function.parameters, {:})
+        let variableTypes = if function.name ? "." then parameterTypes + ("this", backend_unknown_type()) else parameterTypes
+        backend_java_expression_errors(function.body, context.with(variableTypes: variableTypes))
+            + backend_java_function_errors(functions[1:], context)
+
+/// Adds compiled function parameters to a variable type index.
+private fun backend_parameter_variable_types(parameters: List[CompiledFunctionParameter], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> types
+    case Some { parameter } -> backend_parameter_variable_types(parameters[1:], types + (parameter.name, parameter.typeReference))
+
+/// Recursively validates one expression against Java backend capabilities.
+private fun backend_java_expression_errors(expression: CompiledExpression, context: BackendValidationContext): List[CompilerError] =
+    match expression with
+    case CompiledVariableExpression value -> backend_java_variable_errors(value, context)
+    case CompiledIfExpression value ->
+        backend_java_expression_errors(value.condition, context)
+            + backend_java_expression_errors(value.thenBranch, context)
+            + backend_java_expression_errors(value.elseBranch, context)
+    case CompiledBinaryExpression value ->
+        backend_java_expression_errors(value.left, context)
+            + (if backend_pipe_operator(value.operator) & !backend_scoped_pipe_right(value.right)
+                then []
+                else backend_java_expression_errors(value.right, context))
+    case CompiledUnaryExpression value -> backend_java_expression_errors(value.expression, context)
+    case CompiledFunctionCallExpression value -> backend_java_expression_list_errors(value.arguments, context)
+    case CompiledMethodCallExpression value ->
+        backend_java_method_errors(value, context)
+            + backend_java_expression_errors(value.receiver, context)
+            + backend_java_expression_list_errors(value.arguments, context)
+    case CompiledWithExpression value ->
+        backend_java_expression_errors(value.receiver, context)
+            + backend_java_data_field_errors(value.fields, context)
+    case CompiledLambdaExpression value ->
+        backend_java_expression_errors(
+            value.body,
+            context.with(variableTypes: backend_lambda_variable_types(value.parameters, context.variableTypes))
+        )
+    case CompiledListLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledSetLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledDictLiteral value -> backend_java_dict_entry_errors(value.entries, context)
+    case CompiledTupleLiteral value -> backend_java_expression_list_errors(value.values, context)
+    case CompiledIndexExpression value ->
+        backend_java_expression_errors(value.receiver, context)
+            + backend_java_expression_errors(value.index, context)
+            + (if value.hasEndIndex then backend_java_expression_errors(value.endIndex, context) else [])
+    case CompiledDataLiteral value -> backend_java_data_field_errors(value.fields, context)
+    case CompiledFieldAccessExpression value -> backend_java_expression_errors(value.receiver, context)
+    case CompiledReduceExpression value -> backend_java_reduce_errors(value, context)
+    case CompiledMatchExpression value ->
+        backend_java_expression_errors(value.value, context)
+            + backend_java_match_case_errors(value.cases, context)
+    case CompiledThrowExpression value -> backend_java_expression_errors(value.value, context)
+    case CompiledTryCatchExpression value ->
+        backend_java_expression_errors(value.body, context)
+            + backend_java_try_catch_branch_errors(value.branches, context)
+    case CompiledBlockExpression value -> backend_java_block_errors(value.bindings, value.result, context)
+    case _ -> []
+
+/// Checks whether an operator uses the pipe callable shape.
+private fun backend_pipe_operator(operator: String): bool =
+    operator == "|" | operator == "|-" | operator == "|*" | operator == "|!"
+
+/// Checks whether a pipe operand introduces a lambda scope worth validating.
+private fun backend_scoped_pipe_right(expression: CompiledExpression): bool =
+    match expression with
+    case CompiledLambdaExpression _ -> true
+    case CompiledMethodCallExpression call -> backend_scoped_pipe_right(call.receiver)
+    case _ -> false
+
+/// Reports a variable reference that is outside every lexical and imported scope.
+private fun backend_java_variable_errors(variable: CompiledVariableExpression, context: BackendValidationContext): List[CompilerError] =
+    if backend_known_variable(variable.name, context)
+    then []
+    else [CompilerError {
+        message: "Unresolved variable `" + variable.name + "`.",
+        moduleName: context.moduleName,
+        line: variable.location.line,
+        column: variable.location.column
+    }]
+
+/// Checks whether a variable is local, imported, declared, or explicitly qualified.
+private fun backend_known_variable(name: String, context: BackendValidationContext): bool =
+    match context.variableTypes.get(name) with
+    case Some _ -> true
+    case None -> backend_known_function(context.knownFunctions, name) | (name ? ".") | (name ? "/")
+
+/// Adds lambda parameters to the lexical variable type index.
+private fun backend_lambda_variable_types(parameters: List[String], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match parameters[0] with
+    case None -> types
+    case Some { parameter } ->
+        let name = backend_lambda_parameter_name(parameter)
+        let next = if name == "_" then types else types + (name, backend_unknown_type())
+        backend_lambda_variable_types(parameters[1:], next)
+
+/// Decodes a typed lambda parameter marker retained by the shared parser.
+private fun backend_lambda_parameter_name(parameter: String): String =
+    if compiler_string_has_prefix(parameter, "__capy_typed_lambda|")
+    then
+        let rest = parameter["__capy_typed_lambda|".size().value, parameter.size().value]
+        let separator = compiler_first_index_of(rest, "|", 0)
+        if separator < 0 then parameter else rest[0, separator]
+    else parameter
+
+/// Finds the first character index in a compiler string.
+private fun compiler_first_index_of(value: String, needle: String, idx: int): int =
+    if idx >= value.size().value
+    then -1
+    else match value[idx] with
+        case None -> -1
+        case Some { char } -> if char == needle then idx else compiler_first_index_of(value, needle, idx + 1)
+
+/// Returns an unknown type marker used only to retain lexical scope.
+private fun backend_unknown_type(): CompiledTypeReference =
+    CompiledTypeReference { name: "any", arguments: [] }
+
+/// Validates a list of compiled expressions against Java backend capabilities.
+private fun backend_java_expression_list_errors(expressions: List[CompiledExpression], context: BackendValidationContext): List[CompilerError] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } ->
+        backend_java_expression_errors(expression, context)
+            + backend_java_expression_list_errors(expressions[1:], context)
+
+/// Validates compiled data field values against Java backend capabilities.
+private fun backend_java_data_field_errors(fields: List[CompiledDataField], context: BackendValidationContext): List[CompilerError] =
+    match fields[0] with
+    case None -> []
+    case Some { field } ->
+        backend_java_expression_errors(field.value, context)
+            + backend_java_data_field_errors(fields[1:], context)
+
+/// Validates compiled dictionary entries against Java backend capabilities.
+private fun backend_java_dict_entry_errors(entries: List[CompiledDictEntry], context: BackendValidationContext): List[CompilerError] =
+    match entries[0] with
+    case None -> []
+    case Some { entry } ->
+        backend_java_expression_errors(entry.key, context)
+            + backend_java_expression_errors(entry.value, context)
+            + backend_java_dict_entry_errors(entries[1:], context)
+
+/// Validates a reduce expression and tracks the inferred accumulator type.
+private fun backend_java_reduce_errors(reduce: CompiledReduceExpression, context: BackendValidationContext): List[CompilerError] =
+    let reduceContext = context.with(
+        variableTypes: backend_reduce_variable_types(reduce, context.variableTypes)
+    )
+    backend_java_expression_errors(reduce.receiver, context)
+        + backend_java_expression_errors(reduce.initial, context)
+        + backend_java_expression_errors(reduce.body, reduceContext)
+
+/// Adds an inferred reduce accumulator type to a variable type index.
+private fun backend_reduce_variable_types(reduce: CompiledReduceExpression, types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    let accumulatorTypes = match backend_expression_type(reduce.initial, types) with
+        case Some { typeReference } -> types + (reduce.accumulatorName, typeReference)
+        case None -> types + (reduce.accumulatorName, backend_unknown_type())
+    let keyTypes = if reduce.keyName.is_empty() | reduce.keyName == "_" then accumulatorTypes else accumulatorTypes + (reduce.keyName, backend_unknown_type())
+    if reduce.valueName.is_empty() | reduce.valueName == "_" then keyTypes else keyTypes + (reduce.valueName, backend_unknown_type())
+
+/// Validates compiled match cases against Java backend capabilities.
+private fun backend_java_match_case_errors(cases: List[CompiledMatchCase], context: BackendValidationContext): List[CompilerError] =
+    match cases[0] with
+    case None -> []
+    case Some { matchCase } ->
+        (if matchCase.hasLiteral then backend_java_expression_errors(matchCase.literal, context) else [])
+            + (if matchCase.hasGuard then backend_java_expression_errors(
+                matchCase.guard,
+                context.with(variableTypes: backend_match_variable_types(matchCase.bindings, context.variableTypes))
+            ) else [])
+            + backend_java_expression_errors(
+                matchCase.body,
+                context.with(variableTypes: backend_match_variable_types(matchCase.bindings, context.variableTypes))
+            )
+            + backend_java_match_case_errors(cases[1:], context)
+
+/// Adds match-pattern bindings to the lexical variable type index.
+private fun backend_match_variable_types(bindings: List[String], types: Dict[CompiledTypeReference]): Dict[CompiledTypeReference] =
+    match bindings[0] with
+    case None -> types
+    case Some { binding } ->
+        let next = if binding == "_" then types else types + (binding, backend_unknown_type())
+        backend_match_variable_types(bindings[1:], next)
+
+/// Validates compiled try/catch branch bodies against Java backend capabilities.
+private fun backend_java_try_catch_branch_errors(branches: List[CompiledTryCatchBranch], context: BackendValidationContext): List[CompilerError] =
+    match branches[0] with
+    case None -> []
+    case Some { branch } ->
+        backend_java_expression_errors(
+            branch.catchBody,
+            context.with(variableTypes: context.variableTypes + (branch.catchName, backend_unknown_type()))
+        )
+            + backend_java_try_catch_branch_errors(branches[1:], context)
+
+/// Validates block bindings in declaration order and then the block result.
+private fun backend_java_block_errors(bindings: List[CompiledLetBinding], result: CompiledExpression, context: BackendValidationContext): List[CompilerError] =
+    match bindings[0] with
+    case None -> backend_java_expression_errors(result, context)
+    case Some { binding } ->
+        let bindingType = if binding.typeReference.name.is_empty() then backend_unknown_type() else binding.typeReference
+        backend_java_expression_errors(binding.value, context)
+            + backend_java_block_errors(
+                bindings[1:],
+                result,
+                context.with(variableTypes: context.variableTypes + (binding.name, bindingType))
+            )
+
+/// Reports a Java capability error for a method call when its receiver type is known.
+private fun backend_java_method_errors(call: CompiledMethodCallExpression, context: BackendValidationContext): List[CompilerError] =
+    match backend_expression_type(call.receiver, context.variableTypes) with
+    case None -> []
+    case Some { typeReference } ->
+        let receiverType = backend_unqualified_type_name(typeReference.name)
+        if (backend_java_type_has_method_table(receiverType) & backend_java_method_supported(receiverType, call.name))
+            | (!backend_java_type_has_method_table(receiverType)
+                & (backend_known_function(context.knownFunctions, call.name)
+                    | backend_known_function(context.knownFunctions, receiverType + "." + call.name)))
+        then []
+        else [CompilerError {
+            message: "Method `" + call.name + "` on `" + receiverType + "` is not supported by the Java backend.",
+            moduleName: context.moduleName,
+            line: call.location.line,
+            column: call.location.column
+        }]
+
+/// Resolves the limited expression types required by backend capability validation.
+private fun backend_expression_type(expression: CompiledExpression, types: Dict[CompiledTypeReference]): Option[CompiledTypeReference] =
+    match expression with
+    case CompiledVariableExpression variable -> types.get(variable.name)
+    case CompiledFunctionCallExpression call ->
+        if call.name == "pure" | call.name == "Effect.pure" | call.name == "delay" | call.name == "Effect.delay"
+        then Some { CompiledTypeReference { name: "Effect", arguments: [] } }
+        else None {}
+    case _ -> None {}
+
+/// Returns the last unqualified segment of a compiled type name.
+private fun backend_unqualified_type_name(name: String): String =
+    let slash = compiler_last_index_of(name, "/", 0, -1)
+    let dot = compiler_last_index_of(name, ".", 0, -1)
+    let separator = if slash > dot then slash else dot
+    if separator < 0 then name else name[separator + 1, name.size().value]
+
+/// Checks whether a name is present in the linked function symbol index.
+private fun backend_known_function(functions: Dict[bool], name: String): bool =
+    match functions.get(name) with
+    case Some _ -> true
+    case None -> false
+
+/// Checks whether Java has an explicit method capability table for a receiver type.
+private fun backend_java_type_has_method_table(receiverType: String): bool =
+    receiverType == "Effect" | receiverType == "Result" | receiverType == "Option" | receiverType == "Async" | receiverType == "List"
+
+/// Checks whether Java supports a method on a receiver type with an explicit capability table.
+private fun backend_java_method_supported(receiverType: String, methodName: String): bool =
+    if receiverType == "Effect"
+    then compiler_string_list_contains(["map", "flat_map", "start"], methodName)
+    else if receiverType == "Result"
+    then compiler_string_list_contains(["map", "flat_map", "reduce", "reduce_left", "or_else", "or"], methodName)
+    else if receiverType == "Option"
+    then compiler_string_list_contains(["map", "filter", "flat_map"], methodName)
+    else if receiverType == "Async"
+    then compiler_string_list_contains(["join", "map", "flat_map", "`|`", "`|*`"], methodName)
+    else if receiverType == "List"
+    then compiler_string_list_contains([
+        "size", "is_empty", "plus", "minus", "any", "all", "contains", "reduce", "reduce_left",
+        "fold", "map", "filter", "reject", "flat_map", "sort", "get",
+        "`+`", "`-`", "`?`", "`|>`", "`|`", "`|-`", "`|*`"
+    ], methodName)
+    else false
 
 private fun validation_library_modules(libraries: List[CompiledModule]): List[String] =
     match libraries[0] with
@@ -408,14 +1054,26 @@ private fun imported_library_selection_from_module_with_indexes(declaration: Com
             functions: [function.with(visibility: "imported")] + rest.functions,
             functionBindings: [binding] + rest.functionBindings,
             staticImports: if includeStaticImports
-                then [StaticImport { className: compiled_function_binding_class_name(binding), memberName: compiler_java_function_name(function), enumValue: false }] + rest.staticImports
+                then [StaticImport { className: compiled_function_binding_class_name(binding), memberName: compiler_java_static_member_name(function), enumValue: false }] + rest.staticImports
                 else rest.staticImports
         }
         else rest
 
 /// Checks whether a library function is exported and selected by an import declaration.
 private fun imported_library_function(declaration: CompiledImportDeclaration, indexes: CompiledImportNameIndexes, function: CompiledFunction): bool =
-    if function.visibility == "private"
+    if compiler_string_has_prefix(function.name, "__capy_constructor|")
+    then compiled_import_includes_name_with_indexes(
+        function.name["__capy_constructor|".size().value, function.name.size().value],
+        declaration,
+        indexes
+    )
+    else if compiler_string_has_prefix(function.name, "__capy_schema_primitive|")
+    then compiled_import_includes_name_with_indexes(
+        function.name["__capy_schema_primitive|".size().value, function.name.size().value],
+        declaration,
+        indexes
+    )
+    else if function.visibility == "private"
     then false
     else if function.visibility == "const:private"
     then false
@@ -567,6 +1225,12 @@ private fun compiler_java_function_name(function: CompiledFunction): String =
     else if function.name == "main"
     then "main"
     else compiler_java_identifier(function.name) + "__" + function.location.line + "_" + function.location.column
+
+/// Computes the Java member emitted for an imported function or constant.
+private fun compiler_java_static_member_name(function: CompiledFunction): String =
+    if compiler_string_has_prefix(function.visibility, "const:")
+    then compiler_java_identifier(function.name)
+    else compiler_java_function_name(function)
 
 /// Sanitizes a Capybara name into a Java identifier for compiler-generated symbols.
 private fun compiler_java_identifier(name: String): String =

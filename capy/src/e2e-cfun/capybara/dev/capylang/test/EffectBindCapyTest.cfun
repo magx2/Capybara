@@ -9,12 +9,17 @@ from EffectBind import { * }
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/EffectBind.cfun", [
         binds_effects_lazily().map(assertion => test("binds effects lazily", () => assertion)),
+        effect_flat_map_sequences_effects().map(assertion => test("effect flat map sequences effects", () => assertion)),
         test("constructing delayed failure does not run thunk", () => constructing_delayed_failure_does_not_run_thunk()),
         effect_delay_is_lazy_and_non_memoized().map(assertion => test("effect delay is lazy and non-memoized", () => assertion)),
         clock_now_returns_current_date_time_effect().map(assertion => test("clock now returns current date-time effect", () => assertion)),
         current_millis_returns_bounded_current_time_effect().map(assertion => test("current millis returns bounded current time effect", () => assertion)),
         nano_time_returns_bounded_monotonic_time_effect().map(assertion => test("nano time returns bounded monotonic time effect", () => assertion)),
     ])
+
+fun effect_flat_map_sequences_effects(): Effect[Assert] =
+    let actual <- flat_mapped_effect(41)
+    assert_that(actual).is_equal_to(42)
 
 fun binds_effects_lazily(): Effect[Assert] =
     bind_effects_lazily_assertions()

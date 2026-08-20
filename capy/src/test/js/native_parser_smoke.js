@@ -37,9 +37,11 @@ const modules = [
     rawModule(
         'ImportedFunctional',
         'dev/capylang/smoke',
-        'from /capy/lang/String import { String }\n'
+        'from /RootSupport import { support }\n'
+            + 'from /capy/lang/String import { String }\n'
             + 'data User { name: String }\n'
-            + 'fun greet(user: User): String = "hello {user.name}"\n',
+            + 'fun greet(user: User): String = "hello {user.name}"\n'
+            + 'fun typed(values: List[String]): Seq[String] = values | value: String => value\n',
         'FUNCTIONAL'
     ),
     rawModule(
@@ -61,8 +63,10 @@ const parsed = parserImpl.parse(modules);
 
 assertEqual(parsed.__type, 'ParsedProgram', 'parsed type');
 assertEqual(parsed.modules.length, 2, 'parsed module count');
-assertEqual(parsed.modules[0].imports[0].modulePath, '/capy/lang/String', 'import module');
+assertEqual(parsed.modules[0].imports[0].modulePath, '/RootSupport', 'root import module');
+assertEqual(parsed.modules[0].imports[1].modulePath, '/capy/lang/String', 'import module');
 assertEqual(parsed.modules[0].definitions[0].__type, 'DataDeclaration', 'first functional definition');
+assertEqual(parsed.modules[0].definitions[2].function.body.right.parameters[0], '__capy_typed_lambda|value|String', 'typed lambda parameter');
 assertEqual(parsed.modules[1].objectOriented.interfaces[0].name, 'Clock', 'object interface');
 assertEqual(parsed.modules[1].objectOriented.classes[0].name, 'FixedClock', 'object class');
 

@@ -917,6 +917,7 @@ private fun deserialize_key_value(json: String): Result[Parse[KeyValue]] =
 
 private fun parse_string(json: String): Result[Parse[String]] =
     const escape_chars: Set[String] = { '"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u' }
+    fun escape_chars_text(chars: Set[String]): String = chars |> "", (a,b) => a + ", " + b
     /// Parses JSON string, the quotation marks `"` are not included in final string
     /// Supports escape character `\`:
     /// - `\"` - quotation mark
@@ -929,33 +930,33 @@ private fun parse_string(json: String): Result[Parse[String]] =
     /// - `\t` - horizontal tab
     /// - `\\uXXXX` - 4 HEX digits
     @Recursive
-    fun parse_string_until_quotation(parse: Parse[String], escape: bool): Result[Parse[String]] =
+    fun parse_string_until_quotation(parse: Parse[String], escape: bool, escape_chars: Set[String]): Result[Parse[String]] =
         if escape
         then
             match parse.parsing_string[0] with
-            case None -> Error { message: "Expected one of " + (escape_chars |> "", (a,b) => a + ", " + b) + " but got end of string" }
+            case None -> Error { message: "Expected one of " + escape_chars_text(escape_chars) + " but got end of string" }
             case Some { v } ->
                 if escape_chars ? v
                 then
                     if v == 'u'
                     // support \uXXXX
                     // todo check if next chars are [0-9A-F]
-                    then parse_string_until_quotation( Parse { parse.value[0] + 'u' + parse.parsing_string[1, 5], parse.parsing_string[5, parse.parsing_string.size()] }, false)
-                    else parse_string_until_quotation( Parse { parse.value[0] + v, parse.parsing_string[1, parse.parsing_string.size()] }, false)
-                else Error { message: "Expected one of " + (escape_chars |> "", (a,b) => a + ", " + b) + " but got `" + v + "`" }
+                    then parse_string_until_quotation( Parse { parse.value[0] + 'u' + parse.parsing_string[1, 5], parse.parsing_string[5, parse.parsing_string.size()] }, false, escape_chars)
+                    else parse_string_until_quotation( Parse { parse.value[0] + v, parse.parsing_string[1, parse.parsing_string.size()] }, false, escape_chars)
+                else Error { message: "Expected one of " + escape_chars_text(escape_chars) + " but got `" + v + "`" }
         else
             // no escape
             match parse.parsing_string[0] with
             case Some { v } -> {
                 match v with
-                case '\\' -> parse_string_until_quotation(Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size()] } , true)
+                case '\\' -> parse_string_until_quotation(Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size()] } , true, escape_chars)
                 case '"'  -> Success { Parse { parse.value, drop_white_space(parse.parsing_string[1, parse.parsing_string.size()]) }} // quotation mark found, ending
-                case _    -> parse_string_until_quotation(Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size()] }, false) // quotation mark not found, parsing...
+                case _    -> parse_string_until_quotation(Parse { parse.value + v, parse.parsing_string[1, parse.parsing_string.size()] }, false, escape_chars) // quotation mark not found, parsing...
                 }
             case None -> Error { message: '"parse_string: Expected `"`, but got end of string."' }
     ---
     match json[0] with
-    case Some { '"' } -> parse_string_until_quotation(Parse { "", json[1, json.size()] },  false)
+    case Some { '"' } -> parse_string_until_quotation(Parse { "", json[1, json.size()] }, false, escape_chars)
     case Some { v } -> Error { message: "parse_string: Expected `\"`, but got `" + v + "`." }
     case None -> Error { message: "parse_string: Expected JSON string, got end of string." }
 

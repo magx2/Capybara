@@ -392,6 +392,27 @@ def capybaraGeneratedCompilerJavaScriptDir = layout.buildDirectory.dir('generate
 def capybaraRuntimeCompilerJavaScriptDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-runtime/compiler')
 def capybaraLinkedCompilerJavaScriptOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-javascript/compiler')
 def capybaraGeneratedJavaDir = layout.buildDirectory.dir('generated/sources/capybara/java')
+def capybaraJavaGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/java-generator-implementation')
+def capybaraPythonGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/python-generator-implementation')
+def capybaraJavaScriptGeneratorImplementationDir = layout.buildDirectory.dir('generated/sources/capybara/javascript-generator-implementation')
+def capybaraJavaGeneratorSource = capybaraGeneratedJavaDir.map {
+    it.file('dev/capylang/generator/JavaGenerator.java')
+}
+def capybaraJavaGeneratorImplementationSource = capybaraJavaGeneratorImplementationDir.map {
+    it.file('dev/capylang/generator/internal/GeneratedJavaGenerator.java')
+}
+def capybaraPythonGeneratorSource = capybaraGeneratedJavaDir.map {
+    it.file('dev/capylang/generator/PythonGenerator.java')
+}
+def capybaraPythonGeneratorImplementationSource = capybaraPythonGeneratorImplementationDir.map {
+    it.file('dev/capylang/generator/internal/GeneratedPythonGenerator.java')
+}
+def capybaraJavaScriptGeneratorSource = capybaraGeneratedJavaDir.map {
+    it.file('dev/capylang/generator/JavaScriptGenerator.java')
+}
+def capybaraJavaScriptGeneratorImplementationSource = capybaraJavaScriptGeneratorImplementationDir.map {
+    it.file('dev/capylang/generator/internal/GeneratedJavaScriptGenerator.java')
+}
 def pythonAntlrGrammarDir = layout.buildDirectory.dir('generated/sources/antlr/python-grammars')
 def pythonAntlrGeneratedDir = layout.buildDirectory.dir('generated/sources/antlr/python/main')
 def pythonAntlrRuntimeDir = layout.buildDirectory.dir('python/antlr4-runtime')
@@ -431,6 +452,8 @@ def intellijE2eTestSourceDirs = files(
 )
 def capybaraJavaScriptTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/js/run-capybara-tests.js')
 def capybaraPythonTestRunner = project(':lib:capybara-lib').layout.projectDirectory.file('src/main/resources/test-runner/python/run-capybara-tests.py')
+def capybaraJavaTestRunner = javaLibSourceDir.file('dev/capylang/test/TestRunner.java')
+def capybaraJavaTestSelection = javaLibSourceDir.file('dev/capylang/test/TestSelection.java')
 def capyRuntimeDependencies = configurations.runtimeClasspath.incoming.artifactView {
     componentFilter { componentIdentifier ->
         !(componentIdentifier instanceof ProjectComponentIdentifier) &&
@@ -521,7 +544,103 @@ tasks.named('compileCapybara') {
     includeJavaLibResources.set(false)
 }
 
+def prepareJavaGeneratorImplementation = tasks.register('prepareJavaGeneratorImplementation') {
+    group = capybaraTaskGroup
+    description = 'Prepares the self-hosted Java generator behind its bootstrap-compatible adapter.'
+    dependsOn tasks.named('compileCapybara')
+
+    inputs.file(capybaraJavaGeneratorSource)
+    outputs.file(capybaraJavaGeneratorImplementationSource)
+
+    doLast {
+        def input = capybaraJavaGeneratorSource.get().asFile
+        def output = capybaraJavaGeneratorImplementationSource.get().asFile
+        def runtimeUrls = capyRuntimeDependencies.files.collect { it.toURI().toURL() } as URL[]
+        def bootstrapLoader = new URLClassLoader(runtimeUrls, ClassLoader.getPlatformClassLoader())
+        def bootstrapGenerator = Class.forName('dev.capylang.generator.JavaGenerator', true, bootstrapLoader)
+        def bootstrapHelper = { String name ->
+            def method = bootstrapGenerator.getDeclaredMethod(name)
+            method.accessible = true
+            method.invoke(null) as String
+        }
+        def javaStringLiteral = { String value ->
+            '"' + value
+                    .replace('\\', '\\\\')
+                    .replace('"', '\\"')
+                    .replace('\r', '\\r')
+                    .replace('\n', '\\n')
+                    .replace('\t', '\\t') + '"'
+        }
+        def replaceStringStub = { String source, String methodName, String value ->
+            def pattern = java.util.regex.Pattern.compile(
+                    "(?m)(    private static java\\.lang\\.String ${methodName}__\\d+_0\\(\\) \\{\\R)"
+                            + '        throw new UnsupportedOperationException\\("Unsupported CFUN expression at \\d+:0"\\);'
+            )
+            def matcher = pattern.matcher(source)
+            if (!matcher.find()) {
+                throw new GradleException("Unable to find generated stub for ${methodName}.")
+            }
+            matcher.replaceFirst(java.util.regex.Matcher.quoteReplacement(
+                    matcher.group(1) + '        return ' + javaStringLiteral(value) + ';'
+            ))
+        }
+        output.parentFile.mkdirs()
+        def implementation = input.getText('UTF-8')
+                .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
+                .replace('public final class JavaGenerator {', 'public final class GeneratedJavaGenerator {')
+                .replace('private JavaGenerator() {}', 'private GeneratedJavaGenerator() {}')
+        implementation = replaceStringStub(implementation, 'java_data_helpers', bootstrapHelper('javaDataHelpers'))
+        implementation = replaceStringStub(implementation, 'java_collection_helpers', bootstrapHelper('javaCollectionHelpers'))
+        bootstrapLoader.close()
+        output.setText(implementation, 'UTF-8')
+    }
+}
+
+def preparePythonGeneratorImplementation = tasks.register('preparePythonGeneratorImplementation') {
+    group = capybaraTaskGroup
+    description = 'Prepares the self-hosted Python generator behind its bootstrap-compatible adapter.'
+    dependsOn tasks.named('compileCapybara')
+
+    inputs.file(capybaraPythonGeneratorSource)
+    outputs.file(capybaraPythonGeneratorImplementationSource)
+
+    doLast {
+        def input = capybaraPythonGeneratorSource.get().asFile
+        def output = capybaraPythonGeneratorImplementationSource.get().asFile
+        output.parentFile.mkdirs()
+        def implementation = input.getText('UTF-8')
+                .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
+                .replace('public final class PythonGenerator {', 'public final class GeneratedPythonGenerator {')
+                .replace('private PythonGenerator() {}', 'private GeneratedPythonGenerator() {}')
+        output.setText(implementation, 'UTF-8')
+    }
+}
+
+def prepareJavaScriptGeneratorImplementation = tasks.register('prepareJavaScriptGeneratorImplementation') {
+    group = capybaraTaskGroup
+    description = 'Prepares the self-hosted JavaScript generator behind its bootstrap-compatible adapter.'
+    dependsOn tasks.named('compileCapybara')
+
+    inputs.file(capybaraJavaScriptGeneratorSource)
+    outputs.file(capybaraJavaScriptGeneratorImplementationSource)
+
+    doLast {
+        def input = capybaraJavaScriptGeneratorSource.get().asFile
+        def output = capybaraJavaScriptGeneratorImplementationSource.get().asFile
+        output.parentFile.mkdirs()
+        def implementation = input.getText('UTF-8')
+                .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
+                .replace('public final class JavaScriptGenerator {', 'public final class GeneratedJavaScriptGenerator {')
+                .replace('private JavaScriptGenerator() {}', 'private GeneratedJavaScriptGenerator() {}')
+        output.setText(implementation, 'UTF-8')
+    }
+}
+
 tasks.named('compileJava', JavaCompile) {
+    dependsOn prepareJavaGeneratorImplementation, preparePythonGeneratorImplementation, prepareJavaScriptGeneratorImplementation
+    source(capybaraJavaGeneratorImplementationSource)
+    source(capybaraPythonGeneratorImplementationSource)
+    source(capybaraJavaScriptGeneratorImplementationSource)
     exclude { element ->
         element.file.toPath().startsWith(capybaraGeneratedJavaDir.get().asFile.toPath())
     }
@@ -830,6 +949,11 @@ processResources {
     }
 }
 
+compileJava {
+    source(capybaraJavaTestRunner)
+    source(capybaraJavaTestSelection)
+}
+
 application {
     mainClass = 'dev.capylang.cli.CapyLauncher'
 }
@@ -838,7 +962,11 @@ def integrationTests = tasks.register('integrationTest', Test) {
     description = 'Runs compiler integration tests.'
     group = capybaraTaskGroup
     testClassesDirs = sourceSets.integrationTest.output.classesDirs
-    classpath = sourceSets.integrationTest.runtimeClasspath
+    classpath = files(
+            sourceSets.integrationTest.output,
+            sourceSets.main.output,
+            sourceSets.integrationTest.runtimeClasspath
+    )
     shouldRunAfter test
     useJUnitPlatform()
 }
@@ -1117,7 +1245,7 @@ e2ePythonTests.configure {
 
 jar {
     manifest {
-        attributes('Main-Class': application.mainClass.get())
+        attributes('Main-Class': 'dev.capylang.cli.CapyMain')
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn configurations.runtimeClasspath
@@ -1125,5 +1253,17 @@ jar {
         configurations.runtimeClasspath
                 .findAll { it.exists() }
                 .collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude 'dev/capylang/test/TestRunner*.class'
+        exclude 'dev/capylang/test/TestSelection*.class'
+    }
+}
+
+def capyJarFile = tasks.named('jar').flatMap { it.archiveFile }
+integrationTests.configure {
+    dependsOn tasks.named('jar')
+    inputs.file(capyJarFile)
+    doFirst {
+        systemProperty 'capy.jar.path', capyJarFile.get().asFile.absolutePath
     }
 }

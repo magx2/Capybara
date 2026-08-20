@@ -1,0 +1,14 @@
+from /capy/lang/Effect import { Effect }
+from /capy/test/Assert import { assert_that }
+from /capy/test/CapyTest import { TestFile, test, test_file }
+from GenericFunctionResult import { boxed_text, mapped_text }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/GenericFunctionResult.cfun", [
+        test("specializes a generic function return for a chained method", () =>
+            assert_that(boxed_text()).is_equal_to("generic")
+        ),
+        test("asserts the value of a mapped generic result", () =>
+            assert_that(mapped_text()).succeeds("1234")
+        ),
+    ])

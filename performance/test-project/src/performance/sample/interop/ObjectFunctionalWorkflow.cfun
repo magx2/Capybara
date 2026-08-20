@@ -4,6 +4,7 @@ from /performance/sample/domain/ResultTypes import { WorkflowResult }
 from /performance/sample/nativeinterop/NativeClock import { FixedClock }
 from /performance/sample/nativeinterop/NativeHasher import { StableHasher }
 from /performance/sample/nativeinterop/NativeProviders import { fixed_clock, stable_hasher }
+from /performance/sample/interop/ObjectFunctionalInterop import { InteropFacade }
 from /performance/sample/oo/DiscountEngine import { DiscountEngine }
 from /performance/sample/oo/Inventory import { Inventory }
 from /performance/sample/oo/Workflow import { Workflow }
