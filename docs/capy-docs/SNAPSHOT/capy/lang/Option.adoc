@@ -57,6 +57,16 @@ The outer option stays empty if the original value is `None`.
 Transforms a present value using `map`, or returns None when empty.
 
 
+===== fun Option[T].or(option: xref:#type-Option[Option]&#91;T&#93;): xref:#type-Option[Option]&#91;T&#93;
+
+Returns this Option when present, or `option` when this Option is empty.
+
+
+===== fun Option[T].or_else(v: T): T
+
+Returns the present value, or `v` when this Option is empty.
+
+
 [[type-Some]]
 === data Some[T]
 

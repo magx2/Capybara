@@ -102,12 +102,12 @@ Starts an assertion chain for a dictionary value.
 Starts an assertion chain for a sequence value.
 
 
-=== fun assert_that(value: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;): xref:#type-OptionAssert[OptionAssert]
+=== fun assert_that(value: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;): xref:#type-OptionAssert[OptionAssert]&#91;T&#93;
 
 Starts an option assertion chain.
 
 
-=== fun assert_that(value: xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;T&#93;): xref:#type-ResultAssert[ResultAssert]
+=== fun assert_that(value: xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;T&#93;): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
 
 Starts a result assertion chain.
 
