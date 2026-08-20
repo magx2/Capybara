@@ -1,0 +1,43 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from LocalTypesAndData import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/LocalTypesAndData.cfun", [
+        test("local types and data inside function should work", () => local_types_and_data_inside_function_should_work()),
+        test("local data resolves imported result type without fully qualified name", () => local_data_resolves_imported_result_type_without_fully_qualified_name()),
+        test("local function resolves local data type in signature", () => local_function_resolves_local_data_type_in_signature()),
+        test("local function resolves local generic data type inside nested return type", () => local_function_resolves_local_generic_data_type_inside_nested_return_type()),
+        test("local function resolves local single type", () => local_function_resolves_local_single_type()),
+        test("local generic data field access remains visible before indexing inside pipe lambda", () => local_generic_data_field_access_remains_visible_before_indexing_inside_pipe_lambda()),
+        test("generic option constructor pattern binds concrete type", () => generic_option_constructor_pattern_binds_concrete_type()),
+    ])
+
+private fun local_types_and_data_inside_function_should_work(): Assert =
+    assert_all([
+        assert_that(foo_me("foo")).is_equal_to("xyz"),
+        assert_that(foo_me("boo")).is_equal_to("zyx"),
+        assert_that(foo_me("john")).is_equal_to("john"),
+    ])
+
+private fun local_data_resolves_imported_result_type_without_fully_qualified_name(): Assert =
+    assert_that(local_data_with_imported_result(7)).is_equal_to("ok:7")
+
+private fun local_function_resolves_local_data_type_in_signature(): Assert =
+    assert_that(local_data_used_in_local_function(7)).is_equal_to("value:7")
+
+private fun local_function_resolves_local_generic_data_type_inside_nested_return_type(): Assert =
+    assert_that(local_generic_data_used_in_local_function_return_type(7)).is_equal_to("value:7")
+
+private fun local_function_resolves_local_single_type(): Assert =
+    assert_all([
+        assert_that(local_single_used_in_local_type_and_function(false)).is_equal_to("value:7"),
+        assert_that(local_single_used_in_local_type_and_function(true)).is_equal_to("stop"),
+    ])
+
+private fun local_generic_data_field_access_remains_visible_before_indexing_inside_pipe_lambda(): Assert =
+    assert_that(local_generic_data_field_access_followed_by_index("abc")).is_equal_to("a")
+
+private fun generic_option_constructor_pattern_binds_concrete_type(): Assert =
+    assert_that(local_generic_option_constructor_pattern_binding(7)).is_equal_to(77)

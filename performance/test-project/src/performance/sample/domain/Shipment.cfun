@@ -1,0 +1,102 @@
+from /capy/collection/List import { * }
+from /capy/collection/Seq import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Customer import { Customer, is_vip, preferred_channel }
+from /performance/sample/domain/Money import { Money, format, multiply, unsafe_add, usd, zero }
+from /performance/sample/domain/Order import { Order, subtotal }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkEntity, BenchmarkField }
+
+enum ShipmentSpeed { ECONOMY, STANDARD, EXPRESS }
+
+@BenchmarkEntity(label: "shipment-rule", weight: 2)
+data ShipmentRule {
+    @BenchmarkField(value: "shipping zone")
+    zone: String,
+    base_fee: Money,
+    per_line_fee: Money,
+    min_total_for_free: Money
+}
+
+@BenchmarkEntity(label: "shipment-quote", weight: 4)
+data ShipmentQuote {
+    @BenchmarkField(value: "quoted order")
+    order_id: String,
+    speed: ShipmentSpeed,
+    zone: String,
+    fee: Money,
+    line_count: int,
+    warnings: List[String]
+}
+
+fun default_rules(): List[ShipmentRule] =
+    [
+        ShipmentRule { zone: "local", base_fee: usd(499L), per_line_fee: usd(75L), min_total_for_free: usd(12000L) },
+        ShipmentRule { zone: "eu", base_fee: usd(999L), per_line_fee: usd(125L), min_total_for_free: usd(20000L) },
+        ShipmentRule { zone: "global", base_fee: usd(2499L), per_line_fee: usd(250L), min_total_for_free: usd(50000L) },
+    ]
+
+fun quote_shipment(order: Order): Result[ShipmentQuote] =
+    let zone = shipment_zone(order.customer)
+    match rule_for(default_rules(), zone) with
+    case None -> Error { "no shipment rule:" + zone }
+    case Some { rule } -> Success { quote_for_rule(order, rule) }
+
+fun shipment_options(order: Order): List[ShipmentQuote] =
+    (default_rules() | rule => quote_for_rule(order, rule)).as_list()
+
+fun quote_for_rule(order: Order, rule: ShipmentRule): ShipmentQuote =
+    ShipmentQuote {
+        order_id: order.id,
+        speed: recommended_speed(order),
+        zone: rule.zone,
+        fee: shipment_fee(order, rule),
+        line_count: order.lines.size().value,
+        warnings: shipment_warnings(order)
+    }
+
+fun shipment_label(quote: ShipmentQuote): String =
+    "{quote.order_id}:{quote.zone}:{speed_name(quote.speed)}:{format(quote.fee)}:{warning_summary(quote.warnings)}"
+
+fun recommended_speed(order: Order): ShipmentSpeed =
+    if is_vip(order.customer)
+    then EXPRESS
+    else if order.lines.size().value > 2
+    then STANDARD
+    else ECONOMY
+
+fun shipment_zone(customer: Customer): String =
+    if customer.address.country == "PL"
+    then "local"
+    else if customer.address.country == "DE" | customer.address.country == "CZ"
+    then "eu"
+    else "global"
+
+fun rule_for(rules: List[ShipmentRule], zone: String): Option[ShipmentRule] =
+    (rules |- rule => rule.zone == zone).as_list()[0]
+
+fun shipment_fee(order: Order, rule: ShipmentRule): Money =
+    if subtotal(order).cents >= rule.min_total_for_free.cents
+    then zero(rule.base_fee.currency)
+    else unsafe_add(rule.base_fee, multiply(rule.per_line_fee, order.lines.size().value))
+
+fun shipment_warnings(order: Order): List[String] =
+    order.lines.reduce([], (acc, line) =>
+        if line.quantity >= 3
+        then acc + ("bulk:" + line.sku)
+        else acc
+    ) + ("contact:" + contact_channel(order.customer))
+
+fun speed_name(speed: ShipmentSpeed): String =
+    match speed with
+    case ECONOMY -> "economy"
+    case STANDARD -> "standard"
+    case EXPRESS -> "express"
+
+fun warning_summary(warnings: List[String]): String =
+    warnings.reduce("", (acc, warning) => if acc == "" then warning else acc + "|" + warning)
+
+private fun contact_channel(customer: Customer): String =
+    match preferred_channel(customer) with
+    case Some { channel } -> channel
+    case None -> "mail"

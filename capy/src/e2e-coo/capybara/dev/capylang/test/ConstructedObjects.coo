@@ -1,0 +1,23 @@
+from /capy/io/Stdout import { println }
+
+interface TrackedPrintable {
+    def label(): String
+}
+
+class TrackedPerson(name: String): TrackedPrintable {
+    field name: String = name
+
+    init {
+        println("constructed:" + this.name)
+    }
+
+    override def label(): String = this.name
+}
+
+class EmptyTracked {
+    init {
+        println("empty")
+    }
+
+    def label(): String = "empty"
+}

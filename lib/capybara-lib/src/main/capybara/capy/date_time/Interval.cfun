@@ -1,0 +1,168 @@
+from /capy/date_time/DateTime import { * }
+from /capy/date_time/Duration import { * }
+from /capy/lang/Regex import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
+from /capy/meta_prog/Recursive import { Recursive }
+
+/// ISO 8601 interval represented using UTC date-time endpoints.
+///
+/// An interval can be stored as start/end, start/duration, or duration/end.
+///
+/// Example:
+/// ```cfun
+/// DateTimeStartDuration {
+///     start: UNIX_EPOCH,
+///     duration: DateDuration {
+///         years: 0, months: 0, days: 1,
+///         hours: 0, minutes: 0, seconds: 0
+///     }
+/// }
+/// ```
+union Interval =
+    DateTimeStartEnd
+    | DateTimeStartDuration
+    | DateTimeDurationEnd
+
+/// Interval stored with explicit start and end date-times.
+data DateTimeStartEnd { start: DateTime, end: DateTime }
+/// Interval stored with a start date-time and duration.
+data DateTimeStartDuration { start: DateTime, duration: Duration }
+/// Interval stored with a duration and end date-time.
+data DateTimeDurationEnd { duration: Duration, end: DateTime }
+
+/// Formats this interval as canonical ISO 8601 using `/` as the separator.
+///
+/// Example:
+/// ```cfun
+/// DateTimeStartEnd {
+///     start: UNIX_EPOCH,
+///     end: from_timestamp(3600L)
+/// }.to_iso_8601()
+/// ```
+/// Returns `1970-01-01T00:00:00Z/1970-01-01T01:00:00Z`.
+fun Interval.to_iso_8601(): String =
+    match this with
+    case DateTimeStartEnd { start, end } -> start.to_iso_8601() + "/" + end.to_iso_8601()
+    case DateTimeStartDuration { start, duration } -> start.to_iso_8601() + "/" + duration.to_iso_8601()
+    case DateTimeDurationEnd { duration, end } -> duration.to_iso_8601() + "/" + end.to_iso_8601()
+
+/// Returns the interval start date-time.
+///
+/// For `DateTimeDurationEnd`, the start is calculated by subtracting the
+/// duration from the end.
+fun Interval.start(): DateTime =
+    match this with
+    case DateTimeStartEnd { start, _ } -> start
+    case DateTimeStartDuration { start, _ } -> start
+    case DateTimeDurationEnd { duration, end } -> end.minus(duration)
+
+/// Returns the interval end date-time.
+///
+/// For `DateTimeStartDuration`, the end is calculated by adding the duration to
+/// the start.
+fun Interval.end(): DateTime =
+    match this with
+    case DateTimeStartEnd { _, end } -> end
+    case DateTimeStartDuration { start, duration } -> start.plus(duration)
+    case DateTimeDurationEnd { _, end } -> end
+
+/// Returns the interval duration.
+fun Interval.duration(): Duration =
+    match this with
+    case DateTimeStartEnd { start, end } -> end.minus(start)
+    case DateTimeStartDuration { _, duration } -> duration
+    case DateTimeDurationEnd { duration, _ } -> duration
+
+/// Parses an ISO 8601 interval in one of these forms:
+/// - `<start>/<end>`
+/// - `<start>/<duration>`
+/// - `<duration>/<end>`
+///
+/// Also accepts `--` as an alternate input separator and canonicalizes back to `/`.
+///
+/// Example:
+/// ```cfun
+/// from_iso_8601("1970-01-01T00:00:00Z/P1D")
+/// from_iso_8601("P1D/1970-01-02T00:00:00Z")
+/// ```
+/// Both describe a one-day interval.
+fun from_iso_8601(iso: String): Result[Interval] =
+    data Split { left: String, right: String }
+    data SplitScan { left: String, right: String, seen_separator: bool }
+    fun invalid(message: String): String = "Invalid ISO 8601 interval format: " + message
+    @Recursive
+    fun drop_prefix(value: String, size: int): String =
+        if size <= 0
+        then value
+        else
+            match value[0] with
+            case None -> ""
+            case Some { _ } -> drop_prefix(value[1, value.size()], size - 1)
+    @Recursive
+    fun scan_split(separator: String, value: String, scan: SplitScan): Result[Split] =
+        if value.is_empty()
+        then if !scan.seen_separator
+            then Error { invalid("expected exactly one `" + separator + "` separator") }
+            else if scan.left.is_empty() | scan.right.is_empty()
+            then Error { invalid("interval parts must not be empty") }
+            else Success { Split { left: scan.left, right: scan.right } }
+        else if value.starts_with(separator)
+            then if scan.seen_separator
+                then Error { invalid("expected exactly one interval separator") }
+                else scan_split(separator, drop_prefix(value, separator.size()), SplitScan {
+                    left: scan.left,
+                    right: "",
+                    seen_separator: true
+                })
+            else if scan.seen_separator
+                then scan_split(separator, value[1, value.size()], SplitScan {
+                    left: scan.left,
+                    right: scan.right + value[0, 1],
+                    seen_separator: true
+                })
+                else scan_split(separator, value[1, value.size()], SplitScan {
+                    left: scan.left + value[0, 1],
+                    right: scan.right,
+                    seen_separator: false
+                })
+    fun split_interval(value: String): Result[Split] =
+        let has_slash = regex/\// ? value
+        let has_dash = regex/--/ ? value
+        if has_slash & !has_dash
+        then scan_split("/", value, SplitScan { left: "", right: "", seen_separator: false })
+        else if has_dash & !has_slash
+        then scan_split("--", value, SplitScan { left: "", right: "", seen_separator: false })
+        else if has_slash & has_dash
+        then Error { invalid("expected exactly one interval separator") }
+        else Error { invalid("expected `/` or `--` separator") }
+    fun parse_datetime(value: String): Result[DateTime] =
+        match /capy/date_time/DateTime.from_iso_8601(value) with
+        case Success { datetime } -> Success { datetime }
+        case Error -> Error { invalid("interval endpoints must be UTC date-times") }
+    fun parse_start_end(split: Split): Result[Interval] = {
+        let start <- parse_datetime(split.left)
+        let end <- parse_datetime(split.right)
+        if start.greater_than(end)
+        then Error { invalid("interval start must not be after interval end") }
+        else Success { DateTimeStartEnd { start, end } }
+    }
+    fun parse_start_duration(split: Split): Result[Interval] = {
+        let duration <- /capy/date_time/Duration.from_iso_8601(split.right)
+        let start <- parse_datetime(split.left)
+        Success { DateTimeStartDuration { start, duration } }
+    }
+    fun parse_duration_end(split: Split): Result[Interval] = {
+        let duration <- /capy/date_time/Duration.from_iso_8601(split.left)
+        let end <- parse_datetime(split.right)
+        Success { DateTimeDurationEnd { duration, end } }
+    }
+    ---
+    let split <- split_interval(iso)
+    if split.left.starts_with("P") & split.right.starts_with("P")
+    then Error { invalid("interval cannot contain a duration on both sides") }
+    else if split.left.starts_with("P")
+    then parse_duration_end(split)
+    else if split.right.starts_with("P")
+    then parse_start_duration(split)
+    else parse_start_end(split)

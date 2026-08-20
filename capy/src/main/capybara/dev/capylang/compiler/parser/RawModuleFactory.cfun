@@ -1,0 +1,18 @@
+from /dev/capylang/compiler/parser/RawModule import { RawModule }
+from /dev/capylang/compiler/parser/SourceKind import { FUNCTIONAL, OBJECT_ORIENTED }
+
+fun functional_raw_module(name: String, path: String, input: String): RawModule =
+    RawModule {
+        name: name,
+        path: path,
+        input: input,
+        sourceKind: FUNCTIONAL
+    }
+
+fun object_oriented_raw_module(name: String, path: String, input: String): RawModule =
+    RawModule {
+        name: name,
+        path: path,
+        input: input,
+        sourceKind: OBJECT_ORIENTED
+    }

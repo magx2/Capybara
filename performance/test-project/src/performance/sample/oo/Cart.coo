@@ -1,0 +1,21 @@
+from /performance/sample/domain/Customer import { Customer }
+from /performance/sample/domain/Order import { Order, OrderLine }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkMethod, BenchmarkObjectField, BenchmarkType }
+
+@BenchmarkType(label: "cart")
+class Cart(customer: Customer, lines: List[OrderLine]) {
+    @BenchmarkObjectField(value: "cart owner")
+    field customer: Customer = customer
+
+    @BenchmarkObjectField(value: "cart lines")
+    field lines: List[OrderLine] = lines
+
+    @BenchmarkMethod(value: "line count")
+    def count(): int = this.lines.size()
+
+    def total_cents(): long =
+        Order.linesTotal(this.lines).cents
+
+    def to_order(order_id: String): Order =
+        Order.draftOrder(order_id, this.customer, this.lines)
+}

@@ -1,0 +1,19 @@
+= Module Clock
+
+== Functions
+
+=== fun now(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]&#93;
+
+Returns the current date-time as an effect.
+
+Example:
+```cfun
+let current <- now()
+current.to_iso_8601()
+```
+The value is effectful because the current time comes from the runtime
+environment.
+
+
+
+

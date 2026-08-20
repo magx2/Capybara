@@ -1,0 +1,77 @@
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Money import { Money, usd }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkEntity, BenchmarkField }
+
+@BenchmarkEntity(label: "product", weight: 2)
+data Product {
+    @BenchmarkField(value: "stock keeping unit")
+    sku: String,
+    name: String,
+    category: String,
+    price: Money,
+    tags: Set[String]
+}
+
+data Catalog {
+    products: Dict[Product]
+}
+
+data ProductSelection {
+    product: Product,
+    quantity: int
+}
+
+fun sample_catalog(): Catalog =
+    Catalog {
+        products: {
+            "capy-mug": Product {
+                sku: "capy-mug",
+                name: "Capybara Mug",
+                category: "kitchen",
+                price: usd(1299L),
+                tags: {"ceramic", "gift"}
+            },
+            "capy-hoodie": Product {
+                sku: "capy-hoodie",
+                name: "Capybara Hoodie",
+                category: "apparel",
+                price: usd(4999L),
+                tags: {"cotton", "warm"}
+            },
+            "capy-sticker": Product {
+                sku: "capy-sticker",
+                name: "Capybara Sticker Pack",
+                category: "stationery",
+                price: usd(599L),
+                tags: {"gift", "paper"}
+            },
+        }
+    }
+
+fun find(catalog: Catalog, sku: String): Option[Product] = catalog.products[sku]
+
+fun require_product(catalog: Catalog, sku: String): Result[Product] =
+    match find(catalog, sku) with
+    case Some { product } -> Success { product }
+    case None -> Error { "unknown sku:" + sku }
+
+fun select(catalog: Catalog, sku: String, quantity: int): Result[ProductSelection] =
+    require_product(catalog, sku) | product =>
+        if quantity <= 0
+        then Error { "quantity must be positive:" + sku }
+        else Success { ProductSelection { product: product, quantity: quantity } }
+
+fun categories(catalog: Catalog): List[String] =
+    ["kitchen", "apparel", "stationery"]
+
+fun tagged(catalog: Catalog, tag: String): List[Product] =
+    match find(catalog, "capy-mug") with
+    case Some { product } ->
+        if product.tags ? tag
+        then [product]
+        else []
+    case None -> []

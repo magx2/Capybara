@@ -1,0 +1,5 @@
+from /dev/capylang/compiler/parser/FunctionAnnotationValue import { FunctionAnnotationValue }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+
+/// Parsed function annotation argument pairing a field name with a literal value.
+data FunctionAnnotationArgument { name: String, value: FunctionAnnotationValue, location: SourceLocation }

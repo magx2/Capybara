@@ -1,0 +1,11 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+
+/// compiled object-oriented module unit grouping classes and interfaces for a source module.
+data CompiledObjectOrientedUnit {
+    name: String,
+    path: String,
+    interfaces: List[CompiledObjectOrientedInterface],
+    classes: List[CompiledObjectOrientedClass]
+}

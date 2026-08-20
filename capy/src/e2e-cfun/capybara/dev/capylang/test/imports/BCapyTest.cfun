@@ -1,0 +1,33 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+import /dev/capylang/test/imports/B
+from B import { Value }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/B.cfun", [
+        test("foo decrements the provided integer", () => b_foo_decrements_the_provided_integer()),
+        test("Value preserves its amount field", () => b_value_preserves_its_amount_field()),
+        test("value returns a Value with amount decreased by ten", () => b_value_returns_a_value_with_amount_decreased_by_ten()),
+    ])
+
+private fun b_foo_decrements_the_provided_integer(): Assert =
+    assert_all([
+        assert_that(B.foo(0)).is_equal_to(-1),
+        assert_that(B.foo(7)).is_equal_to(6),
+        assert_that(B.foo(-2)).is_equal_to(-3),
+    ])
+
+private fun b_value_preserves_its_amount_field(): Assert =
+    let actual = Value { amount: 7 }
+    assert_all([
+        assert_that(actual).is_equal_to(Value { amount: 7 }),
+        assert_that(actual.amount).is_equal_to(7),
+    ])
+
+private fun b_value_returns_a_value_with_amount_decreased_by_ten(): Assert =
+    assert_all([
+        assert_that(B.value(0)).is_equal_to(Value { amount: -10 }),
+        assert_that(B.value(0).amount).is_equal_to(-10),
+        assert_that(B.value(7).amount).is_equal_to(-3),
+    ])

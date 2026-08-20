@@ -1,0 +1,38 @@
+fun sum_down(x: int): int =
+    fun sum_down(x: int, sum: int): int =
+        if x <= 0
+        then sum
+        else sum_down(x - 1, sum + x)
+    ---
+    sum_down(x, 0)
+
+fun parity(x: int): bool =
+    fun is_even(n: int): bool =
+        if n == 0
+        then true
+        else is_odd(n - 1)
+    fun is_odd(n: int): bool =
+        if n == 0
+        then false
+        else is_even(n - 1)
+    ---
+    is_even(x)
+
+fun local_with_let(x: int): int =
+    fun inc(y: int): int =
+        let z = y + 1
+        z
+    ---
+    inc(x)
+
+fun max_local(x: int, y: int): int =
+    fun compare(a: int, b: int): int =
+        if a > b then a else b
+    ---
+    compare(x, y)
+
+fun min_local(x: int, y: int): int =
+    fun compare(a: int, b: int): int =
+        if a < b then a else b
+    ---
+    compare(x, y)

@@ -1,0 +1,75 @@
+from /capy/collection/Dict import { * }
+from /capy/collection/List import { * }
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Customer import { Customer, score }
+from /performance/sample/domain/Money import { Money, subtract, unsafe_add, multiply, percent, usd, zero }
+from /performance/sample/domain/ResultTypes import { Draft, OrderStatus, Rejected, Submitted }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkEntity, BenchmarkField }
+
+@BenchmarkEntity(label: "order-line")
+data OrderLine {
+    @BenchmarkField(value: "catalog sku")
+    sku: String,
+    quantity: int,
+    unit_price: Money,
+    discount_percent: int
+}
+
+@BenchmarkEntity(label: "order", weight: 5)
+data Order {
+    @BenchmarkField(value: "order identifier")
+    id: String,
+    customer: Customer,
+    lines: List[OrderLine],
+    status: OrderStatus,
+    attributes: Dict[String]
+}
+
+fun line(sku: String, quantity: int, unit_price: Money): OrderLine =
+    OrderLine { sku: sku, quantity: quantity, unit_price: unit_price, discount_percent: 0 }
+
+fun line_total(line: OrderLine): Money =
+    let gross = multiply(line.unit_price, line.quantity)
+    subtract(gross, percent(gross, line.discount_percent))
+
+fun lines_total(lines: List[OrderLine]): Money =
+    lines |> zero("USD"), (acc, line) => unsafe_add(acc, line_total(line))
+
+fun subtotal(order: Order): Money = lines_total(order.lines)
+
+fun apply_line_discount(line: OrderLine, discount: int): OrderLine =
+    line.with(discount_percent: discount)
+
+fun draft_order(id: String, customer: Customer, lines: List[OrderLine]): Order =
+    Order {
+        id: id,
+        customer: customer,
+        lines: lines,
+        status: Draft {},
+        attributes: {"source": "benchmark", "priority": "" + score(customer)}
+    }
+
+fun validate(order: Order): Result[Order] =
+    if order.lines.is_empty()
+    then Error { "order has no lines:" + order.id }
+    else if order.lines.any(line => line.quantity <= 0)
+    then Error { "order has non-positive quantity:" + order.id }
+    else Success { order }
+
+fun submit(order: Order): Result[Order] =
+    validate(order) | value => Success { mark_submitted(value) }
+
+fun mark_submitted(order: Order): Order =
+    order.with(status: Submitted {})
+
+fun reject(order: Order, reason: String): Order =
+    order.with(status: Rejected { reason: reason })
+
+fun summary(order: Order): String =
+    "{order.id}:{order.customer.display}:{subtotal(order).cents}:{order.lines.size()}"
+
+fun describe_status(order: Order): String =
+    match order.status with
+    case Draft -> "draft"
+    case Submitted -> "submitted"
+    case Rejected { reason } -> "rejected:" + reason

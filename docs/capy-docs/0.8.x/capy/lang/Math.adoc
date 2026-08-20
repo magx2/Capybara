@@ -1,0 +1,160 @@
+= Module Math
+
+== Functions
+
+=== fun abs(number: long): long
+
+
+
+=== fun abs(number: int): int
+
+
+
+=== fun digits(number: int): int
+
+
+
+=== fun floor_div(a: int, b: int): int
+
+Floor division for integers.
+
+Unlike `/`, this always rounds toward negative infinity.
+`b` must be non-zero.
+
+
+=== fun floor_div(a: long, b: long): long
+
+Floor division for long integers.
+
+Unlike `/`, this always rounds toward negative infinity.
+`b` must be non-zero.
+
+
+=== fun floor_mod(a: int, b: int): int
+
+Floor modulo for integers.
+
+Result has the same sign as divisor `b` (or is zero).
+`b` must be non-zero.
+
+
+=== fun floor_mod(a: long, b: long): long
+
+Floor modulo for long integers.
+
+Result has the same sign as divisor `b` (or is zero).
+`b` must be non-zero.
+
+
+=== fun max(a: int, b: int): int
+
+Returns the greater of two integers.
+
+
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;int&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+
+Returns the greatest integer in `values`.
+
+Returns `None` when the List is empty.
+
+
+=== fun max(a: long, b: long): long
+
+Returns the greater of two long integers.
+
+
+=== fun max(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;long&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;long&#93;
+
+Returns the greatest long integer in `values`.
+
+Returns `None` when the List is empty.
+
+
+=== fun min(a: int, b: int): int
+
+Returns the smaller of two integers.
+
+
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;int&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;int&#93;
+
+Returns the smallest integer in `values`.
+
+Returns `None` when the List is empty.
+
+
+=== fun min(a: long, b: long): long
+
+Returns the smaller of two long integers.
+
+
+=== fun min(values: xref:../../capy/collection/List.adoc#type-List[List]&#91;long&#93;): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;long&#93;
+
+Returns the smallest long integer in `values`.
+
+Returns `None` when the List is empty.
+
+
+=== fun round(value: double, mode: xref:#type-RoundMode[RoundMode]): long
+
+Rounds `value` to a `long` using the selected `RoundMode`.
+
+Use `FLOOR` and `CEILING` when the direction matters more than nearest
+integer distance. Use the `HALF_*` modes when values should normally round
+to the nearest whole number and only need a specific policy for `.5` ties.
+
+The modes are:
+
+- `FLOOR`: always round toward negative infinity.
+- `CEILING`: always round toward positive infinity.
+- `HALF_UP`: round to the nearest value and move ties away from zero.
+- `HALF_DOWN`: round to the nearest value and move ties toward zero.
+- `HALF_EVEN`: round to the nearest value and move ties to the even neighbor.
+
+Example:
+```cfun
+from /capy/lang/Math import { HALF_EVEN, round }
+
+fun cents_from_dollars(amount: double): long =
+    round(amount * 100.0, HALF_EVEN)
+```
+
+The `HALF_*` modes all agree when there is a clear nearest whole number.
+They only differ for exact ties, which are values exactly halfway between
+two whole numbers:
+
+```cfun
+from /capy/lang/Math import { HALF_DOWN, HALF_EVEN, HALF_UP, round }
+
+let half_up = round(2.5, HALF_UP)          // 3L
+let half_down = round(2.5, HALF_DOWN)      // 2L
+let half_even_low = round(2.5, HALF_EVEN)  // 2L
+let half_even_high = round(3.5, HALF_EVEN) // 4L
+```
+
+Negative ties keep the same mode-specific meaning. `HALF_UP` moves away
+from zero, while `HALF_DOWN` moves toward zero:
+
+```cfun
+from /capy/lang/Math import { HALF_DOWN, HALF_UP, round }
+
+let away_from_zero = round(-1.5, HALF_UP) // -2L
+let toward_zero = round(-1.5, HALF_DOWN)  // -1L
+```
+
+
+
+
+== Types
+
+[[type-RoundMode]]
+=== enum RoundMode
+
+
+==== Values
+
+* `CEILING`
+* `FLOOR`
+* `HALF_DOWN`
+* `HALF_EVEN`
+* `HALF_UP`
+

@@ -1,0 +1,41 @@
+= Module System
+
+== Functions
+
+=== fun clear_system_property(name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Returns an effect that clears a system property and returns its previous value.
+
+Missing previous values, empty names, or inaccessible properties return `None`.
+
+
+=== fun current_millis(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;long&#93;
+
+Returns an effect that reads the current system time in milliseconds since the Unix epoch.
+
+The value is captured when the effect is run.
+
+
+=== fun nano_time(): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;long&#93;
+
+Returns an effect that reads the current monotonic JVM time in nanoseconds.
+
+Use this for measuring elapsed durations, not for wall-clock timestamps.
+
+
+=== fun set_system_property(name: xref:../../capy/lang/String.adoc#type-String[String], value: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Returns an effect that sets a system property and returns its previous value.
+
+Missing previous values, empty names, or inaccessible properties return `None`.
+
+
+=== fun system_property(name: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Effect.adoc#type-Effect[Effect]&#91;xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Returns an effect that reads a system property by name.
+
+Missing, empty, or inaccessible properties return `None`.
+
+
+
+

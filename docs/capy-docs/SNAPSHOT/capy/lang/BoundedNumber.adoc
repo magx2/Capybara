@@ -1,0 +1,187 @@
+= Module BoundedNumber
+
+== Functions
+
+=== fun percentage_to_ratio(value: xref:#type-percentage[percentage]): xref:#type-ratio[ratio]
+
+Function form of `value.to_ratio()` for a percentage.
+
+
+=== fun probability_to_ratio(value: xref:#type-probability[probability]): xref:#type-ratio[ratio]
+
+Function form of `value.to_ratio()` for a probability.
+
+
+=== fun ratio_to_percentage(value: xref:#type-ratio[ratio]): xref:#type-percentage[percentage]
+
+Function form of `value.to_percentage()`.
+
+
+=== fun ratio_to_probability(value: xref:#type-ratio[ratio]): xref:#type-probability[probability]
+
+Function form of `value.to_probability()`.
+
+
+
+
+== Constants
+
+=== const CERTAIN_PROBABILITY: xref:#type-probability[probability]
+
+Probability representing a certain event.
+
+
+=== const FULL_PERCENTAGE: xref:#type-percentage[percentage]
+
+Percentage representing one hundred percent.
+
+
+=== const IMPOSSIBLE_PROBABILITY: xref:#type-probability[probability]
+
+Probability representing an impossible event.
+
+
+=== const WHOLE_RATIO: xref:#type-ratio[ratio]
+
+Ratio representing one whole.
+
+
+=== const ZERO_PERCENTAGE: xref:#type-percentage[percentage]
+
+Percentage representing zero percent.
+
+
+=== const ZERO_RATIO: xref:#type-ratio[ratio]
+
+Ratio representing zero.
+
+
+
+
+== Types
+
+[[type-percentage]]
+=== type percentage: double
+
+Percentage value between zero and one hundred.
+
+==== Functions
+
+===== fun percentage.`<=`(other: xref:#type-percentage[percentage]): bool
+
+Returns whether this percentage is less than or equal to `other`.
+
+
+===== fun percentage.`<`(other: xref:#type-percentage[percentage]): bool
+
+Returns whether this percentage is less than `other`.
+
+
+===== fun percentage.`==`(other: xref:#type-percentage[percentage]): bool
+
+Returns whether this percentage has the same value as `other`.
+
+
+===== fun percentage.`>=`(other: xref:#type-percentage[percentage]): bool
+
+Returns whether this percentage is greater than or equal to `other`.
+
+
+===== fun percentage.`>`(other: xref:#type-percentage[percentage]): bool
+
+Returns whether this percentage is greater than `other`.
+
+
+===== fun percentage.to_ratio(): xref:#type-ratio[ratio]
+
+Converts this percentage to a ratio.
+
+
+
+[[type-probability]]
+=== type probability: double
+
+Probability value between zero and one.
+
+==== Functions
+
+===== fun probability.`<=`(other: xref:#type-probability[probability]): bool
+
+Returns whether this probability is less than or equal to `other`.
+
+
+===== fun probability.`<`(other: xref:#type-probability[probability]): bool
+
+Returns whether this probability is less than `other`.
+
+
+===== fun probability.`==`(other: xref:#type-probability[probability]): bool
+
+Returns whether this probability has the same value as `other`.
+
+
+===== fun probability.`>=`(other: xref:#type-probability[probability]): bool
+
+Returns whether this probability is greater than or equal to `other`.
+
+
+===== fun probability.`>`(other: xref:#type-probability[probability]): bool
+
+Returns whether this probability is greater than `other`.
+
+
+===== fun probability.to_ratio(): xref:#type-ratio[ratio]
+
+Converts this probability to a ratio with the same value.
+
+
+
+[[type-ratio]]
+=== type ratio: double
+
+Fractional value between zero and one.
+
+Example:
+```cfun
+let half = ratio! { 0.5 }
+half.to_percentage() == percentage! { 50.0 }
+```
+
+==== Functions
+
+===== fun ratio.`<=`(other: xref:#type-ratio[ratio]): bool
+
+Returns whether this ratio is less than or equal to `other`.
+
+
+===== fun ratio.`<`(other: xref:#type-ratio[ratio]): bool
+
+Returns whether this ratio is less than `other`.
+
+
+===== fun ratio.`==`(other: xref:#type-ratio[ratio]): bool
+
+Returns whether this ratio has the same value as `other`.
+
+
+===== fun ratio.`>=`(other: xref:#type-ratio[ratio]): bool
+
+Returns whether this ratio is greater than or equal to `other`.
+
+
+===== fun ratio.`>`(other: xref:#type-ratio[ratio]): bool
+
+Returns whether this ratio is greater than `other`.
+
+
+===== fun ratio.to_percentage(): xref:#type-percentage[percentage]
+
+Converts this ratio to a percentage.
+
+
+===== fun ratio.to_probability(): xref:#type-probability[probability]
+
+Converts this ratio to a probability with the same value.
+
+
+

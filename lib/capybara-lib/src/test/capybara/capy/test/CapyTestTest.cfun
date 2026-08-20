@@ -1,0 +1,54 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/List import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/test/CapyTestTest.cfun", [
+        test("should render adoc test report", () => should_render_adoc_test_report()),
+        test("should create portable adoc test output", () => should_create_portable_adoc_test_output()),
+    ])
+
+fun should_render_adoc_test_report(): Assert =
+    let report = adoc_report(adoc_test_file())
+    assert_that(report)
+        .starts_with("= Test results: /capy/lang/StringTest.cfun\n\n")
+        .contains('|starts_with \\| \\{value\\}\n|PASS\n|1\n|0.25')
+        .contains("|starts_with should fail\n|FAIL\n|2\n|0.5")
+        .contains("*Tests:* 2 +\n*Passed:* 1 +\n*Failed:* 1")
+        .contains("== Failures\n\n=== starts_with should fail")
+        .contains('*Type:* `assertion \\{failed\\}`')
+        .contains("[listing]\n....\nExpected string:\n\\....\ncapybara\nto start with:\nbara\n....")
+
+fun should_create_portable_adoc_test_output(): Assert =
+    let output = adoc_test_output(adoc_test_file())
+    assert_all([
+        assert_that(output.path.segments).is_equal_to(["TEST-capy.lang.StringTest.adoc"]),
+        assert_that(output.content).starts_with("= Test results: /capy/lang/StringTest.cfun\n\n"),
+        assert_that(output.failed).is_true(),
+    ])
+
+private fun adoc_test_file(): TestFile =
+    TestFile {
+        file_name: "/capy/lang/StringTest.cfun",
+        test_cases: [
+            TestCase {
+                name: 'starts_with | {value}',
+                result: Passed {},
+                assertions_count: 1,
+                execution_time: 0.25,
+                assert_supplier: () => assert_that(true).is_true()
+            },
+            TestCase {
+                name: "starts_with should fail",
+                result: Failed {
+                    message: "Expected string:\n....\ncapybara\nto start with:\nbara",
+                    type: 'assertion {failed}'
+                },
+                assertions_count: 2,
+                execution_time: 0.5,
+                assert_supplier: () => assert_that(false).is_true()
+            }
+        ],
+        timestamp_millis: 0L
+    }

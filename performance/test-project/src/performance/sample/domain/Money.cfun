@@ -1,0 +1,37 @@
+from /capy/lang/Result import { * }
+
+data Money {
+    cents: long,
+    currency: String
+}
+
+fun usd(cents: long): Money = Money { cents, currency: "USD" }
+
+fun zero(currency: String): Money = Money { cents: 0L, currency: currency }
+
+fun add(left: Money, right: Money): Result[Money] =
+    if left.currency == right.currency
+    then Success { left.with(cents: left.cents + right.cents) }
+    else Error { "currency mismatch:" + left.currency + "/" + right.currency }
+
+fun unsafe_add(left: Money, right: Money): Money =
+    match add(left, right) with
+    case Success { value } -> value
+    case Error _ -> left
+
+fun multiply(value: Money, quantity: int): Money =
+    value.with(cents: value.cents * quantity)
+
+fun percent(value: Money, rate: int): Money =
+    value.with(cents: value.cents * rate / 100L)
+
+fun subtract(left: Money, right: Money): Money =
+    if left.currency == right.currency
+    then left.with(cents: left.cents - right.cents)
+    else left
+
+fun format(value: Money): String =
+    "{value.currency} {value.cents}"
+
+fun max(left: Money, right: Money): Money =
+    if left.cents >= right.cents then left else right

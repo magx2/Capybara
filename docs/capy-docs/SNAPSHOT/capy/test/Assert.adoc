@@ -1,0 +1,1013 @@
+= Module Assert
+
+== Functions
+
+=== fun assert_all(asserts: xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:#type-Assert[Assert]&#93;): xref:#type-Assert[Assert]
+
+Combines several assertion chains into one `Assert`.
+
+Use this when a test case needs to verify multiple independent values.
+
+Example:
+```cfun
+test("profile is valid", () => assert_all([
+    assert_that(profile.name).is_equal_to("Ada"),
+    assert_that(profile.age).is_between(1, 150)
+]))
+```
+
+
+=== fun assert_that(value: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-StringAssert[StringAssert]
+
+Starts a string assertion chain.
+
+Example:
+```cfun
+assert_that("capybara").starts_with("capy").contains("bara")
+```
+
+
+=== fun assert_that(value: xref:../../capy/collection/CollectionTypes.adoc#type-size[size]): xref:#type-IntAssert[IntAssert]
+
+Starts an assertion chain for a collection size.
+
+
+=== fun assert_that(value: int): xref:#type-IntAssert[IntAssert]
+
+Starts an int assertion chain.
+
+
+=== fun assert_that(value: long): xref:#type-LongAssert[LongAssert]
+
+Starts an assertion chain for a long value.
+
+
+=== fun assert_that(value: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Starts an assertion chain for a double value.
+
+
+=== fun assert_that(value: float): xref:#type-FloatAssert[FloatAssert]
+
+Starts an assertion chain for a float value.
+
+
+=== fun assert_that(value: bool): xref:#type-BoolAssert[BoolAssert]
+
+Starts a bool assertion chain.
+
+
+=== fun assert_that(value: xref:../../capy/date_time/Date.adoc#type-Date[Date]): xref:#type-DateAssert[DateAssert]
+
+Starts an assertion chain for a date value.
+
+
+=== fun assert_that(value: xref:../../capy/date_time/Time.adoc#type-Time[Time]): xref:#type-TimeAssert[TimeAssert]
+
+Starts an assertion chain for a time value.
+
+
+=== fun assert_that(value: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Starts an assertion chain for a date-time value.
+
+
+=== fun assert_that(value: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DurationAssert[DurationAssert]
+
+Starts an assertion chain for a duration value.
+
+
+=== fun assert_that(value: xref:../../capy/date_time/Interval.adoc#type-Interval[Interval]): xref:#type-IntervalAssert[IntervalAssert]
+
+Starts an assertion chain for an interval value.
+
+
+=== fun assert_that(value: xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Starts a list assertion chain.
+
+
+=== fun assert_that(value: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;T&#93;): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Starts an assertion chain for a set value.
+
+
+=== fun assert_that(value: xref:../../capy/collection/Dict.adoc#type-Dict[Dict]&#91;T&#93;): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Starts an assertion chain for a dictionary value.
+
+
+=== fun assert_that(value: xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Starts an assertion chain for a sequence value.
+
+
+=== fun assert_that(value: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;): xref:#type-OptionAssert[OptionAssert]
+
+Starts an option assertion chain.
+
+
+=== fun assert_that(value: xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;T&#93;): xref:#type-ResultAssert[ResultAssert]
+
+Starts a result assertion chain.
+
+Example:
+```cfun
+assert_that(parse_user(raw)).succeeds(user =>
+    assert_that(user.name).is_equal_to("Ada")
+)
+```
+
+
+=== fun assert_that(value: data): xref:#type-DataAssert[DataAssert]
+
+Starts a data assertion chain using data equality or containment checks.
+
+
+=== fun fail(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Assert[Assert]
+
+Creates an assertion that always fails with `message`.
+
+When `/capy/lang/Result` is also imported, exclude `fail` from one wildcard
+import or selectively import only the intended `fail` function.
+
+
+=== fun pass(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Assert[Assert]
+
+Creates an assertion that always succeeds with `message`.
+
+
+
+
+== Types
+
+[[type-Assert]]
+=== union Assert
+
+Chainable assertion value produced by `assert_that`.
+
+Assertions are lazy: each assertion stores suppliers that the test runner
+evaluates later. Chain methods to describe all expectations for one value,
+and use `assert_all` to combine expectations for several values.
+
+Example:
+```cfun
+assert_all([
+    assert_that("capybara").starts_with("capy").contains("bara"),
+    assert_that([1, 2, 3]).has_size(3).contains(2),
+    assert_that(Success { value: 42 }).succeeds(42)
+])
+```
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+
+==== Variants
+
+* xref:#type-BoolAssert[BoolAssert]
+* xref:#type-DataAssert[DataAssert]
+* xref:#type-DateAssert[DateAssert]
+* xref:#type-DateTimeAssert[DateTimeAssert]
+* xref:#type-DictAssert[DictAssert]&#91;T&#93;
+* xref:#type-DoubleAssert[DoubleAssert]
+* xref:#type-DurationAssert[DurationAssert]
+* xref:#type-FloatAssert[FloatAssert]
+* xref:#type-IntAssert[IntAssert]
+* xref:#type-IntervalAssert[IntervalAssert]
+* xref:#type-ListAssert[ListAssert]&#91;T&#93;
+* xref:#type-LongAssert[LongAssert]
+* xref:#type-OptionAssert[OptionAssert]&#91;T&#93;
+* xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+* xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+* xref:#type-SetAssert[SetAssert]&#91;T&#93;
+* xref:#type-StringAssert[StringAssert]
+* xref:#type-TimeAssert[TimeAssert]
+
+==== Functions
+
+===== fun Assert.failed(): bool
+
+Returns true when at least one assertion in the chain fails.
+
+
+===== fun Assert.succeeded(): bool
+
+Returns true when every assertion in the chain succeeds.
+
+
+[[type-Assertion]]
+=== data Assertion
+
+Result of one assertion check.
+
+==== Fields
+
+* `message`: xref:../../capy/lang/String.adoc#type-String[String]
+* `result`: bool
+* `type`: xref:../../capy/lang/String.adoc#type-String[String]
+
+[[type-BoolAssert]]
+=== data BoolAssert
+
+Chainable assertions for a boolean value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: bool
+
+==== Functions
+
+===== fun BoolAssert.is_equal_to(other: bool): xref:#type-BoolAssert[BoolAssert]
+
+Adds a boolean equality assertion to the chain.
+
+
+===== fun BoolAssert.is_false(): xref:#type-BoolAssert[BoolAssert]
+
+Adds an assertion that the bool is false.
+
+
+===== fun BoolAssert.is_true(): xref:#type-BoolAssert[BoolAssert]
+
+Adds an assertion that the bool is true.
+
+
+[[type-DataAssert]]
+=== data DataAssert
+
+Chainable assertions for an arbitrary data value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: data
+
+==== Functions
+
+===== fun DataAssert.contains(other: any): xref:#type-DataAssert[DataAssert]
+
+Adds an assertion that at least one field of the data value equals `other`.
+
+
+===== fun DataAssert.is_equal_to(other: data): xref:#type-DataAssert[DataAssert]
+
+Adds a structural equality assertion for a data value.
+
+
+[[type-DateAssert]]
+=== data DateAssert
+
+Chainable assertions for a date value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/date_time/Date.adoc#type-Date[Date]
+
+==== Functions
+
+===== fun DateAssert.has_day(other: int): xref:#type-DateAssert[DateAssert]
+
+Adds an assertion that the date has day `other`.
+
+
+===== fun DateAssert.has_month(other: int): xref:#type-DateAssert[DateAssert]
+
+Adds an assertion that the date has month number `other`.
+
+
+===== fun DateAssert.has_year(other: int): xref:#type-DateAssert[DateAssert]
+
+Adds an assertion that the date has year `other`.
+
+
+===== fun DateAssert.is_equal_to(other: xref:../../capy/date_time/Date.adoc#type-Date[Date]): xref:#type-DateAssert[DateAssert]
+
+Adds a date equality assertion to the chain.
+
+
+===== fun DateAssert.is_equal_to(day: int, month: int, year: int): xref:#type-DateAssert[DateAssert]
+
+Adds a date equality assertion using numeric date components.
+
+
+[[type-DateTimeAssert]]
+=== data DateTimeAssert
+
+Chainable assertions for a date-time value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]
+
+==== Functions
+
+===== fun DateTimeAssert.has_date(other: xref:../../capy/date_time/Date.adoc#type-Date[Date]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has date `other`.
+
+
+===== fun DateTimeAssert.has_date(day: int, month: int, year: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds a date-component assertion using numeric values.
+
+
+===== fun DateTimeAssert.has_day(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has day `other`.
+
+
+===== fun DateTimeAssert.has_hour(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has hour `other`.
+
+
+===== fun DateTimeAssert.has_minute(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has minute `other`.
+
+
+===== fun DateTimeAssert.has_month(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has month number `other`.
+
+
+===== fun DateTimeAssert.has_second(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has second `other`.
+
+
+===== fun DateTimeAssert.has_time(other: xref:../../capy/date_time/Time.adoc#type-Time[Time]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has time `other`.
+
+
+===== fun DateTimeAssert.has_time(hour: int, minute: int, second: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds a time-component assertion using numeric values.
+
+
+===== fun DateTimeAssert.has_year(other: int): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time has year `other`.
+
+
+===== fun DateTimeAssert.is_equal_to(other: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds a date-time equality assertion to the chain.
+
+
+===== fun DateTimeAssert.is_greater_than(other: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time is later than `other`.
+
+
+===== fun DateTimeAssert.is_less_than(other: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-DateTimeAssert[DateTimeAssert]
+
+Adds an assertion that the date-time is earlier than `other`.
+
+
+[[type-DictAssert]]
+=== data DictAssert[T]
+
+Chainable assertions for a dictionary value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/collection/Dict.adoc#type-Dict[Dict]&#91;T&#93;
+
+==== Functions
+
+===== fun DictAssert[T].contains_key(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds an assertion that the dict contains `other` as a key.
+
+
+===== fun DictAssert[T].contains_value(other: T): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds an assertion that the dictionary contains value `other`.
+
+
+===== fun DictAssert[T].does_not_contain_key(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds an assertion that the dictionary does not contain key `other`.
+
+
+===== fun DictAssert[T].has_size(other: int): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds an assertion that the dictionary has size `other`.
+
+
+===== fun DictAssert[T].is_empty(): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds an assertion that the dictionary is empty.
+
+
+===== fun DictAssert[T].is_equal_to(other: xref:../../capy/collection/Dict.adoc#type-Dict[Dict]&#91;T&#93;): xref:#type-DictAssert[DictAssert]&#91;T&#93;
+
+Adds a dictionary equality assertion to the chain.
+
+
+[[type-DoubleAssert]]
+=== data DoubleAssert
+
+Chainable assertions for a double value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: double
+
+==== Functions
+
+===== fun DoubleAssert.is_between(start: double, end: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds assertions that the double is between `start` and `end`, inclusive.
+
+
+===== fun DoubleAssert.is_equal_to(other: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds a double equality assertion to the chain.
+
+
+===== fun DoubleAssert.is_equal_to(other: double, epsilon: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an approximate double equality assertion using `epsilon` as the tolerance.
+
+
+===== fun DoubleAssert.is_greater_or_equals_than(other: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is greater than or equal to `other`.
+
+
+===== fun DoubleAssert.is_greater_than(other: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is greater than `other`.
+
+
+===== fun DoubleAssert.is_less_or_equals_than(other: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is less than or equal to `other`.
+
+
+===== fun DoubleAssert.is_less_than(other: double): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is less than `other`.
+
+
+===== fun DoubleAssert.is_one(): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is one.
+
+
+===== fun DoubleAssert.is_zero(): xref:#type-DoubleAssert[DoubleAssert]
+
+Adds an assertion that the double is zero.
+
+
+[[type-DurationAssert]]
+=== data DurationAssert
+
+Chainable assertions for a duration value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]
+
+==== Functions
+
+===== fun DurationAssert.has_days(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` days.
+
+
+===== fun DurationAssert.has_hours(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` hours.
+
+
+===== fun DurationAssert.has_minutes(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` minutes.
+
+
+===== fun DurationAssert.has_months(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` months.
+
+
+===== fun DurationAssert.has_seconds(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` seconds.
+
+
+===== fun DurationAssert.has_weeks(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` weeks.
+
+
+===== fun DurationAssert.has_years(other: int): xref:#type-DurationAssert[DurationAssert]
+
+Adds an assertion that the duration has `other` years.
+
+
+===== fun DurationAssert.is_equal_to(other: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-DurationAssert[DurationAssert]
+
+Adds a duration equality assertion to the chain.
+
+
+[[type-FloatAssert]]
+=== data FloatAssert
+
+Chainable assertions for a float value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: float
+
+==== Functions
+
+===== fun FloatAssert.is_between(start: float, end: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds assertions that the float is between `start` and `end`, inclusive.
+
+
+===== fun FloatAssert.is_equal_to(other: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds a float equality assertion to the chain.
+
+
+===== fun FloatAssert.is_equal_to(other: float, epsilon: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds an approximate float equality assertion using `epsilon` as the tolerance.
+
+
+===== fun FloatAssert.is_greater_or_equals_than(other: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is greater than or equal to `other`.
+
+
+===== fun FloatAssert.is_greater_than(other: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is greater than `other`.
+
+
+===== fun FloatAssert.is_less_or_equals_than(other: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is less than or equal to `other`.
+
+
+===== fun FloatAssert.is_less_than(other: float): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is less than `other`.
+
+
+===== fun FloatAssert.is_one(): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is one.
+
+
+===== fun FloatAssert.is_zero(): xref:#type-FloatAssert[FloatAssert]
+
+Adds an assertion that the float is zero.
+
+
+[[type-IntAssert]]
+=== data IntAssert
+
+Chainable assertions for an int value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: int
+
+==== Functions
+
+===== fun IntAssert.is_between(start: int, end: int): xref:#type-IntAssert[IntAssert]
+
+Adds assertions that the int is between `start` and `end`, inclusive.
+
+
+===== fun IntAssert.is_equal_to(other: int): xref:#type-IntAssert[IntAssert]
+
+Adds an int equality assertion to the chain.
+
+
+===== fun IntAssert.is_greater_or_equals_than(other: int): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is greater than or equal to `other`.
+
+
+===== fun IntAssert.is_greater_than(other: int): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is greater than `other`.
+
+
+===== fun IntAssert.is_less_or_equals_than(other: int): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is less than or equal to `other`.
+
+
+===== fun IntAssert.is_less_than(other: int): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is less than `other`.
+
+
+===== fun IntAssert.is_one(): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is one.
+
+
+===== fun IntAssert.is_zero(): xref:#type-IntAssert[IntAssert]
+
+Adds an assertion that the int is zero.
+
+
+[[type-IntervalAssert]]
+=== data IntervalAssert
+
+Chainable assertions for an interval value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/date_time/Interval.adoc#type-Interval[Interval]
+
+==== Functions
+
+===== fun IntervalAssert.has_duration(other: xref:../../capy/date_time/Duration.adoc#type-Duration[Duration]): xref:#type-IntervalAssert[IntervalAssert]
+
+Adds an assertion that the interval has duration `other`.
+
+
+===== fun IntervalAssert.has_end(other: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-IntervalAssert[IntervalAssert]
+
+Adds an assertion that the interval ends at `other`.
+
+
+===== fun IntervalAssert.has_start(other: xref:../../capy/date_time/DateTime.adoc#type-DateTime[DateTime]): xref:#type-IntervalAssert[IntervalAssert]
+
+Adds an assertion that the interval starts at `other`.
+
+
+===== fun IntervalAssert.is_equal_to(other: xref:../../capy/date_time/Interval.adoc#type-Interval[Interval]): xref:#type-IntervalAssert[IntervalAssert]
+
+Adds an interval equality assertion to the chain.
+
+
+[[type-ListAssert]]
+=== data ListAssert[T]
+
+Chainable assertions for a list value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;
+
+==== Functions
+
+===== fun ListAssert[T].contains(other: T): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Adds an assertion that the list contains `other`.
+
+
+===== fun ListAssert[T].does_not_contain(other: T): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Adds an assertion that the list does not contain `other`.
+
+
+===== fun ListAssert[T].has_size(other: int): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Adds an assertion that the list size equals `other`.
+
+
+===== fun ListAssert[T].is_empty(): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Adds an assertion that the list is empty.
+
+
+===== fun ListAssert[T].is_equal_to(other: xref:../../capy/collection/List.adoc#type-List[List]&#91;T&#93;): xref:#type-ListAssert[ListAssert]&#91;T&#93;
+
+Adds a list equality assertion to the chain.
+
+
+[[type-LongAssert]]
+=== data LongAssert
+
+Chainable assertions for a long value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: long
+
+==== Functions
+
+===== fun LongAssert.is_between(start: long, end: long): xref:#type-LongAssert[LongAssert]
+
+Adds assertions that the long is between `start` and `end`, inclusive.
+
+
+===== fun LongAssert.is_equal_to(other: long): xref:#type-LongAssert[LongAssert]
+
+Adds a long equality assertion to the chain.
+
+
+===== fun LongAssert.is_greater_or_equals_than(other: long): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is greater than or equal to `other`.
+
+
+===== fun LongAssert.is_greater_than(other: long): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is greater than `other`.
+
+
+===== fun LongAssert.is_less_or_equals_than(other: long): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is less than or equal to `other`.
+
+
+===== fun LongAssert.is_less_than(other: long): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is less than `other`.
+
+
+===== fun LongAssert.is_one(): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is one.
+
+
+===== fun LongAssert.is_zero(): xref:#type-LongAssert[LongAssert]
+
+Adds an assertion that the long is zero.
+
+
+[[type-OptionAssert]]
+=== data OptionAssert[T]
+
+Chainable assertions for an optional value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;
+
+==== Functions
+
+===== fun OptionAssert[T].contains(other: T): xref:#type-OptionAssert[OptionAssert]&#91;T&#93;
+
+Adds an assertion that the option is `Some` with `other`.
+
+
+===== fun OptionAssert[T].is_empty(): xref:#type-OptionAssert[OptionAssert]&#91;T&#93;
+
+Adds an assertion that the option is `None`.
+
+
+===== fun OptionAssert[T].is_equal_to(other: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;T&#93;): xref:#type-OptionAssert[OptionAssert]&#91;T&#93;
+
+Adds an equality assertion for an optional value.
+
+
+[[type-ResultAssert]]
+=== data ResultAssert[T]
+
+Chainable assertions for a result value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;T&#93;
+
+==== Functions
+
+===== fun ResultAssert[T].fails(): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error`.
+
+
+===== fun ResultAssert[T].fails(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error` with the expected message.
+
+
+===== fun ResultAssert[T].fails(assert: Error=>Assert): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error`, then runs nested assertions
+against the structured error value.
+
+Example:
+```cfun
+assert_that(load_user()).fails(error =>
+    assert_that(error.kind).is_equal_to("capy.user.not_found")
+)
+```
+
+
+===== fun ResultAssert[T].fails_with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error` with the expected stable kind.
+
+
+===== fun ResultAssert[T].fails_with_kind(kind: xref:../../capy/lang/String.adoc#type-String[String], message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error` with the expected stable kind and message.
+
+
+===== fun ResultAssert[T].fails_with_message_containing(message: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Error` with a message containing `message`.
+
+
+===== fun ResultAssert[T].is_equal_to(other: xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;T&#93;): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an equality assertion for a result value.
+
+
+===== fun ResultAssert[T].succeeds(): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Success`.
+
+
+===== fun ResultAssert[T].succeeds(other: T): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Success` containing `other`.
+
+Example: `assert_that("42".to_int()).succeeds(42)`.
+
+
+===== fun ResultAssert[T].succeeds(assert: T=>Assert): xref:#type-ResultAssert[ResultAssert]&#91;T&#93;
+
+Adds an assertion that the result is `Success`, then runs nested assertions
+against the success value.
+
+Example:
+```cfun
+assert_that(load_user()).succeeds(user =>
+    assert_that(user.name).is_equal_to("Ada")
+)
+```
+
+
+[[type-SeqAssert]]
+=== data SeqAssert[T]
+
+Chainable assertions for a sequence value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;
+
+==== Functions
+
+===== fun SeqAssert[T].contains(other: T): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Adds an assertion that the sequence contains `other`.
+
+
+===== fun SeqAssert[T].does_not_contain(other: T): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Adds an assertion that the sequence does not contain `other`.
+
+
+===== fun SeqAssert[T].has_size(other: int): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Adds an assertion that the sequence has size `other`.
+
+
+===== fun SeqAssert[T].is_empty(): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Adds an assertion that the sequence is empty.
+
+
+===== fun SeqAssert[T].is_equal_to(other: xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;T&#93;): xref:#type-SeqAssert[SeqAssert]&#91;T&#93;
+
+Adds a sequence equality assertion to the chain.
+
+
+[[type-SetAssert]]
+=== data SetAssert[T]
+
+Chainable assertions for a set value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;T&#93;
+
+==== Functions
+
+===== fun SetAssert[T].contains(other: T): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Adds an assertion that the set contains `other`.
+
+
+===== fun SetAssert[T].does_not_contain(other: T): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Adds an assertion that the set does not contain `other`.
+
+
+===== fun SetAssert[T].has_size(other: int): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Adds an assertion that the set has size `other`.
+
+
+===== fun SetAssert[T].is_empty(): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Adds an assertion that the set is empty.
+
+
+===== fun SetAssert[T].is_equal_to(other: xref:../../capy/collection/Set.adoc#type-Set[Set]&#91;T&#93;): xref:#type-SetAssert[SetAssert]&#91;T&#93;
+
+Adds a set equality assertion to the chain.
+
+
+[[type-StringAssert]]
+=== data StringAssert
+
+Chainable assertions for a string value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/lang/String.adoc#type-String[String]
+
+==== Functions
+
+===== fun StringAssert.contains(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-StringAssert[StringAssert]
+
+Adds an assertion that the string contains `other`.
+
+
+===== fun StringAssert.does_not_start_with(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-StringAssert[StringAssert]
+
+Adds an assertion that the string does not start with `other`.
+
+
+===== fun StringAssert.is_equal_to(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-StringAssert[StringAssert]
+
+Adds a string equality assertion to the chain.
+
+
+===== fun StringAssert.starts_with(other: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-StringAssert[StringAssert]
+
+Adds an assertion that the string starts with `other`.
+
+
+[[type-TimeAssert]]
+=== data TimeAssert
+
+Chainable assertions for a time value.
+
+==== Fields
+
+* `assertions`: List[()=>Assertion]
+* `value`: xref:../../capy/date_time/Time.adoc#type-Time[Time]
+
+==== Functions
+
+===== fun TimeAssert.has_hour(other: int): xref:#type-TimeAssert[TimeAssert]
+
+Adds an assertion that the time has hour `other`.
+
+
+===== fun TimeAssert.has_minute(other: int): xref:#type-TimeAssert[TimeAssert]
+
+Adds an assertion that the time has minute `other`.
+
+
+===== fun TimeAssert.has_offset_minutes(other: xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/date_time/Time.adoc#type-offset_minutes[offset_minutes]&#93;): xref:#type-TimeAssert[TimeAssert]
+
+Adds an assertion for the optional UTC offset in minutes.
+
+
+===== fun TimeAssert.has_offset_minutes(other: int): xref:#type-TimeAssert[TimeAssert]
+
+Adds an assertion for a present UTC offset with the given number of minutes.
+
+
+===== fun TimeAssert.has_second(other: int): xref:#type-TimeAssert[TimeAssert]
+
+Adds an assertion that the time has second `other`.
+
+
+===== fun TimeAssert.is_equal_to(other: xref:../../capy/date_time/Time.adoc#type-Time[Time]): xref:#type-TimeAssert[TimeAssert]
+
+Adds a time equality assertion to the chain.
+
+
+===== fun TimeAssert.is_equal_to(hour: int, minute: int, second: int): xref:#type-TimeAssert[TimeAssert]
+
+Adds a local-time equality assertion using numeric clock components.
+
+

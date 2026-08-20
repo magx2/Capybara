@@ -1,0 +1,64 @@
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+
+deriver Show {
+    fun show(): String =
+        let info: DataValueInfo = reflection(receiver)
+        let body: String = info.fields |> info.name + " { ", (acc, field) =>
+            acc + (if acc == info.name + " { " then "" else ", ") + field.name
+        body + " }"
+}
+
+data AgeLimit { value: int }
+
+deriver AgeComparable {
+    fun bigger_than(i: int): bool = receiver.age > i
+
+    fun matches_age_metadata(extra: int, limit: AgeLimit): bool =
+        let info: DataValueInfo = reflection(receiver)
+        let has_name_field: bool = info.fields.any(field => field.name == "name")
+        let has_age_field: bool = info.fields.any(field => field.name == "age")
+        (info.name == "DerivedUser") & has_name_field & has_age_field & (receiver.age + extra > limit.value)
+}
+
+deriver FieldValueSummary {
+    fun field_values_summary(): String =
+        let info: DataValueInfo = reflection(receiver)
+        info.fields |> "", (acc, field) =>
+            acc + (if acc == "" then "" else ",") + field.name + "=" + field.value
+}
+
+data DerivedUser { name: String, age: int } derive Show, AgeComparable, FieldValueSummary
+data Empty {}
+data Entity { id: String }
+data Employee { department: String, ...Entity } derive Show
+union Named { id: String } = DerivedEntity derive Show
+data DerivedEntity { id: String, rank: int }
+
+fun show_user(): String =
+    DerivedUser { name: "Ada", age: 42 }.show()
+
+fun show_empty(): String =
+    let info: DataValueInfo = reflection(Empty {})
+    info.name + " {  }"
+
+fun show_employee(): String =
+    Employee { id: "E-1", department: "R&D" }.show()
+
+fun show_named(): String =
+    let named: Named = DerivedEntity { id: "N-1", rank: 7 }
+    named.show()
+
+fun user_bigger_than(i: int): bool =
+    DerivedUser { name: "Ada", age: 42 }.bigger_than(i)
+
+fun user_mixed_parameter_derive_true(): bool =
+    DerivedUser { name: "Ada", age: 42 }.matches_age_metadata(3, AgeLimit { value: 44 })
+
+fun user_mixed_parameter_derive_false(): bool =
+    DerivedUser { name: "Ada", age: 42 }.matches_age_metadata(0, AgeLimit { value: 42 })
+
+fun user_field_values_summary(): String =
+    DerivedUser { name: "Ada", age: 42 }.field_values_summary()

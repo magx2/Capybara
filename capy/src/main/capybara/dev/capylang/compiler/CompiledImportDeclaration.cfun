@@ -1,0 +1,12 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledSourceLocation import { CompiledSourceLocation }
+
+/// compiled import directive with normalized module path, selected names, exclusions, and qualified-import flags.
+data CompiledImportDeclaration {
+    modulePath: String,
+    importedNames: List[String],
+    excludedNames: List[String],
+    wildcard: bool,
+    qualified: bool,
+    location: CompiledSourceLocation
+}

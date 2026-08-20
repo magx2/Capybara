@@ -1,0 +1,30 @@
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/collection/Seq import { * }
+
+fun map(l: List[int]) = l | :double
+
+fun double(x: int) = x * x
+
+fun hof(fun: int=>String) = fun(5)
+
+fun invoke_hof(s: String) = hof(x => s + " " + x)
+
+fun plus(a: int, b: int, c: int, d: int) = a+b-c*d
+
+fun run(fun: (int, int, int, int ) => int) = fun(5,6,7,8)
+
+fun run_lambda() = run((a, b, c, d) => a + b - c * d)
+
+fun run_lambda2() = run(:plus)
+
+fun invoke_hof_unused(s: String) = hof(_ => s)
+
+fun run_lambda_unused_middle() = run((a, _, c, d) => a + c)
+
+fun run_lambda_unused_pair() = run((_, _, c, d) => c + d)
+
+fun run0(fun: () => String) = fun()
+
+fun run_lambda_no_args() = run0(() => "Hello, Wrold")
