@@ -109,6 +109,11 @@ Concatenates this sequence with `other`.
 If this sequence is infinite, `other` is never reached.
 
 
+===== fun Seq[T].`+`(value: T): xref:#type-Seq[Seq]&#91;T&#93;
+
+Returns a new sequence with `value` appended.
+
+
 ===== fun Seq[T].`|*`(map: T=>Seq[Y]): xref:#type-Seq[Seq]&#91;Y&#93;
 
 Applies `map` and flattens the resulting sequences.
