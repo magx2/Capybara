@@ -17,9 +17,18 @@ for backend in java python js; do
         --log WARN
 done
 
-PYTHONPATH="${PROJECT_BUILD_DIR}/test-generated/${runner}/python:${PROJECT_SRC_DIR}/native/py${PYTHONPATH:+:${PYTHONPATH}}" \
-    python3 "${ROOT_DIR}/lib/capybara-lib/src/main/resources/test-runner/python/run-capybara-tests.py" \
+run_python_tests() {
+    local log="$1"
+    PYTHONPATH="${PROJECT_BUILD_DIR}/test-generated/${runner}/python:${PROJECT_SRC_DIR}/native/py${PYTHONPATH:+:${PYTHONPATH}}" \
+        python3 "${ROOT_DIR}/lib/capybara-lib/src/main/resources/test-runner/python/run-capybara-tests.py" \
         --generated-dir "${PROJECT_BUILD_DIR}/test-generated/${runner}/python" \
         --output-dir "${PROJECT_BUILD_DIR}/test-results/${runner}/python" \
         --report-type JUNIT \
-        --log NONE
+        --log "${log}"
+}
+
+if ! run_python_tests NONE; then
+    echo "Capybara tests failed; rerunning with logs." >&2
+    run_python_tests LOG || true
+    exit 1
+fi

@@ -16,7 +16,7 @@ fun happy_path_summary(): Effect[String] =
 fun validation_message(): String =
     submit(invalid_order()).reduce_left(
         value => "submitted:" + describe_status(value),
-        message => message
+        error => error.message
     )
 
 fun deterministic_summary(): String = summary(fixture_order())

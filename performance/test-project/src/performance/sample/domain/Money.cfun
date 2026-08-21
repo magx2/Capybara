@@ -12,7 +12,7 @@ fun zero(currency: String): Money = Money { cents: 0L, currency: currency }
 fun add(left: Money, right: Money): Result[Money] =
     if left.currency == right.currency
     then Success { left.with(cents: left.cents + right.cents) }
-    else Error { "currency mismatch:" + left.currency + "/" + right.currency }
+    else error("currency mismatch:" + left.currency + "/" + right.currency)
 
 fun unsafe_add(left: Money, right: Money): Money =
     match add(left, right) with
