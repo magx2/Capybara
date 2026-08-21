@@ -51,9 +51,9 @@ fun draft_order(id: String, customer: Customer, lines: List[OrderLine]): Order =
 
 fun validate(order: Order): Result[Order] =
     if order.lines.is_empty()
-    then Error { "order has no lines:" + order.id }
+    then error("order has no lines:" + order.id)
     else if order.lines.any(line => line.quantity <= 0)
-    then Error { "order has non-positive quantity:" + order.id }
+    then error("order has non-positive quantity:" + order.id)
     else Success { order }
 
 fun submit(order: Order): Result[Order] =

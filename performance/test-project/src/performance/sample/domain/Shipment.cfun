@@ -39,7 +39,7 @@ fun default_rules(): List[ShipmentRule] =
 fun quote_shipment(order: Order): Result[ShipmentQuote] =
     let zone = shipment_zone(order.customer)
     match rule_for(default_rules(), zone) with
-    case None -> Error { "no shipment rule:" + zone }
+    case None -> error("no shipment rule:" + zone)
     case Some { rule } -> Success { quote_for_rule(order, rule) }
 
 fun shipment_options(order: Order): List[ShipmentQuote] =
