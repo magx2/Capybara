@@ -9,10 +9,14 @@ public final class PythonGenerator {
     }
 
     public static GeneratedProgram pythonGenerator(CompiledProgram program) {
-        var compiledProgram = JavaGenerator.withBundledImportModules(
+        var sourceProgram = JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program));
+        var lookupProgram = JavaGenerator.withBundledImportModules(
                 JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program))
         );
-        var generated = JavaGenerator.dataMap(GeneratedPythonGenerator.python_generator__81_0(compiledProgram));
+        var generated = JavaGenerator.dataMap(GeneratedPythonGenerator.python_generator_with_lookup__85_0(
+                sourceProgram,
+                lookupProgram
+        ));
         var modules = JavaGenerator.list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
                 .toList();

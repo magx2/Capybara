@@ -46,15 +46,14 @@ public final class JavaGenerator {
         } else if (program.modules().stream().noneMatch(JavaGenerator::testModule)) {
             MAIN_PROGRAM_CONTEXT.set(program);
         }
+        var sourceProgram = dataMap(toGeneratedValue(program));
         var compiledProgram = withBundledImportModules(dataMap(toGeneratedValue(generationProgram)));
-        var sourceModulePaths = program.modules().stream()
-                .map(JavaGenerator::generatedJavaModulePath)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        var generated = dataMap(GeneratedJavaGenerator.java_generator__133_0(compiledProgram));
+        var generated = dataMap(GeneratedJavaGenerator.java_generator_with_lookup__137_0(
+                sourceProgram,
+                compiledProgram
+        ));
         var modules = list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
-                .filter(module -> sourceModulePaths.contains(module.relativePath())
-                        || generatedSupportModule(module.relativePath()))
                 .toList();
         modules.forEach(module -> rejectUnsupportedFunctions(module, compiledProgram));
         return new GeneratedProgram(modules);
@@ -214,16 +213,6 @@ public final class JavaGenerator {
         var path = normalizeModuleImportPath(string(module.get("path")));
         var name = string(module.get("name")).replace('.', '_');
         return path.isBlank() ? name + ".java" : path + "/" + name + ".java";
-    }
-
-    private static String generatedJavaModulePath(CompiledModule module) {
-        var path = normalizeModuleImportPath(module.path());
-        var name = module.name().replace('.', '_');
-        return path.isBlank() ? name + ".java" : path + "/" + name + ".java";
-    }
-
-    private static boolean generatedSupportModule(String relativePath) {
-        return "capy/test/CapyTestRuntime.java".equals(relativePath);
     }
 
     private static String normalizeModuleImportPath(String path) {

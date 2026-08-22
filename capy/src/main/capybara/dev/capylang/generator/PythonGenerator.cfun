@@ -80,14 +80,27 @@ data PythonNativeProviderScope { declarations: Dict[CompiledNativeProviderDeclar
 
 /// Generates Python source modules, native-provider stubs, and runtime modules from a compiled program.
 fun python_generator(program: CompiledProgram): GeneratedProgram =
-    let objectOrientedUnitIndex = python_object_oriented_unit_index(program.objectOrientedModules)
-    let nativeProviderIndex = python_native_provider_index(program.nativeProviderCatalog)
+    python_generator_with_lookup(program, program)
+
+/// Generates requested Python modules while resolving metadata against a larger lookup program.
+fun python_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
+    let objectOrientedUnitIndex = python_object_oriented_unit_index(lookupProgram.objectOrientedModules)
+    let nativeProviderIndex = python_native_provider_index(lookupProgram.nativeProviderCatalog)
+    let emittedModules = python_runtime_source_modules(sourceProgram.modules, lookupProgram.modules)
     GeneratedProgram {
-        modules: python_native_provider_interface_modules(program.nativeProviderCatalog.declarations)
-            + python_modules(program.modules, program.modules, objectOrientedUnitIndex, nativeProviderIndex)
-            + python_test_runtime_modules(program.modules)
+        modules: python_native_provider_interface_modules(sourceProgram.nativeProviderCatalog.declarations)
+            + python_modules(emittedModules, lookupProgram.modules, objectOrientedUnitIndex, nativeProviderIndex)
+            + python_test_runtime_modules(sourceProgram.modules)
             + python_native_runtime_modules()
     }
+
+private fun python_runtime_source_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
+    match python_find_module_by_path("capy/test/Assert", sourceModules) with
+    case Some _ -> sourceModules
+    case None ->
+        match python_find_module_by_path("capy/test/Assert", lookupModules) with
+        case Some { assertModule } -> sourceModules + [assertModule]
+        case None -> sourceModules
 
 /// Creates Python generated-module entries for native provider interface.
 private fun python_native_provider_interface_modules(declarations: List[CompiledNativeProviderDeclaration]): List[GeneratedModule] =
@@ -1303,6 +1316,8 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_effect_function_call_code(stdlibCall.name)
     else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then python_stdlib_async_function_call_code(stdlibCall, env, module, allModules)
+    else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
+    then "__capy_error(" + python_first_method_argument_code(stdlibCall.arguments, env, module, allModules) + ")"
     else if python_resolved_stdlib_parse_function_call(stdlibCall, module, qualifiedStdlib)
     then python_stdlib_parse_function_call_code(stdlibCall, env, module, allModules)
     else if python_resolved_stdlib_path_function_call(stdlibCall, module, qualifiedStdlib)
@@ -1528,18 +1543,18 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
                 match python_find_extension_method_with_receiver_type(receiverType, call, module, allModules) with
                 case Some { function } -> python_extension_method_call_code(function, call, env, module, allModules)
                 case None ->
-                    match python_primitive_backed_backing_type(receiverType, module, allModules) with
-                    case Some { backingType } -> python_primitive_backed_method_call_code(call, backingType, receiver, env, module, allModules)
-                    case None ->
-                        if python_derived_to_json_method_call(call, module, allModules)
-                        then python_function_call_name("to_json", module, allModules) + "(" + receiver + ")"
-                        else if python_unknown_builtin_method_call(call, receiverType)
-                        then python_unknown_builtin_method_code(call, receiver)
-                        else if receiverType == python_unknown_type()
-                        then "__capy_dynamic_method(" + receiver + ", " + python_string_literal(call.name)
-                            + python_extension_method_argument_tail(call.arguments, env, module, allModules) + ")"
-                        else receiver + "." + python_method_name(call.name)
-                            + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
+                        match python_primitive_backed_backing_type(receiverType, module, allModules) with
+                        case Some { backingType } -> python_primitive_backed_method_call_code(call, backingType, receiver, env, module, allModules)
+                        case None ->
+                            if python_derived_to_json_method_call(call, module, allModules)
+                            then python_function_call_name("to_json", module, allModules) + "(" + receiver + ")"
+                            else if python_unknown_builtin_method_call(call, receiverType)
+                            then python_unknown_builtin_method_code(call, receiver)
+                            else if receiverType == python_unknown_type()
+                            then "__capy_dynamic_method(" + receiver + ", " + python_string_literal(call.name)
+                                + python_extension_method_argument_tail(call.arguments, env, module, allModules) + ")"
+                            else receiver + "." + python_method_name(call.name)
+                                + "(" + python_expression_list_code(call.arguments, env, module, allModules) + ")"
 
 /// Checks whether a zero-argument size call targets a native Python collection value.
 private fun python_builtin_size_method_call(call: CompiledMethodCallExpression, receiverType: String): bool =
@@ -2404,7 +2419,7 @@ private fun python_set_binary_operator(operator: String): bool =
 
 /// Checks whether an operator belongs to the set predicate operator category.
 private fun python_set_predicate_operator(operator: String): bool =
-    operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
+    operator == "?" | operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
 
 /// Checks whether an operator belongs to the set algebra operator category.
 private fun python_set_algebra_operator(operator: String): bool =
@@ -2414,7 +2429,9 @@ private fun python_set_algebra_operator(operator: String): bool =
 private fun python_set_binary_code(binary: CompiledBinaryExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let leftCode = python_expression_code(binary.left, env, module, allModules)
     let rightCode = python_expression_code(binary.right, env, module, allModules)
-    if binary.operator == "⊆"
+    if binary.operator == "?"
+    then "__capy_contains(" + leftCode + ", " + rightCode + ")"
+    else if binary.operator == "⊆"
     then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
     else if binary.operator == "⊂"
     then "__capy_set_proper_subset(" + leftCode + ", " + rightCode + ")"
@@ -3941,6 +3958,8 @@ private fun python_function_call_expression_type(call: CompiledFunctionCallExpre
     then python_stdlib_effect_function_call_type(stdlibCall.name)
     else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then if stdlibCall.name == "compute" then "Async" else python_effect_type()
+    else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
+    then "Error"
     else if python_object_type_function_call(call, module, allModules)
     then python_object_type_function_call_type(call, module, allModules)
     else if python_object_constructor_call(call, module, allModules)
@@ -4020,6 +4039,12 @@ private fun python_resolved_stdlib_async_function_call(call: CompiledFunctionCal
     if qualified
     then python_one_method_argument(call.arguments) & python_stdlib_async_function_name(call.name)
     else python_stdlib_async_function_call(call, module)
+
+/// Checks whether a resolved call targets the runtime-backed Result.error factory.
+private fun python_resolved_stdlib_result_error_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    call.name == "error"
+        & python_one_method_argument(call.arguments)
+        & (qualified | (!python_local_function_exists(call.name, module.functions) & python_result_member_imported(call.name, module.imports)))
 
 private fun python_stdlib_async_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     python_one_method_argument(call.arguments)
@@ -4208,6 +4233,9 @@ private fun python_path_member_imported(member: String, imports: List[CompiledIm
 
 private fun python_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     python_module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
+
+private fun python_result_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    python_module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
 
 /// Checks whether module member is imported into the current module scope.
 private fun python_module_member_imported(member: String, imports: List[CompiledImportDeclaration], absoluteModulePath: String, relativeModulePath: String): bool =
@@ -6751,6 +6779,7 @@ private fun python_test_runtime_header_code(): String =
     + python_newline()
     + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', '__capy_assert_failed', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '__capy_random_seed', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_dynamic_method', '__capy_bind_value', '__capy_block_bind', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_values', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_fold', '__capy_as_list', '__capy_seq_first_value', '__capy_seq_rest', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_option_or', '__capy_option_or_else', '__capy_result_from_value', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_dynamic_map', '__capy_dynamic_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + "__all__.append('__capy_seq_first')" + python_newline()
+    + "__all__.append('__capy_error')" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -9128,6 +9157,8 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
         else if python_resolved_stdlib_effect_function_call(stdlibCall, module, qualifiedStdlib)
         then true
         else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
+        then true
+        else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
         then true
         else if python_resolved_stdlib_parse_function_call(stdlibCall, module, qualifiedStdlib)
         then true

@@ -252,6 +252,71 @@ class CompilationTest {
     }
 
     @Test
+    void shouldUseBundledModulesForLookupWithoutGeneratingThem() {
+        var program = compileProgram(List.of(rawModule("BundledLookup", "/sample/app", """
+                from /capy/collection/List import { * }
+                from /capy/lang/Option import { * }
+                from /capy/lang/Result import { * }
+                from /capy/test/Assert import { * }
+
+                fun first_or(values: List[int], fallback: int): int =
+                    match values[0] with
+                    case Some { value } -> value
+                    case None -> fallback
+
+                fun result_or(result: Result[int], fallback: int): int =
+                    result.reduce_left(value => value, _ => fallback)
+
+                fun failed(message: String): Result[int] =
+                    error(message)
+
+                fun check(value: String): Assert =
+                    assert_that(value).is_equal_to("ok")
+                """)));
+
+        var javaModules = JavaGenerator.javaGenerator(program).modules();
+        assertThat(javaModules)
+                .extracting(module -> module.relativePath())
+                .containsExactly("sample/app/BundledLookup.java");
+        assertThat(javaModules.getFirst().code())
+                .contains("java.util.List<java.lang.Integer> values")
+                .contains("java.util.Optional<java.lang.Integer>")
+                .contains("java.lang.Object result")
+                .contains("__capy_result_is_success")
+                .contains("__capy_assert_equal(");
+
+        var pythonModules = PythonGenerator.pythonGenerator(program).modules();
+        assertThat(pythonModules)
+                .extracting(module -> module.relativePath())
+                .contains("sample/app/BundledLookup.py", "capy/test/Assert.py", "capy/test/CapyTestRuntime.py", "dev/capylang/capybara.py")
+                .doesNotContain("capy/collection/List.py", "capy/lang/Option.py", "capy/lang/Result.py");
+        assertThat(pythonModules.stream()
+                .filter(module -> module.relativePath().equals("sample/app/BundledLookup.py"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("__capy_index(values, 0)")
+                .contains("__capy_result_reduce(result")
+                .contains("__capy_error(message)")
+                .contains("__import__(\"capy.test.Assert\"");
+
+        var javaScriptModules = JavaScriptGenerator.javaScriptGenerator(program).modules();
+        assertThat(javaScriptModules)
+                .extracting(module -> module.relativePath())
+                .contains("sample/app/BundledLookup.js", "capy/test/Assert.js", "capy/test/CapyTestRuntime.js")
+                .doesNotContain("capy/collection/List.js", "capy/lang/Option.js", "capy/lang/Result.js");
+        assertThat(javaScriptModules.stream()
+                .filter(module -> module.relativePath().equals("sample/app/BundledLookup.js"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("__capy_index(values, 0, \"List\")")
+                .contains("__capy_result_reduce(result")
+                .contains("__capy_error_kind(\"capy.error\", message)")
+                .contains("capy/test/Assert");
+    }
+
+    @Test
     void shouldSanitizeDottedModuleNamesForJavaClasses() {
         var program = compileProgram(List.of(rawModule(
                 "Kaprekar.test",
@@ -1778,9 +1843,9 @@ class CompilationTest {
                 .contains("__capy_dynamic_flat_map(int_result")
                 .contains("__capy_result_map(__capy_primitive_constructor_result")
                 .contains("(__capy_size(acc) === 0)")
-                .contains("__capy_import_capy_lang_Effect")
-                .contains("__capy_import_capy_io_Console")
-                .contains("__capy_import_capy_lang_Primitives")
+                .doesNotContain("__capy_import_capy_lang_Effect")
+                .doesNotContain("__capy_import_capy_io_Console")
+                .doesNotContain("__capy_import_capy_lang_Primitives")
                 .doesNotContain("Effect_pure")
                 .doesNotContain("Console_println")
                 .doesNotContain("Primitives_to_int")

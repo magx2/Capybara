@@ -75,29 +75,43 @@ private fun java_script_bool_identity(value: bool): bool = value
 
 /// Generates JavaScript source modules and test runtime modules from a compiled program.
 fun java_script_generator(program: CompiledProgram): GeneratedProgram =
-    let nativeProviderIndex = java_script_native_provider_index(program.nativeProviderCatalog)
+    java_script_generator_with_lookup(program, program)
+
+/// Generates requested JavaScript modules while resolving metadata against a larger lookup program.
+fun java_script_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
+    let nativeProviderIndex = java_script_native_provider_index(lookupProgram.nativeProviderCatalog)
+    let emittedModules = java_script_runtime_source_modules(sourceProgram.modules, lookupProgram.modules)
     GeneratedProgram {
-        modules: java_script_modules(program.modules, program.modules, nativeProviderIndex) + java_script_test_runtime_modules(program.modules)
+        modules: java_script_modules(emittedModules, emittedModules, lookupProgram.modules, nativeProviderIndex)
+            + java_script_test_runtime_modules(sourceProgram.modules)
     }
 
+private fun java_script_runtime_source_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
+    match java_script_find_module_by_path("capy/test/Assert", sourceModules) with
+    case Some _ -> sourceModules
+    case None ->
+        match java_script_find_module_by_path("capy/test/Assert", lookupModules) with
+        case Some { assertModule } -> sourceModules + [assertModule]
+        case None -> sourceModules
+
 /// Creates JavaScript generated source modules for compiled modules.
-private fun java_script_modules(modules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): List[GeneratedModule] =
+private fun java_script_modules(modules: List[CompiledModule], emittedModules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): List[GeneratedModule] =
     match modules[0] with
     case None -> []
     case Some { module } -> [GeneratedModule {
         relativePath: java_script_module_relative_path(module, ".js"),
-        code: java_script_module_code(module, allModules, nativeProviderIndex)
-    }] + java_script_modules(modules[1:], allModules, nativeProviderIndex)
+        code: java_script_module_code(module, emittedModules, allModules, nativeProviderIndex)
+    }] + java_script_modules(modules[1:], emittedModules, allModules, nativeProviderIndex)
 
 /// Emits the complete CommonJS source for one compiled module.
-private fun java_script_module_code(module: CompiledModule, allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): String =
+private fun java_script_module_code(module: CompiledModule, emittedModules: List[CompiledModule], allModules: List[CompiledModule], nativeProviderIndex: JavaScriptNativeProviderIndex): String =
     let nativeProviderScope = java_script_native_provider_scope_for_module(module, nativeProviderIndex)
     let objectAnnotationIndex = java_script_object_annotation_index(module.functions)
     let sections = java_script_function_sections(module.functions, module, allModules, nativeProviderScope, objectAnnotationIndex)
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_runtime_import(module)
-    + java_script_imports(module.imports, module, allModules)
+    + java_script_imports(module.imports, module, emittedModules, allModules)
     + java_script_newline()
     + sections.constants
     + java_script_newline()
@@ -107,7 +121,7 @@ private fun java_script_module_code(module: CompiledModule, allModules: List[Com
 
 /// Emits JavaScript runtime support source for runtime symbols.
 private fun java_script_runtime_symbols(): String =
-    JAVA_SCRIPT_RUNTIME_SYMBOLS + ", __capy_dynamic_map, __capy_dynamic_flat_map"
+    JAVA_SCRIPT_RUNTIME_SYMBOLS + ", __capy_dynamic_map, __capy_dynamic_flat_map, __capy_error_kind"
 
 private fun java_script_runtime_import_symbols(module: CompiledModule): String =
     let excluded = java_script_runtime_excluded_symbols(module)
@@ -312,22 +326,22 @@ private fun java_script_runtime_import(module: CompiledModule): String =
         + java_script_newline()
 
 /// Emits JavaScript import source for imports.
-private fun java_script_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): String =
-    java_script_unique_imports(imports, module, allModules, {:})
+private fun java_script_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, emittedModules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    java_script_unique_imports(imports, module, emittedModules, allModules, {:})
 
 /// Emits JavaScript import statements for unique.
-private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], emittedAliases: Dict[bool]): String =
+private fun java_script_unique_imports(imports: List[CompiledImportDeclaration], module: CompiledModule, emittedModules: List[CompiledModule], allModules: List[CompiledModule], emittedAliases: Dict[bool]): String =
     match imports[0] with
     case None -> ""
     case Some { declaration } ->
         let alias = java_script_import_alias(declaration, module)
         match emittedAliases.get(alias) with
-        case Some _ -> java_script_unique_imports(imports[1:], module, allModules, emittedAliases)
-        case None -> java_script_import(declaration, module, allModules) + java_script_unique_imports(imports[1:], module, allModules, emittedAliases + (alias, true))
+        case Some _ -> java_script_unique_imports(imports[1:], module, emittedModules, allModules, emittedAliases)
+        case None -> java_script_import(declaration, module, emittedModules, allModules) + java_script_unique_imports(imports[1:], module, emittedModules, allModules, emittedAliases + (alias, true))
 
 /// Emits JavaScript import source for import.
-private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_script_stdlib_import(declaration.modulePath) & !java_script_imported_module_available(declaration, module, allModules)
+private fun java_script_import(declaration: CompiledImportDeclaration, module: CompiledModule, emittedModules: List[CompiledModule], allModules: List[CompiledModule]): String =
+    if java_script_stdlib_import(declaration.modulePath) & !java_script_imported_module_available(declaration, module, emittedModules)
     then ""
     else "const "
             + java_script_import_alias(declaration, module)
@@ -2427,7 +2441,7 @@ private fun java_script_set_binary_operator(operator: String): bool =
 
 /// Checks whether an operator belongs to the set predicate operator category.
 private fun java_script_set_predicate_operator(operator: String): bool =
-    operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
+    operator == "?" | operator == "⊆" | operator == "⊂" | operator == "⊇" | operator == "⊃"
 
 /// Checks whether an operator belongs to the set algebra operator category.
 private fun java_script_set_algebra_operator(operator: String): bool =
@@ -2570,6 +2584,8 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
     then java_script_stdlib_effect_function_call_code(stdlibCall.name)
     else if java_script_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then java_script_stdlib_async_function_call_code(stdlibCall, env, module, allModules)
+    else if java_script_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
+    then "__capy_error_kind(\"capy.error\", " + java_script_first_method_argument_code(stdlibCall.arguments, env, module, allModules) + ")"
     else if java_script_oo_constructor_call(call.name, module, allModules)
     then java_script_oo_constructor_call_code(call, env, module, allModules)
     else if java_script_stdlib_path_function_call(call, module)
@@ -5688,6 +5704,15 @@ private fun java_script_runtime_function(name: String): bool =
         | name == "println_error"
         | name == "to_seq"
 
+private fun java_script_resolved_stdlib_result_error_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    call.name == "error"
+        & java_script_one_method_argument(call.arguments)
+        & (qualified | (!java_script_local_function_exists(call.name, module.functions) & java_script_result_member_imported(call.name, module.imports)))
+
+/// Checks whether an assertion method is implemented by the generated JavaScript test runtime.
+private fun java_script_runtime_assert_receiver_type(receiverType: String): bool =
+    java_script_string_has_suffix(java_script_type_unqualified_name(receiverType), "Assert")
+
 private fun java_script_stdlib_parse_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     if java_script_one_method_argument(call.arguments)
     then java_script_stdlib_parse_function_call_by_name(call.name, module)
@@ -6806,6 +6831,9 @@ private fun java_script_path_member_imported(member: String, imports: List[Compi
 /// Checks whether I/O member is imported into the current module scope.
 private fun java_script_io_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
     java_script_module_member_imported(member, imports, "/capy/io/IO", "capy/io/IO")
+
+private fun java_script_result_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =
+    java_script_module_member_imported(member, imports, "/capy/lang/Result", "capy/lang/Result")
 
 /// Checks whether reflection member is imported into the current module scope.
 private fun java_script_reflection_member_imported(member: String, imports: List[CompiledImportDeclaration]): bool =

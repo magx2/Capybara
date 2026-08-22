@@ -132,13 +132,17 @@ private fun oo_method_function_prefix_size(): int =
 
 /// Generates Java source modules, object interface files, and test runtime modules from a compiled program.
 fun java_generator(program: CompiledProgram): GeneratedProgram =
-    let objectOrientedUnitIndex = java_object_oriented_unit_index(program.objectOrientedModules)
-    let nativeProviderIndex = java_native_provider_index(program.nativeProviderCatalog)
-    let generated = java_generated_modules(program.modules, program.modules, objectOrientedUnitIndex, nativeProviderIndex)
+    java_generator_with_lookup(program, program)
+
+/// Generates requested Java modules while resolving metadata against a larger lookup program.
+fun java_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
+    let objectOrientedUnitIndex = java_object_oriented_unit_index(lookupProgram.objectOrientedModules)
+    let nativeProviderIndex = java_native_provider_index(lookupProgram.nativeProviderCatalog)
+    let generated = java_generated_modules(sourceProgram.modules, lookupProgram.modules, objectOrientedUnitIndex, nativeProviderIndex)
     GeneratedProgram {
         modules: generated.objectInterfaceModules
             + generated.javaModules
-            + test_runtime_modules(program.modules)
+            + test_runtime_modules(sourceProgram.modules)
     }
 
 /// Creates Java object interface and module source entries while decoding object schemas once per module.
