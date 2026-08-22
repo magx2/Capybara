@@ -9,11 +9,15 @@ public final class JavaScriptGenerator {
     }
 
     public static GeneratedProgram javaScriptGenerator(CompiledProgram program) {
-        var compiledProgram = JavaGenerator.withBundledImportModules(
+        var sourceProgram = JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program));
+        var lookupProgram = JavaGenerator.withBundledImportModules(
                 JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(program))
         );
         var generated = JavaGenerator.dataMap(
-                GeneratedJavaScriptGenerator.java_script_generator__76_0(compiledProgram)
+                GeneratedJavaScriptGenerator.java_script_generator_with_lookup__80_0(
+                        sourceProgram,
+                        lookupProgram
+                )
         );
         var modules = JavaGenerator.list(generated.get("modules")).stream()
                 .map(JavaGenerator::generatedModule)
