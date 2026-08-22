@@ -3918,13 +3918,23 @@ private fun function_value_call_code(call: CompiledFunctionCallExpression, env: 
     else target + ".apply(" + function_value_call_arguments(parameters, call.arguments, env, module, allModules) + ")"
 
 private fun result_error_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    if stdlib_call_member_name(call.name) == "error"
+    let name = stdlib_call_member_name(call.name)
+    let arguments = expression_list_code(call.arguments, env, module, allModules)
+    if name == "error" | name == "fail"
     then "__capy_error(" + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules) + ")"
-    else "__capy_error("
+    else if name == "error_kind" | name == "fail_kind"
+    then "__capy_error("
         + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
         + ", "
         + expression_code(argument(call.arguments, 1), env, string_type(), module, allModules)
         + ")"
+    else if name == "error_with" | name == "fail_with"
+    then "__capy_error_with(" + arguments + ")"
+    else if name == "error_at"
+    then "__capy_error_at(" + arguments + ")"
+    else if name == "error_full"
+    then "__capy_error_full_value(" + arguments + ")"
+    else "(" + arguments + ")"
 
 /// Formats function value call arguments for generated emission.
 private fun function_value_call_arguments(parameters: List[CompiledTypeReference], arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -13709,11 +13719,26 @@ private fun result_error_literal(typeName: String, imports: List[CompiledImportD
 private fun result_error_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     stdlib_function_call(call, "capy/lang/Result", "error", module)
         | stdlib_function_call(call, "capy/lang/Result", "error_kind", module)
+        | stdlib_function_call(call, "capy/lang/Result", "error_with", module)
+        | stdlib_function_call(call, "capy/lang/Result", "error_at", module)
+        | stdlib_function_call(call, "capy/lang/Result", "error_full", module)
+        | stdlib_function_call(call, "capy/lang/Result", "fail", module)
+        | stdlib_function_call(call, "capy/lang/Result", "fail_kind", module)
+        | stdlib_function_call(call, "capy/lang/Result", "fail_with", module)
+        | stdlib_function_call(call, "capy/lang/Result", "fail_error", module)
 
 private fun result_error_function_call_emittable(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    if stdlib_call_member_name(call.name) == "error"
-    then one_string_argument(call.arguments, env, module, allModules)
-    else two_string_arguments(call.arguments, env, module, allModules)
+    result_error_function_call_arguments(stdlib_call_member_name(call.name), call.arguments)
+        & expressions_emittable(call.arguments, env, module, allModules)
+
+private fun result_error_function_call_arguments(name: String, arguments: List[CompiledExpression]): bool =
+    if name == "error" | name == "fail" | name == "fail_error"
+    then arguments.size().value == 1
+    else if name == "error_kind" | name == "fail_kind"
+    then arguments.size().value == 2
+    else if name == "error_with" | name == "fail_with" | name == "error_at"
+    then arguments.size().value == 3
+    else name == "error_full" & arguments.size().value == 8
 
 private fun one_string_argument(arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match arguments[0] with
@@ -14284,7 +14309,12 @@ private fun java_data_helpers(): String =
 
 /// Emits Java runtime helper source for option result helpers.
 private fun java_option_result_helpers(): String =
-    "    private static java.lang.Object __capy_error(java.lang.String message) {\n        return __capy_error(\"capy.error\", message);\n    }\n\n    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message) {\n        return __capy_error_full(kind, message, java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of());\n    }\n\n    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message, java.lang.Throwable throwable) {\n        java.util.List<java.lang.Object> stackTrace = __capy_stack_trace(throwable);\n        return "
+    "    private static java.lang.Object __capy_error(java.lang.String message) {\n        return __capy_error(\"capy.error\", message);\n    }\n\n    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message) {\n        return __capy_error_full(kind, message, java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of());\n    }\n\n"
+        + "    private static java.lang.Object __capy_error_with(java.lang.String kind, java.lang.String message, java.lang.Object details) {\n        return __capy_error_full(kind, message, java.util.Optional.ofNullable(details), java.util.Optional.empty(), java.util.List.of(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of());\n    }\n\n"
+        + "    private static java.lang.Object __capy_error_at(java.lang.String kind, java.lang.String message, java.lang.Object location) {\n        return __capy_error_full(kind, message, java.util.Optional.empty(), java.util.Optional.ofNullable(location), java.util.List.of(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of());\n    }\n\n"
+        + "    private static java.lang.Object __capy_error_full_value(java.lang.String kind, java.lang.String message, java.lang.Object details, java.lang.Object location, java.lang.Object stackTrace, java.lang.Object rawStack, java.lang.Object cause, java.lang.Object suppressed) {\n        return __capy_error_full(kind, message, __capy_optional_value(details), __capy_optional_value(location), __capy_object_list(stackTrace), __capy_optional_value(rawStack), __capy_optional_value(cause), __capy_object_list(suppressed));\n    }\n\n"
+        + "    private static java.util.List<java.lang.Object> __capy_object_list(java.lang.Object value) {\n        if (value instanceof java.util.List<?> list) {\n            java.util.ArrayList<java.lang.Object> result = new java.util.ArrayList<>();\n            result.addAll(list);\n            return java.util.List.copyOf(result);\n        }\n        return java.util.List.of();\n    }\n\n"
+        + "    private static java.lang.Object __capy_error(java.lang.String kind, java.lang.String message, java.lang.Throwable throwable) {\n        java.util.List<java.lang.Object> stackTrace = __capy_stack_trace(throwable);\n        return "
         + "__capy_error_full(kind, message, java.util.Optional.empty(), __capy_source_location(stackTrace), stackTrace, java.util.Optional.of(__capy_raw_stack(throwable)), __capy_cause(throwable), __capy_suppressed(throwable));\n    }\n\n    private static java.lang.Object __capy_thrown_error(java.lang.Object error, java.lang.Throwable throwable) {\n        if (!(error instanceof java.util.Map<?, ?> map)) {\n            return __capy_error(\"capy.runtime.invalid_thrown_error\", \"OO throw expected capy/lang/Result.Error\", throwable);\n        }\n        java.util.List<java.lang.Object> stackTrace = __capy_stack_trace(throwable);\n        return __capy_error_full(\n                "
         + "__capy_string_field(map, \"kind\", \"capy.error\"),\n                __capy_string_field(map, \"message\", \"\"),\n                __capy_optional_object_field(map, \"details\"),\n                __capy_source_location(stackTrace),\n                stackTrace,\n                java.util.Optional.of(__capy_raw_stack(throwable)),\n                __capy_optional_object_field(map, \"cause\"),\n                __capy_list_field(map, \"suppressed\")\n        );\n    }\n\n    private static java.lang.Object __capy_error_full(\n            java.lang.String kind,\n            java.lang.String message,\n            java.util.Optional<java.lang.Object> details,\n            "
         + "java.util.Optional<java.lang.Object> location,\n            java.util.List<java.lang.Object> stackTrace,\n            java.util.Optional<java.lang.String> rawStack,\n            java.util.Optional<java.lang.Object> cause,\n            java.util.List<java.lang.Object> suppressed\n    ) {\n        return java.util.Map.ofEntries(\n                java.util.Map.entry(\"__type\", \"Error\"),\n                java.util.Map.entry(\"kind\", kind),\n                java.util.Map.entry(\"message\", message),\n                java.util.Map.entry(\"details\", details),\n                java.util.Map.entry(\"location\", location),\n                java.util.Map.entry(\"stack_trace\", stackTrace),\n      "

@@ -121,7 +121,7 @@ private fun java_script_module_code(module: CompiledModule, emittedModules: List
 
 /// Emits JavaScript runtime support source for runtime symbols.
 private fun java_script_runtime_symbols(): String =
-    JAVA_SCRIPT_RUNTIME_SYMBOLS + ", __capy_dynamic_map, __capy_dynamic_flat_map, __capy_error_kind"
+    JAVA_SCRIPT_RUNTIME_SYMBOLS + ", __capy_dynamic_map, __capy_dynamic_flat_map, __capy_error_kind, __capy_error_with, __capy_error_at, __capy_error_full"
 
 private fun java_script_runtime_import_symbols(module: CompiledModule): String =
     let excluded = java_script_runtime_excluded_symbols(module)
@@ -299,6 +299,10 @@ private fun java_script_runtime_symbol_names(): List[String] =
         "__capy_result_recover",
         "__capy_dynamic_map",
         "__capy_dynamic_flat_map",
+        "__capy_error_kind",
+        "__capy_error_with",
+        "__capy_error_at",
+        "__capy_error_full",
         "__capy_constructor_result",
         "__capy_primitive_constructor_result",
         "__capy_constructor_pipeline",
@@ -2584,8 +2588,8 @@ private fun java_script_function_call_code(call: CompiledFunctionCallExpression,
     then java_script_stdlib_effect_function_call_code(stdlibCall.name)
     else if java_script_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then java_script_stdlib_async_function_call_code(stdlibCall, env, module, allModules)
-    else if java_script_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
-    then "__capy_error_kind(\"capy.error\", " + java_script_first_method_argument_code(stdlibCall.arguments, env, module, allModules) + ")"
+    else if java_script_resolved_stdlib_result_factory_call(stdlibCall, module, qualifiedStdlib)
+    then java_script_stdlib_result_factory_call_code(stdlibCall, env, module, allModules)
     else if java_script_oo_constructor_call(call.name, module, allModules)
     then java_script_oo_constructor_call_code(call, env, module, allModules)
     else if java_script_stdlib_path_function_call(call, module)
@@ -5704,10 +5708,35 @@ private fun java_script_runtime_function(name: String): bool =
         | name == "println_error"
         | name == "to_seq"
 
-private fun java_script_resolved_stdlib_result_error_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
-    call.name == "error"
-        & java_script_one_method_argument(call.arguments)
-        & (qualified | (!java_script_local_function_exists(call.name, module.functions) & java_script_result_member_imported(call.name, module.imports)))
+private fun java_script_resolved_stdlib_result_factory_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    java_script_stdlib_result_factory_arguments(call.name, call.arguments)
+        & java_script_result_member_imported(call.name, module.imports)
+        & (qualified | !java_script_local_function_exists(call.name, module.functions))
+
+/// Checks the arity of an exported Result factory implemented by the JavaScript runtime.
+private fun java_script_stdlib_result_factory_arguments(name: String, arguments: List[CompiledExpression]): bool =
+    if name == "error" | name == "fail" | name == "fail_error"
+    then arguments.size().value == 1
+    else if name == "error_kind" | name == "fail_kind"
+    then arguments.size().value == 2
+    else if name == "error_with" | name == "fail_with" | name == "error_at"
+    then arguments.size().value == 3
+    else name == "error_full" & arguments.size().value == 8
+
+/// Emits a Result factory through runtime helpers so the bundled Result module remains lookup-only.
+private fun java_script_stdlib_result_factory_call_code(call: CompiledFunctionCallExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let arguments = java_script_expression_list_code(call.arguments, env, module, allModules)
+    if call.name == "error" | call.name == "fail"
+    then "__capy_error_kind(\"capy.error\", " + arguments + ")"
+    else if call.name == "error_kind" | call.name == "fail_kind"
+    then "__capy_error_kind(" + arguments + ")"
+    else if call.name == "error_with" | call.name == "fail_with"
+    then "__capy_error_with(" + arguments + ")"
+    else if call.name == "error_at"
+    then "__capy_error_at(" + arguments + ")"
+    else if call.name == "error_full"
+    then "__capy_error_full(" + arguments + ")"
+    else "(" + arguments + ")"
 
 /// Checks whether an assertion method is implemented by the generated JavaScript test runtime.
 private fun java_script_runtime_assert_receiver_type(receiverType: String): bool =
@@ -7270,6 +7299,8 @@ private fun java_script_numeric_runtime_code(): String =
 /// Emits the JavaScript runtime support source for structured errors.
 private fun java_script_error_runtime_code(): String =
     "function __capy_error_kind(kind, message) { return __capy_error_full(kind, message, __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
+    + "function __capy_error_with(kind, message, details) { return __capy_error_full(kind, message, __capy_some(details), __capy_none(), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
+    + "function __capy_error_at(kind, message, location) { return __capy_error_full(kind, message, __capy_none(), __capy_some(location), [], __capy_none(), __capy_none(), []); }" + java_script_newline()
     + "function __capy_error_full(kind, message, details, location, stackTrace, rawStack, cause, suppressed) { return __capy_data('Error', { kind: String(kind), message: String(message), details, location, stack_trace: stackTrace, raw_stack: rawStack, cause, suppressed }); }" + java_script_newline()
     + "function __capy_some(value) { return __capy_data('Some', Object.fromEntries([['value', value]])); }" + java_script_newline()
     + "function __capy_stack_frames(rawStack) {" + java_script_newline()
