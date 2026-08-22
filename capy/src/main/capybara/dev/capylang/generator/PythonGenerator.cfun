@@ -1316,8 +1316,8 @@ private fun python_function_call_code(call: CompiledFunctionCallExpression, env:
     then python_stdlib_effect_function_call_code(stdlibCall.name)
     else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then python_stdlib_async_function_call_code(stdlibCall, env, module, allModules)
-    else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
-    then "__capy_error(" + python_first_method_argument_code(stdlibCall.arguments, env, module, allModules) + ")"
+    else if python_resolved_stdlib_result_factory_call(stdlibCall, module, qualifiedStdlib)
+    then python_stdlib_result_factory_call_code(stdlibCall, env, module, allModules)
     else if python_resolved_stdlib_parse_function_call(stdlibCall, module, qualifiedStdlib)
     then python_stdlib_parse_function_call_code(stdlibCall, env, module, allModules)
     else if python_resolved_stdlib_path_function_call(stdlibCall, module, qualifiedStdlib)
@@ -3958,8 +3958,8 @@ private fun python_function_call_expression_type(call: CompiledFunctionCallExpre
     then python_stdlib_effect_function_call_type(stdlibCall.name)
     else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
     then if stdlibCall.name == "compute" then "Async" else python_effect_type()
-    else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
-    then "Error"
+    else if python_resolved_stdlib_result_factory_call(stdlibCall, module, qualifiedStdlib)
+    then if python_stdlib_result_failure_factory(stdlibCall.name) then python_result_type() else "Error"
     else if python_object_type_function_call(call, module, allModules)
     then python_object_type_function_call_type(call, module, allModules)
     else if python_object_constructor_call(call, module, allModules)
@@ -4040,11 +4040,40 @@ private fun python_resolved_stdlib_async_function_call(call: CompiledFunctionCal
     then python_one_method_argument(call.arguments) & python_stdlib_async_function_name(call.name)
     else python_stdlib_async_function_call(call, module)
 
-/// Checks whether a resolved call targets the runtime-backed Result.error factory.
-private fun python_resolved_stdlib_result_error_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
-    call.name == "error"
-        & python_one_method_argument(call.arguments)
-        & (qualified | (!python_local_function_exists(call.name, module.functions) & python_result_member_imported(call.name, module.imports)))
+/// Checks whether a resolved call targets a runtime-backed Result factory.
+private fun python_resolved_stdlib_result_factory_call(call: CompiledFunctionCallExpression, module: CompiledModule, qualified: bool): bool =
+    python_stdlib_result_factory_arguments(call.name, call.arguments)
+        & python_result_member_imported(call.name, module.imports)
+        & (qualified | !python_local_function_exists(call.name, module.functions))
+
+/// Checks the arity of an exported Result factory implemented by the Python runtime.
+private fun python_stdlib_result_factory_arguments(name: String, arguments: List[CompiledExpression]): bool =
+    if name == "error" | name == "fail" | name == "fail_error"
+    then arguments.size().value == 1
+    else if name == "error_kind" | name == "fail_kind"
+    then arguments.size().value == 2
+    else if name == "error_with" | name == "fail_with" | name == "error_at"
+    then arguments.size().value == 3
+    else name == "error_full" & arguments.size().value == 8
+
+/// Checks whether a Result factory has the generic Result return type rather than Error.
+private fun python_stdlib_result_failure_factory(name: String): bool =
+    name == "fail" | name == "fail_kind" | name == "fail_with" | name == "fail_error"
+
+/// Emits a Result factory through runtime helpers so the bundled Result module remains lookup-only.
+private fun python_stdlib_result_factory_call_code(call: CompiledFunctionCallExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let arguments = python_expression_list_code(call.arguments, env, module, allModules)
+    if call.name == "error" | call.name == "fail"
+    then "__capy_error(" + arguments + ")"
+    else if call.name == "error_kind" | call.name == "fail_kind"
+    then "__capy_error_kind(" + arguments + ")"
+    else if call.name == "error_with" | call.name == "fail_with"
+    then "__capy_error_with(" + arguments + ")"
+    else if call.name == "error_at"
+    then "__capy_error_at(" + arguments + ")"
+    else if call.name == "error_full"
+    then "__capy_error_full(" + arguments + ")"
+    else "(" + arguments + ")"
 
 private fun python_stdlib_async_function_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
     python_one_method_argument(call.arguments)
@@ -6780,6 +6809,7 @@ private fun python_test_runtime_header_code(): String =
     + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', '__capy_assert_failed', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '__capy_random_seed', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_dynamic_method', '__capy_bind_value', '__capy_block_bind', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_values', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_fold', '__capy_as_list', '__capy_seq_first_value', '__capy_seq_rest', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_option_or', '__capy_option_or_else', '__capy_result_from_value', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_dynamic_map', '__capy_dynamic_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + "__all__.append('__capy_seq_first')" + python_newline()
     + "__all__.append('__capy_error')" + python_newline()
+    + "__all__.extend(['__capy_error_kind', '__capy_error_with', '__capy_error_at', '__capy_error_full'])" + python_newline()
     + python_newline()
 
 /// Emits Python code for test runtime effect.
@@ -7725,6 +7755,12 @@ private fun python_test_runtime_error_code(): String =
     + python_newline()
     + "def __capy_error_kind(kind, message):" + python_newline()
     + "    return __capy_error_full(kind, message, __capy_none(), __capy_none(), [], __capy_none(), __capy_none(), [])" + python_newline()
+    + python_newline()
+    + "def __capy_error_with(kind, message, details):" + python_newline()
+    + "    return __capy_error_full(kind, message, __capy_some(details), __capy_none(), [], __capy_none(), __capy_none(), [])" + python_newline()
+    + python_newline()
+    + "def __capy_error_at(kind, message, location):" + python_newline()
+    + "    return __capy_error_full(kind, message, __capy_none(), __capy_some(location), [], __capy_none(), __capy_none(), [])" + python_newline()
     + python_newline()
     + "def __capy_error_full(kind, message, details, location, stack_trace, raw_stack, cause, suppressed):" + python_newline()
     + "    return __capy_data('Error', dict(kind=str(kind), message=str(message), details=details, location=location, stack_trace=stack_trace, raw_stack=raw_stack, cause=cause, suppressed=suppressed))" + python_newline()
@@ -9158,7 +9194,7 @@ private fun python_function_call_gatherable(call: CompiledFunctionCallExpression
         then true
         else if python_resolved_stdlib_async_function_call(stdlibCall, module, qualifiedStdlib)
         then true
-        else if python_resolved_stdlib_result_error_call(stdlibCall, module, qualifiedStdlib)
+        else if python_resolved_stdlib_result_factory_call(stdlibCall, module, qualifiedStdlib)
         then true
         else if python_resolved_stdlib_parse_function_call(stdlibCall, module, qualifiedStdlib)
         then true

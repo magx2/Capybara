@@ -270,6 +270,12 @@ class CompilationTest {
                 fun failed(message: String): Result[int] =
                     error(message)
 
+                fun failed_kind(kind: String, message: String): Result[int] =
+                    fail_kind(kind, message)
+
+                fun detailed_error(kind: String, message: String, details: data): Error =
+                    error_with(kind, message, details)
+
                 fun check(value: String): Assert =
                     assert_that(value).is_equal_to("ok")
                 """)));
@@ -283,6 +289,8 @@ class CompilationTest {
                 .contains("java.util.Optional<java.lang.Integer>")
                 .contains("java.lang.Object result")
                 .contains("__capy_result_is_success")
+                .contains("__capy_error(kind, message)")
+                .contains("__capy_error_with(kind, message, details)")
                 .contains("__capy_assert_equal(");
 
         var pythonModules = PythonGenerator.pythonGenerator(program).modules();
@@ -298,6 +306,8 @@ class CompilationTest {
                 .contains("__capy_index(values, 0)")
                 .contains("__capy_result_reduce(result")
                 .contains("__capy_error(message)")
+                .contains("__capy_error_kind(kind, message)")
+                .contains("__capy_error_with(kind, message, details)")
                 .contains("__import__(\"capy.test.Assert\"");
 
         var javaScriptModules = JavaScriptGenerator.javaScriptGenerator(program).modules();
@@ -313,6 +323,8 @@ class CompilationTest {
                 .contains("__capy_index(values, 0, \"List\")")
                 .contains("__capy_result_reduce(result")
                 .contains("__capy_error_kind(\"capy.error\", message)")
+                .contains("__capy_error_kind(kind, message)")
+                .contains("__capy_error_with(kind, message, details)")
                 .contains("capy/test/Assert");
     }
 
