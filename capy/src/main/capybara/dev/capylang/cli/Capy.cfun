@@ -46,7 +46,7 @@ from /dev/capylang/compiler/parser/RawModuleFactory import { functional_raw_modu
 from /dev/capylang/doc/DocGenerator import { render_adoc_docs }
 from /dev/capylang/generator/GeneratedModule import { GeneratedModule }
 from /dev/capylang/generator/GeneratedProgram import { GeneratedProgram }
-from /dev/capylang/generator/Generator import { generate }
+from /dev/capylang/generator/Generator import { generate, generate_with_lookup }
 
 // This is set during build
 const COMPILER_VERSION = "x.y.z"
@@ -1333,13 +1333,15 @@ private fun compile_generate_tests(
             match outputResult with
             case Error e -> pure(e)
             case Success _ ->
-                compile_source_directory(testInputPath, rawTestInput, configuration.with(libraries: merge_libraries(configuration.libraries, mainProgram))).flat_map(compilation =>
-                    match compilation with
-                    case Right { errors } -> pure(Error { message: compiler_errors_text(errors) })
-                    case Left { program } ->
-                        let testProgram = test_generation_program(options.output_type, mainProgram, program)
-                        pure(Success { Some { testProgram } })
-                )
+                if compile_generate_inputs_match(options)
+                then pure(Success { Some { mainProgram } })
+                else
+                    compile_source_directory(testInputPath, rawTestInput, configuration.with(libraries: merge_libraries(configuration.libraries, mainProgram))).flat_map(compilation =>
+                        match compilation with
+                        case Right { errors } -> pure(Error { message: compiler_errors_text(errors) })
+                        case Left { program } ->
+                            pure(Success { Some { program } })
+                    )
         )
 
 private fun write_compile_generate_test_output(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
@@ -1353,36 +1355,46 @@ private fun write_compile_generate_test_output(options: CompileGenerateOptions, 
 private fun write_compile_generate_outputs(options: CompileGenerateOptions, mainProgram: CompiledProgram, testProgram: Option[CompiledProgram]): Effect[Result[String]] =
     match testProgram with
     case Some { test } -> {
-        match options.test_output with
-        case Some { rawTestOutput } when rawTestOutput == options.output ->
-            write_generated_program(
-                from_string(options.output),
-                merge_generated_programs(generate(mainProgram, options.output_type), test_generated_program(options.output_type, mainProgram, test))
-            )
-        case _ ->
-            write_generated_program(from_string(options.output), generate(mainProgram, options.output_type)).flat_map(writeResult =>
-                match writeResult with
-                case Error e -> pure(e)
-                case Success _ -> write_compile_generate_test_output(options, mainProgram, testProgram)
-            )
+        if compile_generate_inputs_match(options)
+        then
+            let generated = generate(mainProgram, options.output_type)
+            match options.test_output with
+            case Some { rawTestOutput } when rawTestOutput == options.output ->
+                write_generated_program(from_string(options.output), generated)
+            case Some { rawTestOutput } ->
+                write_generated_program(from_string(options.output), generated).flat_map(writeResult =>
+                    match writeResult with
+                    case Error e -> pure(e)
+                    case Success _ -> write_generated_program(from_string(rawTestOutput), generated)
+                )
+            case None -> pure(Error { message: "`compile-generate` requires both `--test-input` and `--test-output` when either is provided." })
+        else
+            match options.test_output with
+            case Some { rawTestOutput } when rawTestOutput == options.output ->
+                write_generated_program(
+                    from_string(options.output),
+                    merge_generated_programs(generate(mainProgram, options.output_type), test_generated_program(options.output_type, mainProgram, test))
+                )
+            case _ ->
+                write_generated_program(from_string(options.output), generate(mainProgram, options.output_type)).flat_map(writeResult =>
+                    match writeResult with
+                    case Error e -> pure(e)
+                    case Success _ -> write_compile_generate_test_output(options, mainProgram, testProgram)
+                )
     }
     case None -> write_generated_program(from_string(options.output), generate(mainProgram, options.output_type))
+
+private fun compile_generate_inputs_match(options: CompileGenerateOptions): bool =
+    match options.test_input with
+    case None -> false
+    case Some { rawTestInput } -> rawTestInput == options.input
 
 private fun merge_generated_programs(first: GeneratedProgram, second: GeneratedProgram): GeneratedProgram =
     GeneratedProgram { modules: first.modules + second.modules }
 
-/// Generates tests with main-module metadata available while keeping Java main classes in their dedicated output directory.
+/// Generates only test modules while resolving their symbols against the freshly compiled main program.
 private fun test_generated_program(outputType: String, mainProgram: CompiledProgram, testProgram: CompiledProgram): GeneratedProgram =
-    if outputType == "java"
-    then
-        let generated = generate(merge_programs(mainProgram, testProgram), outputType)
-        GeneratedProgram { modules: drop_generated_modules(generated.modules, mainProgram.modules.size()) }
-    else generate(testProgram, outputType)
-
-private fun drop_generated_modules(modules: List[GeneratedModule], count: int): List[GeneratedModule] =
-    if count <= 0
-    then modules
-    else drop_generated_modules(modules[1:], count - 1)
+    generate_with_lookup(testProgram, merge_programs(mainProgram, testProgram), outputType)
 
 private fun merge_libraries(libraries: Set[CompiledModule], program: CompiledProgram): Set[CompiledModule] =
     add_modules_to_libraries(libraries, program.modules)
@@ -1392,19 +1404,55 @@ private fun add_modules_to_libraries(libraries: Set[CompiledModule], modules: Li
     case None -> libraries
     case Some { module } -> add_modules_to_libraries(libraries + module, modules[1:])
 
-private fun test_generation_program(outputType: String, mainProgram: CompiledProgram, testProgram: CompiledProgram): CompiledProgram =
-    match outputType with
-    case "javascript" | "python" -> merge_programs(mainProgram, testProgram)
-    case "java" -> testProgram
-    case _ -> testProgram
-
 private fun merge_programs(first: CompiledProgram, second: CompiledProgram): CompiledProgram =
     CompiledProgram {
-        modules: first.modules + second.modules,
-        objectOrientedModules: first.objectOrientedModules + second.objectOrientedModules,
+        modules: merge_compiled_modules(first.modules, second.modules),
+        objectOrientedModules: merge_object_oriented_modules(first.objectOrientedModules, second.objectOrientedModules),
         nativeProviders: merge_native_providers(first.nativeProviders, second.nativeProviders),
         nativeProviderCatalog: merge_native_provider_catalog(first.nativeProviderCatalog, second.nativeProviderCatalog)
     }
+
+private fun merge_compiled_modules(first: List[CompiledModule], second: List[CompiledModule]): List[CompiledModule] =
+    match second[0] with
+    case None -> first
+    case Some { module } ->
+        let merged =
+            if compiled_module_present(module.name, module.path, first)
+            then first
+            else first + module
+        merge_compiled_modules(merged, second[1:])
+
+private fun compiled_module_present(name: String, path: String, modules: List[CompiledModule]): bool =
+    compiled_module_present_at(name, path, modules, 0)
+
+private fun compiled_module_present_at(name: String, path: String, modules: List[CompiledModule], idx: int): bool =
+    match modules[idx] with
+    case None -> false
+    case Some { module } ->
+        if module.name == name & module.path == path
+        then true
+        else compiled_module_present_at(name, path, modules, idx + 1)
+
+private fun merge_object_oriented_modules(first: List[CompiledObjectOrientedUnit], second: List[CompiledObjectOrientedUnit]): List[CompiledObjectOrientedUnit] =
+    match second[0] with
+    case None -> first
+    case Some { unit } ->
+        let merged =
+            if object_oriented_module_present(unit.name, unit.path, first)
+            then first
+            else first + unit
+        merge_object_oriented_modules(merged, second[1:])
+
+private fun object_oriented_module_present(name: String, path: String, modules: List[CompiledObjectOrientedUnit]): bool =
+    object_oriented_module_present_at(name, path, modules, 0)
+
+private fun object_oriented_module_present_at(name: String, path: String, modules: List[CompiledObjectOrientedUnit], idx: int): bool =
+    match modules[idx] with
+    case None -> false
+    case Some { module } ->
+        if module.name == name & module.path == path
+        then true
+        else object_oriented_module_present_at(name, path, modules, idx + 1)
 
 private fun merge_native_providers(first: NativeProviderManifest, second: NativeProviderManifest): NativeProviderManifest =
     if first.providers.is_empty()
@@ -3076,7 +3124,7 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
                                             match testResult with
                                             case Error { message } -> runtime_error(message)
                                             case Success { testProgram } ->
-                                                validate_compile_generate_test_program(testProgram, options.output_type).flat_map(testBackendErrors =>
+                                                validate_compile_generate_test_program(options, testProgram, options.output_type).flat_map(testBackendErrors =>
                                                     if !testBackendErrors.is_empty()
                                                     then print_compiler_errors(testBackendErrors)
                                                         .map(_ => /capy/lang/Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
@@ -3093,10 +3141,13 @@ fun run_compile_generate(options: CompileGenerateOptions): Effect[/capy/lang/Pro
             )
     )
 
-private fun validate_compile_generate_test_program(testProgram: Option[CompiledProgram], outputType: String): Effect[List[CompilerError]] =
-    match testProgram with
-    case None -> pure([])
-    case Some { program } -> /dev/capylang/compiler/CapybaraCompiler.validate_backend(program, outputType)
+private fun validate_compile_generate_test_program(options: CompileGenerateOptions, testProgram: Option[CompiledProgram], outputType: String): Effect[List[CompilerError]] =
+    if compile_generate_inputs_match(options)
+    then pure([])
+    else
+        match testProgram with
+        case None -> pure([])
+        case Some { program } -> /dev/capylang/compiler/CapybaraCompiler.validate_backend(program, outputType)
 
 fun run_package(options: PackageOptions): Effect[/capy/lang/Program] =
     let moduleFile = from_string(options.module)

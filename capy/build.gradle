@@ -544,6 +544,179 @@ tasks.named('compileCapybara') {
     includeJavaLibResources.set(false)
 }
 
+def replaceGeneratedLookupMethod = { String source, String methodPrefix, Closure<String> replacement ->
+    def pattern = java.util.regex.Pattern.compile(
+            "(?ms)^    private static java\\.util\\.Optional<java\\.lang\\.Object> ("
+                    + java.util.regex.Pattern.quote(methodPrefix)
+                    + "__\\d+_0)\\([^\\r\\n]+\\) \\{.*?^    \\}\\r?" + '$'
+    )
+    def matcher = pattern.matcher(source)
+    if (!matcher.find()) {
+        throw new GradleException("Unable to find generated lookup method `${methodPrefix}`.")
+    }
+    matcher.replaceFirst(java.util.regex.Matcher.quoteReplacement(replacement(matcher.group(1))))
+}
+
+def replaceGeneratedScalarMethod = { String source, String returnType, String methodPrefix, Closure<String> replacement ->
+    def pattern = java.util.regex.Pattern.compile(
+            "(?ms)^    private static "
+                    + java.util.regex.Pattern.quote(returnType)
+                    + " ("
+                    + java.util.regex.Pattern.quote(methodPrefix)
+                    + "__\\d+_0)\\([^\\r\\n]+\\) \\{.*?^    \\}\\r?" + '$'
+    )
+    def matcher = pattern.matcher(source)
+    if (!matcher.find()) {
+        throw new GradleException("Unable to find generated scalar method `${methodPrefix}`.")
+    }
+    matcher.replaceFirst(java.util.regex.Matcher.quoteReplacement(replacement(matcher.group(1))))
+}
+
+def generatedMethodName = { String source, String methodPrefix ->
+    def pattern = java.util.regex.Pattern.compile(
+            "private static boolean (" + java.util.regex.Pattern.quote(methodPrefix) + "__\\d+_0)\\("
+    )
+    def matcher = pattern.matcher(source)
+    if (!matcher.find()) {
+        throw new GradleException("Unable to find generated helper method `${methodPrefix}`.")
+    }
+    matcher.group(1)
+}
+
+def generatedMethodNameReturning = { String source, String returnType, String methodPrefix ->
+    def pattern = java.util.regex.Pattern.compile(
+            "private static " + java.util.regex.Pattern.quote(returnType) + " ("
+                    + java.util.regex.Pattern.quote(methodPrefix) + "__\\d+_0)\\("
+    )
+    def matcher = pattern.matcher(source)
+    if (!matcher.find()) {
+        throw new GradleException("Unable to find generated helper method `${methodPrefix}`.")
+    }
+    matcher.group(1)
+}
+
+def optimizeGeneratedListSlices = { String source ->
+    def copyingSlice = 'return java.util.List.copyOf(values.subList(normalizedStart, normalizedEnd));'
+    if (!source.contains(copyingSlice)) {
+        throw new GradleException('Unable to find generated list-slice helper.')
+    }
+    source.replace(
+            copyingSlice,
+            'return java.util.Collections.unmodifiableList(values.subList(normalizedStart, normalizedEnd));'
+    )
+}
+
+def optimizeGeneratedStringSearches = { String source, String prefix ->
+    def optimized = replaceGeneratedScalarMethod(source, 'boolean', prefix + '_string_has_prefix') { String method ->
+        """    private static boolean ${method}(java.lang.String value, java.lang.String prefix) {
+        return value.startsWith(prefix);
+    }"""
+    }
+    optimized = replaceGeneratedScalarMethod(optimized, 'boolean', prefix + '_string_has_suffix') { String method ->
+        """    private static boolean ${method}(java.lang.String value, java.lang.String suffix) {
+        return value.endsWith(suffix);
+    }"""
+    }
+    optimized = replaceGeneratedScalarMethod(optimized, 'int', prefix + '_first_index_of') { String method ->
+        """    private static int ${method}(java.lang.String value, java.lang.String expected, int idx) {
+        return value.indexOf(expected, idx);
+    }"""
+    }
+    replaceGeneratedScalarMethod(optimized, 'int', prefix + '_last_dot_index') { String method ->
+        """    private static int ${method}(java.lang.String value) {
+        return value.lastIndexOf('.');
+    }"""
+    }
+}
+
+def optimizeGeneratedSchemaLookups = { String source, String prefix, String valuesType ->
+    def compiledSchema = generatedMethodNameReturning(source, 'boolean', prefix + '_compiled_schema')
+    def schemaValue = generatedMethodNameReturning(source, 'java.lang.String', prefix + '_schema_value')
+    def optimized = replaceGeneratedScalarMethod(source, 'boolean', prefix + '_schema_type_exists_named') { String method ->
+        """    private static boolean ${method}(java.lang.String name, java.util.List<java.lang.Object> functions) {
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamed(functions, name)) {
+            if (${compiledSchema}(function)) {
+                return true;
+            }
+        }
+        return false;
+    }"""
+    }
+    replaceGeneratedScalarMethod(optimized, 'java.lang.Object', prefix + '_schema_values_for_type_named') { String method ->
+        """    private static java.lang.Object ${method}(java.lang.String typeSchemaName, java.lang.String valuePrefix, java.util.List<java.lang.Object> functions) {
+        boolean typeExists = false;
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamed(functions, typeSchemaName)) {
+            if (${compiledSchema}(function)) {
+                typeExists = true;
+                break;
+            }
+        }
+        java.util.ArrayList<java.lang.String> values = new java.util.ArrayList<>();
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamedWithPrefix(functions, valuePrefix)) {
+            if (${compiledSchema}(function)) {
+                values.add(${schemaValue}(function));
+            }
+        }
+        return __capy_data("${valuesType}", java.util.Map.ofEntries(
+                java.util.Map.entry("typeExists", typeExists),
+                java.util.Map.entry("values", java.util.List.copyOf(values))));
+    }"""
+    }
+}
+
+def optimizePythonGeneratorLookups = { String source ->
+    def callable = generatedMethodName(source, 'python_callable_function')
+    def optimized = replaceGeneratedLookupMethod(source, 'python_find_function') { String method ->
+        """    private static java.util.Optional<java.lang.Object> ${method}(java.lang.String name, java.util.List<java.lang.Object> functions) {
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamed(functions, name)) {
+            if (${callable}(function)) {
+                return java.util.Optional.of(function);
+            }
+        }
+        return java.util.Optional.empty();
+    }"""
+    }
+    optimized = replaceGeneratedLookupMethod(optimized, 'python_find_function_with_arity') { String method ->
+        """    private static java.util.Optional<java.lang.Object> ${method}(java.lang.String name, int argumentCount, java.util.List<java.lang.Object> functions) {
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamed(functions, name)) {
+            if (${callable}(function)
+                    && ((java.util.List<?>) __capy_data_field(function, \"parameters\")).size() == argumentCount) {
+                return java.util.Optional.of(function);
+            }
+        }
+        return java.util.Optional.empty();
+    }"""
+    }
+    optimized = replaceGeneratedLookupMethod(optimized, 'python_find_module_by_path') { String method ->
+        """    private static java.util.Optional<java.lang.Object> ${method}(java.lang.String modulePath, java.util.List<java.lang.Object> modules) {
+        return dev.capylang.generator.GeneratorLookupIndex.moduleByPath(modulePath, modules);
+    }"""
+    }
+    optimized = optimizeGeneratedStringSearches(optimized, 'python')
+    optimizeGeneratedSchemaLookups(optimized, 'python', 'PythonSchemaValues')
+}
+
+def optimizeJavaScriptGeneratorLookups = { String source ->
+    def callable = generatedMethodName(source, 'java_script_callable_function')
+    def optimized = replaceGeneratedLookupMethod(source, 'java_script_find_function') { String method ->
+        """    private static java.util.Optional<java.lang.Object> ${method}(java.lang.String name, java.util.List<java.lang.Object> functions) {
+        for (java.lang.Object function : dev.capylang.generator.GeneratorLookupIndex.functionsNamed(functions, name)) {
+            if (${callable}(function)) {
+                return java.util.Optional.of(function);
+            }
+        }
+        return java.util.Optional.empty();
+    }"""
+    }
+    optimized = replaceGeneratedLookupMethod(optimized, 'java_script_find_module_by_path') { String method ->
+        """    private static java.util.Optional<java.lang.Object> ${method}(java.lang.String modulePath, java.util.List<java.lang.Object> modules) {
+        return dev.capylang.generator.GeneratorLookupIndex.moduleByPath(modulePath, modules);
+    }"""
+    }
+    optimized = optimizeGeneratedStringSearches(optimized, 'java_script')
+    optimizeGeneratedSchemaLookups(optimized, 'java_script', 'JavaScriptSchemaValues')
+}
+
 def prepareJavaGeneratorImplementation = tasks.register('prepareJavaGeneratorImplementation') {
     group = capybaraTaskGroup
     description = 'Prepares the self-hosted Java generator behind its bootstrap-compatible adapter.'
@@ -592,7 +765,7 @@ def prepareJavaGeneratorImplementation = tasks.register('prepareJavaGeneratorImp
         implementation = replaceStringStub(implementation, 'java_data_helpers', bootstrapHelper('javaDataHelpers'))
         implementation = replaceStringStub(implementation, 'java_collection_helpers', bootstrapHelper('javaCollectionHelpers'))
         bootstrapLoader.close()
-        output.setText(implementation, 'UTF-8')
+        output.setText(optimizeGeneratedListSlices(implementation), 'UTF-8')
     }
 }
 
@@ -612,7 +785,7 @@ def preparePythonGeneratorImplementation = tasks.register('preparePythonGenerato
                 .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
                 .replace('public final class PythonGenerator {', 'public final class GeneratedPythonGenerator {')
                 .replace('private PythonGenerator() {}', 'private GeneratedPythonGenerator() {}')
-        output.setText(implementation, 'UTF-8')
+        output.setText(optimizeGeneratedListSlices(optimizePythonGeneratorLookups(implementation)), 'UTF-8')
     }
 }
 
@@ -632,7 +805,7 @@ def prepareJavaScriptGeneratorImplementation = tasks.register('prepareJavaScript
                 .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
                 .replace('public final class JavaScriptGenerator {', 'public final class GeneratedJavaScriptGenerator {')
                 .replace('private JavaScriptGenerator() {}', 'private GeneratedJavaScriptGenerator() {}')
-        output.setText(implementation, 'UTF-8')
+        output.setText(optimizeGeneratedListSlices(optimizeJavaScriptGeneratorLookups(implementation)), 'UTF-8')
     }
 }
 

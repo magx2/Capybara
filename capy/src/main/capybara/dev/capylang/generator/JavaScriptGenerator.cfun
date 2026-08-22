@@ -83,7 +83,7 @@ fun java_script_generator_with_lookup(sourceProgram: CompiledProgram, lookupProg
     let emittedModules = java_script_runtime_source_modules(sourceProgram.modules, lookupProgram.modules)
     GeneratedProgram {
         modules: java_script_modules(emittedModules, emittedModules, lookupProgram.modules, nativeProviderIndex)
-            + java_script_test_runtime_modules(sourceProgram.modules)
+            + java_script_test_runtime_modules(sourceProgram.modules, lookupProgram.modules)
     }
 
 private fun java_script_runtime_source_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
@@ -6164,14 +6164,18 @@ private fun java_script_find_local_function_at(name: String, functions: List[Com
 
 /// Finds a function in scope, imports, or compiled modules.
 private fun java_script_find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    match functions[0] with
+    java_script_find_function_at(name, functions, 0)
+
+/// Finds a callable function by name from the requested index.
+private fun java_script_find_function_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[CompiledFunction] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if function.name == name
         then if java_script_callable_function(function)
             then /capy/lang/Option.Some { function }
-            else java_script_find_function(name, functions[1:])
-        else java_script_find_function(name, functions[1:])
+            else java_script_find_function_at(name, functions, idx + 1)
+        else java_script_find_function_at(name, functions, idx + 1)
 
 /// Checks whether a function matches the callable function metadata.
 private fun java_script_callable_function(function: CompiledFunction): bool =
@@ -6805,12 +6809,16 @@ private fun java_script_find_imported_module(declaration: CompiledImportDeclarat
 
 /// Finds a module by path in scope, imports, or compiled modules.
 private fun java_script_find_module_by_path(modulePath: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
-    match modules[0] with
+    java_script_find_module_by_path_at(modulePath, modules, 0)
+
+/// Finds a module by path from the requested index.
+private fun java_script_find_module_by_path_at(modulePath: String, modules: List[CompiledModule], idx: int): /capy/lang/Option[CompiledModule] =
+    match modules[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
         if java_script_module_matches_path(modulePath, module)
         then /capy/lang/Option.Some { module }
-        else java_script_find_module_by_path(modulePath, modules[1:])
+        else java_script_find_module_by_path_at(modulePath, modules, idx + 1)
 
 /// Checks whether a compiled module matches a slash-separated module path without building the full path.
 private fun java_script_module_matches_path(modulePath: String, module: CompiledModule): bool =
@@ -7035,14 +7043,14 @@ private fun java_script_export_name(function: CompiledFunction): String =
     java_script_function_name(function)
 
 /// Creates JavaScript generated-module entries for test runtime.
-private fun java_script_test_runtime_modules(modules: List[CompiledModule]): List[GeneratedModule] =
+private fun java_script_test_runtime_modules(modules: List[CompiledModule], allModules: List[CompiledModule]): List[GeneratedModule] =
     [GeneratedModule {
         relativePath: "capy/test/CapyTestRuntime.js",
-        code: java_script_test_runtime_code(modules)
+        code: java_script_test_runtime_code(modules, allModules)
     }]
 
 /// Emits the JavaScript runtime support source for test.
-private fun java_script_test_runtime_code(modules: List[CompiledModule]): String =
+private fun java_script_test_runtime_code(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     "'use strict';" + java_script_newline()
     + java_script_newline()
     + java_script_effect_runtime_code()
@@ -7057,7 +7065,7 @@ private fun java_script_test_runtime_code(modules: List[CompiledModule]): String
     + java_script_date_time_runtime_code()
     + java_script_deep_equal_code()
     + java_script_reflection_runtime_code(modules)
-    + java_script_test_gather_runtime_code(modules)
+    + java_script_test_gather_runtime_code(modules, allModules)
     + java_script_runtime_exports_code()
 
 /// Emits the JavaScript runtime support source for module export.
@@ -7528,11 +7536,11 @@ private fun java_script_date_time_runtime_code(): String =
     + java_script_newline()
 
 /// Emits the JavaScript runtime support source for test gather.
-private fun java_script_test_gather_runtime_code(modules: List[CompiledModule]): String =
+private fun java_script_test_gather_runtime_code(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     java_script_newline()
     + "function gatherTests() {" + java_script_newline()
     + "    const files = [];" + java_script_newline()
-    + java_script_test_gather_calls(modules, modules)
+    + java_script_test_gather_calls(modules, allModules)
     + "    return files;" + java_script_newline()
     + "}" + java_script_newline()
     + java_script_newline()

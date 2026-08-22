@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.compiler.BackendCompilationContext;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.LinkedJsonCodec;
@@ -19,11 +20,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
 public final class JavaGenerator {
-    private static final ThreadLocal<CompiledProgram> MAIN_PROGRAM_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<ScopedProgram> MAIN_PROGRAM_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<CachedGeneration> LAST_GENERATION = new ThreadLocal<>();
+    private static final Map<String, Optional<Map<String, Object>>> BUNDLED_IMPORT_MODULES =
+            new ConcurrentHashMap<>();
     private static final String PRIMITIVE_SCHEMA_PREFIX = "__capy_schema_primitive|";
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Pattern UNSUPPORTED_FUNCTION = Pattern.compile(
@@ -35,7 +40,11 @@ public final class JavaGenerator {
 
     public static GeneratedProgram javaGenerator(CompiledProgram program) {
         var standaloneTestProgram = standaloneTestProgram(program);
-        var mainContext = MAIN_PROGRAM_CONTEXT.get();
+        var invocation = BackendCompilationContext.generationInvocation().orElse(null);
+        var scopedContext = MAIN_PROGRAM_CONTEXT.get();
+        var mainContext = scopedContext != null && scopedContext.invocation() == invocation
+                ? scopedContext.program()
+                : null;
         var generationProgram = standaloneTestProgram
                 && mainContext != null
                 && importsMainModule(program, mainContext)
@@ -43,11 +52,28 @@ public final class JavaGenerator {
                 : program;
         if (standaloneTestProgram) {
             MAIN_PROGRAM_CONTEXT.remove();
-        } else if (program.modules().stream().noneMatch(JavaGenerator::testModule)) {
-            MAIN_PROGRAM_CONTEXT.set(program);
+        } else if (invocation != null && program.modules().stream().noneMatch(JavaGenerator::testModule)) {
+            MAIN_PROGRAM_CONTEXT.set(new ScopedProgram(invocation, program));
         }
-        var sourceProgram = dataMap(toGeneratedValue(program));
-        var compiledProgram = withBundledImportModules(dataMap(toGeneratedValue(generationProgram)));
+        return javaGeneratorWithLookup(program, generationProgram);
+    }
+
+    public static GeneratedProgram javaGeneratorWithLookup(
+            CompiledProgram source,
+            CompiledProgram lookup
+    ) {
+        var sameProgram = source == lookup;
+        source = deduplicateProgram(source);
+        lookup = sameProgram ? source : deduplicateProgram(lookup);
+        var cached = LAST_GENERATION.get();
+        if (cached != null && cached.source().equals(source) && cached.lookup().equals(lookup)) {
+            return cached.generated();
+        }
+        var sourceProgram = dataMap(toGeneratedValue(source));
+        var lookupProgram = source == lookup
+                ? sourceProgram
+                : dataMap(toGeneratedValue(lookup));
+        var compiledProgram = withBundledImportModules(lookupProgram);
         var generated = dataMap(GeneratedJavaGenerator.java_generator_with_lookup__137_0(
                 sourceProgram,
                 compiledProgram
@@ -56,7 +82,32 @@ public final class JavaGenerator {
                 .map(JavaGenerator::generatedModule)
                 .toList();
         modules.forEach(module -> rejectUnsupportedFunctions(module, compiledProgram));
-        return new GeneratedProgram(modules);
+        var result = new GeneratedProgram(modules);
+        LAST_GENERATION.set(new CachedGeneration(source, lookup, result));
+        return result;
+    }
+
+    static CompiledProgram deduplicateProgram(CompiledProgram program) {
+        var modules = new LinkedHashMap<String, CompiledModule>();
+        for (var module : program.modules()) {
+            modules.putIfAbsent(moduleImportPath(module), module);
+        }
+        var objectOrientedModules = new LinkedHashMap<String, dev.capylang.compiler.CompiledObjectOrientedUnit>();
+        for (var module : program.objectOrientedModules()) {
+            var path = normalizeModuleImportPath(module.path());
+            var modulePath = path.isBlank() ? module.name() : path + "/" + module.name();
+            objectOrientedModules.putIfAbsent(modulePath, module);
+        }
+        if (modules.size() == program.modules().size()
+                && objectOrientedModules.size() == program.objectOrientedModules().size()) {
+            return program;
+        }
+        return new CompiledProgram(
+                List.copyOf(modules.values()),
+                List.copyOf(objectOrientedModules.values()),
+                program.nativeProviders(),
+                program.nativeProviderCatalog()
+        );
     }
 
     private static boolean standaloneTestProgram(CompiledProgram program) {
@@ -82,7 +133,7 @@ public final class JavaGenerator {
         return path.isBlank() ? module.name() : path + "/" + module.name();
     }
 
-    private static CompiledProgram mergePrograms(CompiledProgram main, CompiledProgram tests) {
+    static CompiledProgram mergePrograms(CompiledProgram main, CompiledProgram tests) {
         var modules = new ArrayList<CompiledModule>(main.modules());
         modules.addAll(tests.modules());
         var objectOrientedModules = new ArrayList<>(main.objectOrientedModules());
@@ -93,6 +144,39 @@ public final class JavaGenerator {
                 tests.nativeProviders(),
                 tests.nativeProviderCatalog()
         );
+    }
+
+    static Optional<GenerationPrograms> separateTestGeneration(
+            CompiledProgram program,
+            CompiledProgram main
+    ) {
+        if (main == null) {
+            return Optional.empty();
+        }
+        var mainModules = main.modules().stream()
+                .map(JavaGenerator::moduleImportPath)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var sourceModules = program.modules().stream()
+                .filter(module -> !mainModules.contains(moduleImportPath(module)))
+                .toList();
+        if (sourceModules.isEmpty() || sourceModules.stream().noneMatch(JavaGenerator::testModule)) {
+            return Optional.empty();
+        }
+        var mainObjectModules = main.objectOrientedModules().stream()
+                .map(module -> normalizeModuleImportPath(module.path()) + "/" + module.name())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var sourceObjectModules = program.objectOrientedModules().stream()
+                .filter(module -> !mainObjectModules.contains(
+                        normalizeModuleImportPath(module.path()) + "/" + module.name()
+                ))
+                .toList();
+        var source = new CompiledProgram(
+                sourceModules,
+                sourceObjectModules,
+                program.nativeProviders(),
+                program.nativeProviderCatalog()
+        );
+        return Optional.of(new GenerationPrograms(source, deduplicateProgram(mergePrograms(main, program))));
     }
 
     static Map<String, Object> withBundledImportModules(Map<String, Object> program) {
@@ -113,7 +197,7 @@ public final class JavaGenerator {
             if (module.isEmpty()) {
                 continue;
             }
-            var generatedModule = dataMap(toGeneratedValue(module.get()));
+            var generatedModule = module.get();
             modules.add(generatedModule);
             knownModules.add(modulePath);
             enqueueImports(generatedModule, pendingImports);
@@ -190,14 +274,19 @@ public final class JavaGenerator {
                 .forEach(pendingImports::addLast);
     }
 
-    private static Optional<CompiledModule> readBundledModule(String modulePath) {
+    private static Optional<Map<String, Object>> readBundledModule(String modulePath) {
+        return BUNDLED_IMPORT_MODULES.computeIfAbsent(modulePath, JavaGenerator::loadBundledModule);
+    }
+
+    private static Optional<Map<String, Object>> loadBundledModule(String modulePath) {
         var resource = "/" + modulePath + ".json";
         try (var input = JavaGenerator.class.getResourceAsStream(resource)) {
             if (input == null) {
                 return Optional.empty();
             }
             var json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            return Optional.of(LinkedJsonCodec.read(json, CompiledModule.class));
+            var module = LinkedJsonCodec.read(json, CompiledModule.class);
+            return Optional.of(dataMap(toGeneratedValue(module)));
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to read bundled Capybara module `" + modulePath + "`", exception);
         }
@@ -666,5 +755,18 @@ public final class JavaGenerator {
     }
 
     private record TypeShape(String name, List<TypeShape> arguments) {
+    }
+
+    private record CachedGeneration(
+            CompiledProgram source,
+            CompiledProgram lookup,
+            GeneratedProgram generated
+    ) {
+    }
+
+    record GenerationPrograms(CompiledProgram source, CompiledProgram lookup) {
+    }
+
+    private record ScopedProgram(Object invocation, CompiledProgram program) {
     }
 }

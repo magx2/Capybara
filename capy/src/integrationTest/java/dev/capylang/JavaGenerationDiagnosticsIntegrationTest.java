@@ -1,6 +1,7 @@
 package dev.capylang;
 
 import dev.capylang.cli.Capy;
+import dev.capylang.cli.CapyMain;
 import dev.capylang.compiler.BackendCompilationContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -1087,6 +1088,69 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void emitsMainModulesOnlyToTheMainOutputForEveryBackend() throws Exception {
+        writeSource("sample/MainOnly.cfun", """
+                fun value(): int = 42
+                """);
+        writeTestSource("sample/MainOnly.test.cfun", """
+                from /sample/MainOnly import { value }
+                from /capy/test/CapyTest import { test_file, test }
+                from /capy/test/Assert import { assert_that }
+
+                fun tests(): Effect[TestFile] =
+                    test_file("/sample/MainOnly.cfun", [
+                        test("main value", () => assert_that(value()).is_equal_to(42))
+                    ])
+                """);
+
+        for (var backend : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateWithTestsStderr(backend)).isEmpty();
+            var extension = switch (backend) {
+                case "java" -> ".java";
+                case "javascript" -> ".js";
+                case "python" -> ".py";
+                default -> throw new IllegalStateException("Unexpected backend: " + backend);
+            };
+            assertThat(outputDir().resolve("sample/MainOnly" + extension)).exists();
+            assertThat(testOutputDir().resolve("sample/MainOnly" + extension)).doesNotExist();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"java", "javascript", "python"})
+    void reusesGeneratedOutputWhenMainAndTestInputsMatch(String backend) throws Exception {
+        var source = writeSource("sample/SharedInput.cfun", "fun value(): int = 42");
+
+        assertThat(compileGenerateWithSharedInputStderr(backend)).isEmpty();
+
+        var extension = switch (backend) {
+            case "java" -> ".java";
+            case "javascript" -> ".js";
+            case "python" -> ".py";
+            default -> throw new IllegalStateException("Unexpected backend: " + backend);
+        };
+        var mainOutput = generatedPath(source, extension);
+        var testOutput = testOutputDir().resolve("sample/SharedInput" + extension);
+        assertThat(mainOutput).exists();
+        assertThat(testOutput).hasSameTextualContentAs(mainOutput);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"javascript", "python"})
+    void isolatesGeneratorLookupContextBetweenCompileGenerateInvocations(String backend) throws Exception {
+        var shared = writeSource("sample/Shared.cfun", "fun value(): int = 1");
+        assertThat(compileGenerateStderr(backend)).isEmpty();
+
+        Files.writeString(shared, "fun value(): int = 2");
+        var independentTest = writeSource("sample/Independent.test.cfun", "fun marker(): int = 3");
+        assertThat(compileGenerateStderr(backend)).isEmpty();
+
+        var extension = backend.equals("javascript") ? ".js" : ".py";
+        assertThat(generatedPath(shared, extension)).content().contains("return 2");
+        assertThat(generatedPath(independentTest, extension)).exists();
+    }
+
+    @Test
     void discoversJavaScriptTestsUsingInferredExtensionReceiversAndFailureKinds() throws Exception {
         writeSource("sample/OrderedValue.cfun", """
                 data OrderedValue { value: int }
@@ -1360,6 +1424,26 @@ class JavaGenerationDiagnosticsIntegrationTest {
                             false,
                             Capy.LogLevel.WARN
                     )).unsafeRun());
+        } finally {
+            System.setErr(originalError);
+        }
+        return normalizedDiagnostics(buffer);
+    }
+
+    private String compileGenerateWithSharedInputStderr(String outputType) {
+        var originalError = System.err;
+        var buffer = new ByteArrayOutputStream();
+        try (var errorStream = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
+            System.setErr(errorStream);
+            CapyMain.main(
+                    "compile-generate",
+                    outputType,
+                    "--input", inputDir().toString(),
+                    "--output", outputDir().toString(),
+                    "--test-input", inputDir().toString(),
+                    "--test-output", testOutputDir().toString(),
+                    "--log", "WARN"
+            );
         } finally {
             System.setErr(originalError);
         }
