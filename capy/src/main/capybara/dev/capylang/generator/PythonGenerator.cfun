@@ -90,7 +90,7 @@ fun python_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: 
     GeneratedProgram {
         modules: python_native_provider_interface_modules(sourceProgram.nativeProviderCatalog.declarations)
             + python_modules(emittedModules, lookupProgram.modules, objectOrientedUnitIndex, nativeProviderIndex)
-            + python_test_runtime_modules(sourceProgram.modules)
+            + python_test_runtime_modules(sourceProgram.modules, lookupProgram.modules)
             + python_native_runtime_modules()
     }
 
@@ -5556,23 +5556,31 @@ private fun python_primitive_numeric_widening_type_key(target: String, source: S
 
 /// Finds a function in scope, imports, or compiled modules.
 private fun python_find_function(name: String, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    match functions[0] with
+    python_find_function_at(name, functions, 0)
+
+/// Finds a callable function by name from the requested index.
+private fun python_find_function_at(name: String, functions: List[CompiledFunction], idx: int): /capy/lang/Option[CompiledFunction] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if python_callable_function(function) & function.name == name
         then /capy/lang/Option.Some { function }
-        else python_find_function(name, functions[1:])
+        else python_find_function_at(name, functions, idx + 1)
 
 /// Finds a callable function by source name and argument count.
 private fun python_find_function_with_arity(name: String, argumentCount: int, functions: List[CompiledFunction]): /capy/lang/Option[CompiledFunction] =
-    match functions[0] with
+    python_find_function_with_arity_at(name, argumentCount, functions, 0)
+
+/// Finds a callable function by source name and argument count from the requested index.
+private fun python_find_function_with_arity_at(name: String, argumentCount: int, functions: List[CompiledFunction], idx: int): /capy/lang/Option[CompiledFunction] =
+    match functions[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { function } ->
         if python_callable_function(function)
             & function.name == name
             & function.parameters.size().value == argumentCount
         then /capy/lang/Option.Some { function }
-        else python_find_function_with_arity(name, argumentCount, functions[1:])
+        else python_find_function_with_arity_at(name, argumentCount, functions, idx + 1)
 
 /// Checks whether a function matches the callable function metadata.
 private fun python_callable_function(function: CompiledFunction): bool =
@@ -6632,12 +6640,16 @@ private fun python_normalize_capybara_import_suffix(suffix: String, prefix: Stri
 
 /// Finds a module by path in scope, imports, or compiled modules.
 private fun python_find_module_by_path(modulePath: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
-    match modules[0] with
+    python_find_module_by_path_at(modulePath, modules, 0)
+
+/// Finds a module by path from the requested index.
+private fun python_find_module_by_path_at(modulePath: String, modules: List[CompiledModule], idx: int): /capy/lang/Option[CompiledModule] =
+    match modules[idx] with
     case None -> /capy/lang/Option.None {}
     case Some { module } ->
         if python_module_matches_path(modulePath, module)
         then /capy/lang/Option.Some { module }
-        else python_find_module_by_path(modulePath, modules[1:])
+        else python_find_module_by_path_at(modulePath, modules, idx + 1)
 
 /// Checks whether a compiled module matches a slash-separated module path without building the full path.
 private fun python_module_matches_path(modulePath: String, module: CompiledModule): bool =
@@ -6743,10 +6755,10 @@ private fun python_binding_exists(name: String, env: List[PythonBinding]): bool 
     case None -> false
 
 /// Creates Python generated-module entries for test runtime.
-private fun python_test_runtime_modules(modules: List[CompiledModule]): List[GeneratedModule] =
+private fun python_test_runtime_modules(modules: List[CompiledModule], allModules: List[CompiledModule]): List[GeneratedModule] =
     [GeneratedModule {
         relativePath: "capy/test/CapyTestRuntime.py",
-        code: python_test_runtime_code(modules)
+        code: python_test_runtime_code(modules, allModules)
     }]
 
 /// Creates Python generated-module entries for native runtime.
@@ -6775,7 +6787,7 @@ private fun python_native_runtime_code(): String =
     + "    return decorate(_target)" + python_newline()
 
 /// Emits the Python runtime support source for test.
-private fun python_test_runtime_code(modules: List[CompiledModule]): String =
+private fun python_test_runtime_code(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     python_test_runtime_header_code()
     + python_test_runtime_effect_code()
     + python_test_runtime_io_code()
@@ -6789,7 +6801,7 @@ private fun python_test_runtime_code(modules: List[CompiledModule]): String =
     + python_test_runtime_reflection_code(modules)
     + python_test_runtime_effect_helpers_code()
     + "__all__.extend(['fail', '__capy_result_recover'])" + python_newline()
-    + python_test_runtime_gather_code(modules)
+    + python_test_runtime_gather_code(modules, allModules)
 
 /// Emits Python code for test runtime header.
 private fun python_test_runtime_header_code(): String =
@@ -7991,10 +8003,10 @@ private fun python_test_runtime_effect_helpers_code(): String =
     + python_newline()
 
 /// Emits Python code for test runtime gather.
-private fun python_test_runtime_gather_code(modules: List[CompiledModule]): String =
+private fun python_test_runtime_gather_code(modules: List[CompiledModule], allModules: List[CompiledModule]): String =
     "def gatherTests():" + python_newline()
     + "    files = []" + python_newline()
-    + python_test_gather_calls(modules, modules)
+    + python_test_gather_calls(modules, allModules)
     + "    return files" + python_newline()
 
 /// Emits Python code for value assert extra methods.
