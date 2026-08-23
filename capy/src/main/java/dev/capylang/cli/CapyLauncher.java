@@ -10,6 +10,15 @@ public final class CapyLauncher {
     }
 
     public static void main(String[] args) {
+        try {
+            run(args);
+        } catch (IllegalArgumentException exception) {
+            System.err.println(exception.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void run(String[] args) {
         if (args.length > 0 && "test".equals(args[0])) {
             System.exit(TestCommand.execute(java.util.Arrays.copyOfRange(args, 1, args.length)));
         }

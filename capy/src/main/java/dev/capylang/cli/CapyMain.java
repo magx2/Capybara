@@ -17,6 +17,15 @@ public final class CapyMain {
     }
 
     public static void main(String... arguments) {
+        try {
+            run(arguments);
+        } catch (IllegalArgumentException exception) {
+            System.err.println(exception.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void run(String... arguments) {
         if (arguments.length == 1 && arguments[0].equals("--version")) {
             System.out.println("Capybara compiler version: " + packagedVersion());
             return;
