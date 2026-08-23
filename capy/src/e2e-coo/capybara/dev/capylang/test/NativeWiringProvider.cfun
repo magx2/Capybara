@@ -1,0 +1,6 @@
+from /capy/lang/Effect import { Effect }
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+from NativeWiring import { NativeClock }
+
+@NativeProvider(qualifier: "system")
+fun system_native_clock(): Effect[NativeClock] = <native>

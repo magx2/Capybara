@@ -1,0 +1,9 @@
+from /capy/io/IO import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+class FileIoWorker {
+    def write_missing_parent(path: Path): Effect[Result[String]] =
+        write_text(path, "payload")
+}

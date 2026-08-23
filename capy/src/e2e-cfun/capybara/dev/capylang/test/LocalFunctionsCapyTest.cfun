@@ -1,0 +1,39 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from LocalFunctions import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/LocalFunctions.cfun", [
+        test("local recursive function can be called", () => local_recursive_function_can_be_called()),
+        test("local mutual recursion works", () => local_mutual_recursion_works()),
+        test("local function can use let expression", () => local_function_can_use_let_expression()),
+        test("same local function name can be reused in different outer functions", () => same_local_function_name_can_be_reused_in_different_outer_functions()),
+    ])
+
+private fun local_recursive_function_can_be_called(): Assert =
+    assert_all([
+        assert_that(sum_down(0)).is_equal_to(0),
+        assert_that(sum_down(1)).is_equal_to(1),
+        assert_that(sum_down(5)).is_equal_to(15),
+    ])
+
+private fun local_mutual_recursion_works(): Assert =
+    assert_all([
+        assert_that(parity(0)).is_true(),
+        assert_that(parity(1)).is_false(),
+        assert_that(parity(12)).is_true(),
+        assert_that(parity(15)).is_false(),
+    ])
+
+private fun local_function_can_use_let_expression(): Assert =
+    assert_all([
+        assert_that(local_with_let(0)).is_equal_to(1),
+        assert_that(local_with_let(10)).is_equal_to(11),
+    ])
+
+private fun same_local_function_name_can_be_reused_in_different_outer_functions(): Assert =
+    assert_all([
+        assert_that(max_local(2, 5)).is_equal_to(5),
+        assert_that(min_local(2, 5)).is_equal_to(2),
+    ])

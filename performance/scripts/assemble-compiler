@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+cd "${ROOT_DIR}"
+./gradlew :capy:assemble
+
+version="$(awk -F= '/^version[[:space:]]*=/ { value=$2; gsub(/\r/, "", value); gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); print value }' gradle.properties)"
+jar="${ROOT_DIR}/capy/build/libs/capy-${version}.jar"
+
+if [[ ! -f "${jar}" ]]; then
+    echo "Expected assembled compiler jar not found: ${jar}" >&2
+    exit 1
+fi
+
+mkdir -p "${PROJECT_BUILD_DIR}"
+printf '%s\n' "${jar}" > "${COMPILER_JAR_MARKER}"
+printf '%s\n' "${jar}"

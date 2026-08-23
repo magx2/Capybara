@@ -1,0 +1,17 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+/// Parsed object field with declared type, optional initializer, annotations, visibility, and location.
+data ObjectOrientedField {
+    name: String,
+    visibility: String,
+    typeReference: TypeReference,
+    value: Expression,
+    hasValue: bool,
+    documentation: List[String],
+    annotations: List[FunctionAnnotationApplication],
+    location: SourceLocation
+}

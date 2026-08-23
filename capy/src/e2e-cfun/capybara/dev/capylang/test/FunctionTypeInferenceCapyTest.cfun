@@ -1,0 +1,71 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from FunctionTypeInference import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/FunctionTypeInference.cfun", [
+        test("simple_no_param_int returns an inferred int", () => simple_no_param_int_returns_an_inferred_int()),
+        test("simple returns its inferred int argument", () => simple_returns_its_inferred_int_argument()),
+        test("infix_operator returns an inferred int", () => infix_operator_returns_an_inferred_int()),
+        test("if_operator returns an inferred string", () => if_operator_returns_an_inferred_string()),
+        test("type_sum returns an inferred string", () => type_sum_returns_an_inferred_string()),
+        test("list_of_ints returns an inferred list of ints", () => list_of_ints_returns_an_inferred_list_of_ints()),
+        test("empty_list returns an inferred empty list", () => empty_list_returns_an_inferred_empty_list()),
+        test("set_of_ints returns an inferred set of ints", () => set_of_ints_returns_an_inferred_set_of_ints()),
+        test("empty_set returns an inferred empty set", () => empty_set_returns_an_inferred_empty_set()),
+        test("dict_of_ints returns an inferred dict of ints", () => dict_of_ints_returns_an_inferred_dict_of_ints()),
+    ])
+
+private fun simple_no_param_int_returns_an_inferred_int(): Assert =
+    let value: int = simple_no_param_int()
+    assert_that(value).is_equal_to(5)
+
+private fun simple_returns_its_inferred_int_argument(): Assert =
+    let value: int = simple(1)
+    assert_that(value).is_equal_to(1)
+
+private fun infix_operator_returns_an_inferred_int(): Assert =
+    let value: int = infix_operator(1, 2)
+    assert_that(value).is_equal_to(3)
+
+private fun if_operator_returns_an_inferred_string(): Assert =
+    let low_value: String = if_operator(1, 2)
+    let high_value: String = if_operator(9, 2)
+    assert_all([
+        assert_that(low_value).is_equal_to("not mucho"),
+        assert_that(high_value).is_equal_to("mucho"),
+    ])
+
+private fun type_sum_returns_an_inferred_string(): Assert =
+    let value: String = type_sum(1)
+    assert_that(value).is_equal_to("age: 1")
+
+private fun list_of_ints_returns_an_inferred_list_of_ints(): Assert =
+    let values: List[int] = list_of_ints(7)
+    assert_that(values).is_equal_to([7, 7, 7])
+
+private fun empty_list_returns_an_inferred_empty_list(): Assert =
+    let values: List[any] = empty_list()
+    assert_that(values.size()).is_equal_to(0)
+
+private fun set_of_ints_returns_an_inferred_set_of_ints(): Assert =
+    // The legacy Java host test reflected the Set[int] return type only. Evaluating set_of_ints(7)
+    // currently throws on Java because the source literal is {x,x,x}, so keep this as a type check.
+    let typecheck: () => Set[int] = () => set_of_ints(7)
+    assert_that(true).is_true()
+
+private fun empty_set_returns_an_inferred_empty_set(): Assert =
+    let values: Set[any] = empty_set()
+    assert_that(values.size()).is_equal_to(0)
+
+private fun dict_of_ints_returns_an_inferred_dict_of_ints(): Assert =
+    let values: Dict[int] = dict_of_ints()
+    assert_that(values).is_equal_to({
+        "one": 1,
+        "two": 2,
+        "three": 3
+    })

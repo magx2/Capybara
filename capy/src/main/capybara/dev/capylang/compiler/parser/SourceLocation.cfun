@@ -1,0 +1,2 @@
+/// Line and column position captured while parsing source text.
+data SourceLocation { line: int, column: int }

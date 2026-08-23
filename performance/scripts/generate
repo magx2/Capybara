@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+backend="${1:?Usage: performance/scripts/generate <java|python|js> [runner] [linked-input] [generated-output]}"
+runner="${2:-java}"
+linked_input="${3:-${PROJECT_BUILD_DIR}/linked/${runner}/generate-${backend}}"
+generated_output="${4:-${PROJECT_BUILD_DIR}/generated/${runner}/${backend}}"
+jar="$(capy_jar)"
+cli_backend="$(backend_cli_name "${backend}")"
+
+if [[ ! -f "${linked_input}/program.json" ]]; then
+    prepare_linked_input "${linked_input}"
+fi
+
+mkdir -p "${generated_output}"
+java -jar "${jar}" generate "${cli_backend}" \
+    --input "${linked_input}" \
+    --output "${generated_output}" \
+    --log WARN

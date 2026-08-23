@@ -1,0 +1,5 @@
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+from /dev/capylang/compiler/LinkedProgramIO import { LinkedProgramIO }
+
+@NativeProvider
+fun linked_program_io(): Effect[LinkedProgramIO] = <native>

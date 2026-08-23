@@ -1,0 +1,28 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from GeneratorSemVer import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/GeneratorSemVer.cfun", [
+        test("custom_to_string uses Pretty.to_string", () => custom_to_string_uses_pretty_to_string()),
+        test("parse_local_option unwraps Some value", () => parse_local_option_unwraps_some_value()),
+        test("parse_local_option_none returns missing value error", () => parse_local_option_none_returns_missing_value_error()),
+        test("parse_local_semver_build preserves build metadata", () => parse_local_semver_build_preserves_build_metadata()),
+        test("parse_local_semver_build_and_increment increments major version", () => parse_local_semver_build_and_increment_increments_major_version()),
+    ])
+
+private fun custom_to_string_uses_pretty_to_string(): Assert =
+    assert_that(custom_to_string("capy")).is_equal_to("pretty:capy")
+
+private fun parse_local_option_unwraps_some_value(): Assert =
+    assert_that(parse_local_option(7)).succeeds(7)
+
+private fun parse_local_option_none_returns_missing_value_error(): Assert =
+    assert_that(parse_local_option_none()).fails("missing value")
+
+private fun parse_local_semver_build_preserves_build_metadata(): Assert =
+    assert_that(parse_local_semver_build("001")).succeeds("001")
+
+private fun parse_local_semver_build_and_increment_increments_major_version(): Assert =
+    assert_that(parse_local_semver_build_and_increment("001")).succeeds(2)

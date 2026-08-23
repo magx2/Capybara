@@ -1,0 +1,11 @@
+from /capy/lang/Option import { Option }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
+
+/// Manifest entry that binds a Capybara function to a provider id, provider class, and method.
+data NativeProviderBinding {
+    interfaceId: String,
+    qualifier: String,
+    javaBinding: Option[NativeProviderBackendBinding],
+    javascriptBinding: Option[NativeProviderBackendBinding],
+    pythonBinding: Option[NativeProviderBackendBinding]
+}

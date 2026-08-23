@@ -1,0 +1,7 @@
+data Counter { value: int }
+
+fun Counter.plus(x: int): Counter = Counter { value: this.value + x }
+fun Counter.`+`(x: int): Counter = Counter { value: this.value + x + 100 }
+
+fun named_plus(counter: Counter, x: int): int = counter.plus(x).value
+fun operator_plus(counter: Counter, x: int): int = (counter + x).value

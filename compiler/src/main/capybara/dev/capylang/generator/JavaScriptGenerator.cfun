@@ -1,0 +1,3 @@
+fun java_script_generator(CompiledProgram program): GeneratedProgram =
+    // todo(codex): implement the java generator, which takes in a compiled program and generates java code.
+    ???

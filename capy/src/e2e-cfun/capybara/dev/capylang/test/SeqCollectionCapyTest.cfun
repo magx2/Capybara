@@ -1,0 +1,54 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from SeqCollection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/SeqCollection.cfun", [
+        test("one_two_three builds nested Cons sequence", () => one_two_three_builds_nested_cons_sequence()),
+        test("head, tail, and option accessors work for recursive type", () => head_tail_and_option_accessors_work_for_recursive_type()),
+        test("sum_first_two uses nested Seq fields", () => sum_first_two_uses_nested_seq_fields()),
+        test("drop_local returns the remaining sequence", () => drop_local_returns_the_remaining_sequence()),
+        test("until_local stops before matching value", () => until_local_stops_before_matching_value()),
+    ])
+
+private fun one_two_three_builds_nested_cons_sequence(): Assert =
+    let seq = one_two_three()
+    assert_all([
+        assert_that(head_or_default(seq, -1)).is_equal_to(1),
+        assert_that(head_or_default(tail(seq), -1)).is_equal_to(2),
+        assert_that(head_or_default(tail(tail(seq)), -1)).is_equal_to(3),
+    ])
+
+private fun head_tail_and_option_accessors_work_for_recursive_type(): Assert =
+    let seq = one_two_three()
+    let empty: Seq[int] = End {}
+    assert_all([
+        assert_that(head_or_default(seq, -1)).is_equal_to(1),
+        assert_that(head_or_default_wildcard(seq, -1)).is_equal_to(1),
+        assert_that(head_or_default_wildcard(empty, -1)).is_equal_to(-1),
+        assert_that(first_fq_singleton(seq)).contains(1),
+        assert_that(first_fq_singleton(empty)).is_empty(),
+        assert_that(first_short_singleton(seq)).contains(1),
+        assert_that(first_short_singleton(empty)).is_empty(),
+        assert_that(head_or_default(tail(seq), -1)).is_equal_to(2),
+    ])
+
+private fun sum_first_two_uses_nested_seq_fields(): Assert =
+    assert_all([
+        assert_that(sum_first_two(one_two_three())).is_equal_to(3),
+        assert_that(sum_first_two(End {})).is_equal_to(0),
+    ])
+
+private fun drop_local_returns_the_remaining_sequence(): Assert =
+    assert_all([
+        assert_that(head_or_default(drop_local(one_two_three(), 1), -1)).is_equal_to(2),
+        assert_that(head_or_default(drop_local(one_two_three(), 3), -1)).is_equal_to(-1),
+    ])
+
+private fun until_local_stops_before_matching_value(): Assert =
+    let until_two = until_local(one_two_three(), 2)
+    assert_all([
+        assert_that(head_or_default(until_two, -1)).is_equal_to(1),
+        assert_that(head_or_default(tail(until_two), -1)).is_equal_to(-1),
+    ])

@@ -1,0 +1,31 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/System import { current_millis, nano_time }
+from ObjectFileIo import { * }
+
+fun tests(): Effect[TestFile] =
+    let assertion <- object_write_returns_error_when_parent_directory_is_missing()
+    test_file("/dev/capylang/test/ObjectFileIo.coo", [
+        test("object write returns error when parent directory is missing", () => assertion),
+    ])
+
+fun object_write_returns_error_when_parent_directory_is_missing(): Effect[Assert] =
+    let base <- unique_base_path("write-errors")
+    let target = base / "missing-parent" / "payload.txt"
+    let write_result <- object_write_missing_parent(target)
+    assert_all([
+        assert_failed_message_contains(write_result, "write_text failed"),
+    ])
+
+private fun unique_base_path(name: String): Effect[Path] =
+    let millis <- current_millis()
+    let nanos <- nano_time()
+    from_string("/tmp/capybara-object-file-io-e2e/" + name + "-" + millis + "-" + nanos)
+
+private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
+    match result with
+    case Error e -> assert_that(e.message).contains(expected)
+    case Success _ -> assert_that(false).is_true()

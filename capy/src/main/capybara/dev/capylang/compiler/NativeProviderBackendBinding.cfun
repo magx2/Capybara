@@ -1,0 +1,9 @@
+from /capy/lang/Option import { Option }
+
+/// Manifest entry mapping one backend name to its native implementation class and method.
+data NativeProviderBackendBinding {
+    className: Option[String],
+    moduleName: Option[String],
+    exportName: Option[String],
+    factory: Option[String]
+}

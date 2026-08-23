@@ -1,0 +1,23 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Temporary import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Temporary.cfun", [
+        test("foo and boo variants expose parent and own fields", () => foo_and_boo_variants_expose_parent_and_own_fields()),
+    ])
+
+private fun foo_and_boo_variants_expose_parent_and_own_fields(): Assert =
+    let foo = Foo { name: "foo", fooishnes: 5 }
+    let boo = Boo { name: "boo", booishnes: 7 }
+    let temporary_foo: Temporary = foo
+    let temporary_boo: Temporary = boo
+    assert_all([
+        assert_that(temporary_foo).is_equal_to(foo),
+        assert_that(temporary_boo).is_equal_to(boo),
+        assert_that(foo.name).is_equal_to("foo"),
+        assert_that(foo.fooishnes).is_equal_to(5),
+        assert_that(boo.name).is_equal_to("boo"),
+        assert_that(boo.booishnes).is_equal_to(7),
+    ])

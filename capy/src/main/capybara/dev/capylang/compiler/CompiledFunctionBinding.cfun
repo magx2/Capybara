@@ -1,0 +1,8 @@
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+
+/// A linked function together with the module that declares its generated implementation.
+data CompiledFunctionBinding {
+    moduleName: String,
+    modulePath: String,
+    function: CompiledFunction
+}

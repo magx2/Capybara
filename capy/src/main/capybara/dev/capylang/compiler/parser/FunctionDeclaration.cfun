@@ -1,0 +1,18 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/parser/Expression import { Expression }
+from /dev/capylang/compiler/parser/FunctionAnnotationApplication import { FunctionAnnotationApplication }
+from /dev/capylang/compiler/parser/FunctionParameter import { FunctionParameter }
+from /dev/capylang/compiler/parser/SourceLocation import { SourceLocation }
+from /dev/capylang/compiler/parser/TypeReference import { TypeReference }
+
+/// Parsed function declaration with receiver metadata, parameters, return type, body, docs, annotations, and location.
+data FunctionDeclaration {
+    name: String,
+    visibility: String,
+    parameters: List[FunctionParameter],
+    returnType: TypeReference,
+    body: Expression,
+    documentation: List[String],
+    annotations: List[FunctionAnnotationApplication],
+    location: SourceLocation
+}

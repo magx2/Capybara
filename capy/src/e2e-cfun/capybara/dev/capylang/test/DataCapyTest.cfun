@@ -1,0 +1,132 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Data import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Data.cfun", [
+        test("shape union values preserve variant fields", () => shape_union_values_preserve_variant_fields()),
+        test("quoted data field names are readable", () => quoted_data_field_names_are_readable()),
+        test("area uses algebraic matching", () => area_uses_algebraic_matching()),
+        test("da_vinci maps between shape variants", () => da_vinci_maps_between_shape_variants()),
+        test("generic typed variants keep values", () => generic_typed_variants_keep_values()),
+        test("knight functions match singleton and record variants", () => knight_functions_match_singleton_and_record_variants()),
+        test("generic king functions match singleton and record variants", () => generic_king_functions_match_singleton_and_record_variants()),
+        test("worker subtypes expose parent and own fields", () => worker_subtypes_expose_parent_and_own_fields()),
+        test("data string rendering is stable", () => data_string_rendering_is_stable()),
+        test("positional data constructors assign fields", () => positional_data_constructors_assign_fields()),
+        test("reserved identifiers can be data field names", () => reserved_identifiers_can_be_data_field_names()),
+        test("generic field can be mapped with result pipe", () => generic_field_can_be_mapped_with_result_pipe()),
+    ])
+
+// The legacy Java host test also asserted java-lib JsonObject.toString() output.
+// That assertion belongs to /capy/serialization/Json and is not Data.cfun behavior.
+
+fun shape_union_values_preserve_variant_fields(): Assert =
+    let circle: Shape = Circle { 2.5 }
+    let rectangle: Shape = Rectangle { width: 3.0, "height": 4.0 }
+    assert_all([
+        assert_that(circle).is_equal_to(Circle { 2.5 }),
+        assert_that(rectangle).is_equal_to(Rectangle { width: 3.0, "height": 4.0 }),
+    ])
+
+fun quoted_data_field_names_are_readable(): Assert =
+    let rectangle = Rectangle { width: 3.0, "height": 4.0 }
+    assert_all([
+        assert_that(rectangle.width).is_equal_to(3.0),
+        assert_that(rectangle.height).is_equal_to(4.0),
+    ])
+
+fun area_uses_algebraic_matching(): Assert =
+    assert_all([
+        assert_that(area(Circle { 2.0 })).is_equal_to(12.56),
+        assert_that(area(Rectangle { width: 3.0, "height": 4.0 })).is_equal_to(12.0),
+    ])
+
+fun da_vinci_maps_between_shape_variants(): Assert =
+    assert_all([
+        assert_that(da_vinci(Circle { 2.0 })).is_equal_to(Rectangle { width: 4.0, "height": 4.0 }),
+        assert_that(da_vinci(Rectangle { width: 6.0, "height": 2.0 })).is_equal_to(Circle { 2.0 }),
+    ])
+
+fun generic_typed_variants_keep_values(): Assert =
+    let foo = Foo { foo: "abc" }
+    let boo = Boo { boo: 123 }
+    let typed_foo: Typed[String] = foo
+    let typed_boo: Typed[int] = boo
+    assert_all([
+        assert_that(foo.foo).is_equal_to("abc"),
+        assert_that(boo.boo).is_equal_to(123),
+        assert_that(typed_foo).is_equal_to(foo),
+        assert_that(typed_boo).is_equal_to(boo),
+    ])
+
+fun knight_functions_match_singleton_and_record_variants(): Assert =
+    assert_all([
+        assert_that(is_tom(summon_tom())).is_true(),
+        assert_that(is_tom(Tom {})).is_true(),
+        assert_that(is_tom(EnglishKnight { 11.0 })).is_true(),
+        assert_that(is_tom(EnglishKnight { 10.0 })).is_false(),
+        assert_that(Tom {} == Tom {}).is_true(),
+    ])
+
+fun generic_king_functions_match_singleton_and_record_variants(): Assert =
+    assert_all([
+        assert_that(jerry_or_french(summon_jerry())).is_equal_to("jerry"),
+        assert_that(jerry_or_french(Jerry {})).is_equal_to("jerry"),
+        assert_that(jerry_or_french(FrenchKing { head: true, foo: 7 })).is_equal_to("true:7"),
+        assert_that(jerry_or_french(FrenchKing { head: false, foo: 3 })).is_equal_to("false:3"),
+    ])
+
+fun worker_subtypes_expose_parent_and_own_fields(): Assert =
+    let blue_collar = BlueCollar { name: "Jan", surname: "Kowalski", strength: 10.0 }
+    let white_collar = WhiteCollar { name: "Anna", surname: "Nowak", intelligence: 9.5 }
+    assert_all([
+        assert_that(blue_collar.name).is_equal_to("Jan"),
+        assert_that(blue_collar.surname).is_equal_to("Kowalski"),
+        assert_that(blue_collar.strength).is_equal_to(10.0),
+        assert_that(white_collar.name).is_equal_to("Anna"),
+        assert_that(white_collar.surname).is_equal_to("Nowak"),
+        assert_that(white_collar.intelligence).is_equal_to(9.5),
+    ])
+
+fun data_string_rendering_is_stable(): Assert =
+    // Java/JS legacy host tests assert exact generated data punctuation. Python renders
+    // the same data values with different quoting, so keep this test to portable content.
+    assert_all([
+        assert_that(printable_data_to_string()).contains("PrintableData"),
+        assert_that(printable_data_to_string()).contains("foo"),
+        assert_that(printable_data_to_string()).contains("abc"),
+        assert_that(printable_data_to_string()).contains("boo"),
+        assert_that(printable_data_to_string()).contains("123"),
+        assert_that(string_plus_data_left()).starts_with("prefix=PrintableData"),
+        assert_that(string_plus_data_left()).contains("abc"),
+        assert_that(string_plus_data_right()).contains("PrintableData"),
+        assert_that(string_plus_data_right()).contains("=suffix"),
+        assert_that(knight_holder_to_string()).contains("KnightHolder"),
+        assert_that(knight_holder_to_string()).contains("knight"),
+        assert_that(knight_holder_to_string()).contains("Tom"),
+    ])
+
+fun positional_data_constructors_assign_fields(): Assert =
+    let direct = create_positional_data("abc", 10)
+    let expr = create_positional_data_expr("abc", 10)
+    assert_all([
+        assert_that(direct.text).is_equal_to("abc"),
+        assert_that(direct.number).is_equal_to(10),
+        assert_that(expr.text).is_equal_to("abc!"),
+        assert_that(expr.number).is_equal_to(11),
+    ])
+
+fun reserved_identifiers_can_be_data_field_names(): Assert =
+    let value = create_data_with_type("record")
+    assert_all([
+        assert_that(value.type).is_equal_to("record"),
+        assert_that(read_data_type(value)).is_equal_to("record"),
+    ])
+
+fun generic_field_can_be_mapped_with_result_pipe(): Assert =
+    assert_all([
+        assert_that(generic_field_pipe(Box { "41" })).is_equal_to(BoxSuccess { 43L }),
+        assert_that(generic_field_pipe(Box { "x" })).is_equal_to(BoxError { "bad long: x" }),
+    ])

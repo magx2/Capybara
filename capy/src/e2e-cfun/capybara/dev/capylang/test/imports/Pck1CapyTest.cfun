@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Pck1 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/Pck1.cfun", [
+        test("arithmetic helpers return expected integer results", () => arithmetic_helpers_return_expected_integer_results()),
+    ])
+
+private fun arithmetic_helpers_return_expected_integer_results(): Assert =
+    assert_all([
+        pck1_assert_int_equal(add(2, 3), 5),
+        pck1_assert_int_equal(subtract(2, 3), -1),
+        pck1_assert_int_equal(multiply(2, 3), 6),
+        pck1_assert_int_equal(divide(8, 2), 4),
+    ])
+
+private fun pck1_assert_int_equal(value: int, expected: int): Assert =
+    assert_that(value).is_equal_to(expected)

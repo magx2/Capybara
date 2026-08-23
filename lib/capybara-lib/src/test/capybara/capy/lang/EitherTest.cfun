@@ -1,0 +1,92 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Either import { * }
+from /capy/lang/Effect import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/Either.cfun", [
+        test("should map right", () => should_map_right()),
+        test("should keep left when mapping right", () => should_keep_left_when_mapping_right()),
+        test("should flat map right", () => should_flat_map_right()),
+        test("should flat map left", () => should_flat_map_left()),
+        test("should map left", () => should_map_left()),
+        test("should swap branches", () => should_swap_branches()),
+        test("should reduce branches", () => should_reduce_branches()),
+        test("should convert to result", () => should_convert_to_result()),
+    ])
+
+private fun make_left(message: String): Either[String, int] = Left { message }
+
+private fun make_right(value: int): Either[String, int] = Right { value }
+
+private fun plus_5(value: int): int = value + 5
+
+fun should_map_right(): Assert =
+    let either = make_right(10)
+    assert_that(either.map_right(:plus_5)).is_equal_to(Right { 15 })
+
+fun should_keep_left_when_mapping_right(): Assert =
+    let either = make_left("missing")
+    assert_that(either.map_right(:plus_5)).is_equal_to(Left { "missing" })
+
+private fun right_plus_5(value: int): Either[String, int] = Right { value + 5 }
+
+private fun left_bad(value: int): Either[String, int] = Left { "bad " + value }
+
+fun should_flat_map_right(): Assert =
+    let either = make_right(10)
+    let left = make_left("missing")
+    assert_all([
+        assert_that(either.flat_map_right(:right_plus_5)).is_equal_to(Right { 15 }),
+        assert_that(either.flat_map_right(:left_bad)).is_equal_to(Left { "bad 10" }),
+        assert_that(left.flat_map_right(:right_plus_5)).is_equal_to(Left { "missing" }),
+    ])
+
+private fun left_prefixed(message: String): Either[String, int] = Left { "handled " + message }
+
+private fun left_recovered(message: String): Either[String, int] = Right { 99 }
+
+fun should_flat_map_left(): Assert =
+    let either = make_left("missing")
+    let right = make_right(10)
+    assert_all([
+        assert_that(either.flat_map_left(:left_prefixed)).is_equal_to(Left { "handled missing" }),
+        assert_that(either.flat_map_left(:left_recovered)).is_equal_to(Right { 99 }),
+        assert_that(right.flat_map_left(:left_prefixed)).is_equal_to(Right { 10 }),
+    ])
+
+private fun prefix_error(message: String): String = "error: " + message
+
+fun should_map_left(): Assert =
+    let either = make_left("missing")
+    assert_that(either.map_left(:prefix_error)).is_equal_to(Left { "error: missing" })
+
+fun should_swap_branches(): Assert =
+    let left = make_left("missing")
+    let right = make_right(42)
+    assert_all([
+        assert_that(left.swap()).is_equal_to(Right { "missing" }),
+        assert_that(right.swap()).is_equal_to(Left { 42 }),
+    ])
+
+private fun left_text(message: String): String = "left:" + message
+
+private fun right_text(value: int): String = "right:" + value
+
+fun should_reduce_branches(): Assert =
+    let left = make_left("missing")
+    let right = make_right(42)
+    let left_reduced: String = left.reduce(:left_text, :right_text)
+    let right_reduced: String = right.`|>`(:left_text, :right_text)
+    assert_all([
+        assert_that(left_reduced).is_equal_to("left:missing"),
+        assert_that(right_reduced).is_equal_to("right:42"),
+    ])
+
+fun should_convert_to_result(): Assert =
+    let left = make_left("missing")
+    let right = make_right(42)
+    assert_all([
+        assert_that(left.to_result(:left_text)).fails("left:missing"),
+        assert_that(right.to_result(:left_text)).succeeds(42),
+    ])

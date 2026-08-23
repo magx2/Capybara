@@ -1,0 +1,396 @@
+= Module TimeUnit
+
+== Types
+
+[[type-day]]
+=== type day: long
+
+Time duration measured in days.
+
+==== Functions
+
+===== fun day.to_days(): xref:#type-day[day]
+
+Returns this day value unchanged.
+
+
+===== fun day.to_hours(): xref:#type-hour[hour]
+
+Converts this day value to hours.
+
+
+===== fun day.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this day value to microseconds.
+
+
+===== fun day.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this day value to milliseconds.
+
+
+===== fun day.to_minutes(): xref:#type-minute[minute]
+
+Converts this day value to minutes.
+
+
+===== fun day.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this day value to nanoseconds.
+
+
+===== fun day.to_seconds(): xref:#type-second[second]
+
+Converts this day value to seconds.
+
+
+===== fun day.to_weeks(): xref:#type-week[week]
+
+Converts this day value to weeks, discarding any remainder.
+
+
+
+[[type-hour]]
+=== type hour: long
+
+Time duration measured in hours.
+
+==== Functions
+
+===== fun hour.to_days(): xref:#type-day[day]
+
+Converts this hour value to days, discarding any remainder.
+
+
+===== fun hour.to_hours(): xref:#type-hour[hour]
+
+Returns this hour value unchanged.
+
+
+===== fun hour.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this hour value to microseconds.
+
+
+===== fun hour.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this hour value to milliseconds.
+
+
+===== fun hour.to_minutes(): xref:#type-minute[minute]
+
+Converts this hour value to minutes.
+
+
+===== fun hour.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this hour value to nanoseconds.
+
+
+===== fun hour.to_seconds(): xref:#type-second[second]
+
+Converts this hour value to seconds.
+
+
+===== fun hour.to_weeks(): xref:#type-week[week]
+
+Converts this hour value to weeks, discarding any remainder.
+
+
+
+[[type-micro_second]]
+=== type micro_second: long
+
+Time duration measured in microseconds.
+
+==== Functions
+
+===== fun micro_second.to_days(): xref:#type-day[day]
+
+Converts this microsecond value to days, discarding any remainder.
+
+
+===== fun micro_second.to_hours(): xref:#type-hour[hour]
+
+Converts this microsecond value to hours, discarding any remainder.
+
+
+===== fun micro_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Returns this microsecond value unchanged.
+
+
+===== fun micro_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this microsecond value to milliseconds, discarding any remainder.
+
+
+===== fun micro_second.to_minutes(): xref:#type-minute[minute]
+
+Converts this microsecond value to minutes, discarding any remainder.
+
+
+===== fun micro_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this microsecond value to nanoseconds.
+
+
+===== fun micro_second.to_seconds(): xref:#type-second[second]
+
+Converts this microsecond value to seconds, discarding any remainder.
+
+
+===== fun micro_second.to_weeks(): xref:#type-week[week]
+
+Converts this microsecond value to weeks, discarding any remainder.
+
+
+
+[[type-milli_second]]
+=== type milli_second: long
+
+Time duration measured in milliseconds.
+
+==== Functions
+
+===== fun milli_second.to_days(): xref:#type-day[day]
+
+Converts this millisecond value to days, discarding any remainder.
+
+
+===== fun milli_second.to_hours(): xref:#type-hour[hour]
+
+Converts this millisecond value to hours, discarding any remainder.
+
+
+===== fun milli_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this millisecond value to microseconds.
+
+
+===== fun milli_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Returns this millisecond value unchanged.
+
+
+===== fun milli_second.to_minutes(): xref:#type-minute[minute]
+
+Converts this millisecond value to minutes, discarding any remainder.
+
+
+===== fun milli_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this millisecond value to nanoseconds.
+
+
+===== fun milli_second.to_seconds(): xref:#type-second[second]
+
+Converts this millisecond value to seconds, discarding any remainder.
+
+
+===== fun milli_second.to_weeks(): xref:#type-week[week]
+
+Converts this millisecond value to weeks, discarding any remainder.
+
+
+
+[[type-minute]]
+=== type minute: long
+
+Time duration measured in minutes.
+
+==== Functions
+
+===== fun minute.to_days(): xref:#type-day[day]
+
+Converts this minute value to days, discarding any remainder.
+
+
+===== fun minute.to_hours(): xref:#type-hour[hour]
+
+Converts this minute value to hours, discarding any remainder.
+
+
+===== fun minute.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this minute value to microseconds.
+
+
+===== fun minute.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this minute value to milliseconds.
+
+
+===== fun minute.to_minutes(): xref:#type-minute[minute]
+
+Returns this minute value unchanged.
+
+
+===== fun minute.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this minute value to nanoseconds.
+
+
+===== fun minute.to_seconds(): xref:#type-second[second]
+
+Converts this minute value to seconds.
+
+
+===== fun minute.to_weeks(): xref:#type-week[week]
+
+Converts this minute value to weeks, discarding any remainder.
+
+
+
+[[type-nano_second]]
+=== type nano_second: long
+
+Time duration measured in nanoseconds.
+
+Example:
+```cfun
+second { 2L }.to_milli_seconds() == milli_second { 2000L }
+milli_second { 1500L }.to_seconds() == second { 1L }
+```
+
+Conversions to a coarser unit use integer division and discard the remainder.
+
+==== Functions
+
+===== fun nano_second.to_days(): xref:#type-day[day]
+
+Converts this nanosecond value to days, discarding any remainder.
+
+
+===== fun nano_second.to_hours(): xref:#type-hour[hour]
+
+Converts this nanosecond value to hours, discarding any remainder.
+
+
+===== fun nano_second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this nanosecond value to microseconds, discarding any remainder.
+
+
+===== fun nano_second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this nanosecond value to milliseconds, discarding any remainder.
+
+
+===== fun nano_second.to_minutes(): xref:#type-minute[minute]
+
+Converts this nanosecond value to minutes, discarding any remainder.
+
+
+===== fun nano_second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Returns this nanosecond value unchanged.
+
+
+===== fun nano_second.to_seconds(): xref:#type-second[second]
+
+Converts this nanosecond value to seconds, discarding any remainder.
+
+
+===== fun nano_second.to_weeks(): xref:#type-week[week]
+
+Converts this nanosecond value to weeks, discarding any remainder.
+
+
+
+[[type-second]]
+=== type second: long
+
+Time duration measured in seconds.
+
+==== Functions
+
+===== fun second.to_days(): xref:#type-day[day]
+
+Converts this second value to days, discarding any remainder.
+
+
+===== fun second.to_hours(): xref:#type-hour[hour]
+
+Converts this second value to hours, discarding any remainder.
+
+
+===== fun second.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this second value to microseconds.
+
+
+===== fun second.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this second value to milliseconds.
+
+
+===== fun second.to_minutes(): xref:#type-minute[minute]
+
+Converts this second value to minutes, discarding any remainder.
+
+
+===== fun second.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this second value to nanoseconds.
+
+
+===== fun second.to_seconds(): xref:#type-second[second]
+
+Returns this second value unchanged.
+
+
+===== fun second.to_weeks(): xref:#type-week[week]
+
+Converts this second value to weeks, discarding any remainder.
+
+
+
+[[type-week]]
+=== type week: long
+
+Time duration measured in weeks.
+
+==== Functions
+
+===== fun week.to_days(): xref:#type-day[day]
+
+Converts this week value to days.
+
+
+===== fun week.to_hours(): xref:#type-hour[hour]
+
+Converts this week value to hours.
+
+
+===== fun week.to_micro_seconds(): xref:#type-micro_second[micro_second]
+
+Converts this week value to microseconds.
+
+
+===== fun week.to_milli_seconds(): xref:#type-milli_second[milli_second]
+
+Converts this week value to milliseconds.
+
+
+===== fun week.to_minutes(): xref:#type-minute[minute]
+
+Converts this week value to minutes.
+
+
+===== fun week.to_nano_seconds(): xref:#type-nano_second[nano_second]
+
+Converts this week value to nanoseconds.
+
+
+===== fun week.to_seconds(): xref:#type-second[second]
+
+Converts this week value to seconds.
+
+
+===== fun week.to_weeks(): xref:#type-week[week]
+
+Returns this week value unchanged.
+
+
+

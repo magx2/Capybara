@@ -1,0 +1,27 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+fun oor_constructs_main(): Effect[bool] =
+    let main <- Main()
+    true
+
+fun oor_constructs_person(name: String): Effect[bool] =
+    let person <- Person(name)
+    true
+
+fun oor_constructs_greeter_base(name: String): Effect[bool] =
+    let greeter: GreeterBase <- Person(name)
+    true
+
+fun oor_constructs_printable(name: String): Effect[bool] =
+    let printable: Printable <- Person(name)
+    true
+
+fun oor_constructs_bracket_naming(name: String): Effect[bool] =
+    let naming: BracketNaming <- Person(name)
+    true
+
+fun oor_throw_structured_error(): Effect[Error] =
+    let person <- Person("Capy")
+    let error <- person.throw_structured_error()
+    error

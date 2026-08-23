@@ -1,0 +1,9 @@
+interface Clock {
+    def now_millis(): long
+}
+
+class NativeProviderDomain(clock: Clock) {
+    field clock: Clock = clock
+
+    def read(): long = this.clock.now_millis()
+}

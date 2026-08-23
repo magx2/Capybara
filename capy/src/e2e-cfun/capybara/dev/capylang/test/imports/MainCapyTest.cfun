@@ -1,0 +1,73 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Main import { * }
+from Types1 import { D1 }
+from Types2 import { TD1, DataX }
+from A import { Value }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports/Main.cfun", [
+        test("calculator uses imported arithmetic functions", () => calculator_uses_imported_arithmetic_functions()),
+        test("package qualified imports are callable", () => package_qualified_imports_are_callable()),
+        test("qualified type imports construct expected data", () => qualified_type_imports_construct_expected_data()),
+        test("fully qualified types and constructors construct expected variants", () => fully_qualified_types_and_constructors_construct_expected_variants()),
+        test("qualified-only imports stay isolated by module alias", () => qualified_only_imports_stay_isolated_by_module_alias()),
+    ])
+
+// Legacy host tests also asserted generated Java classes and JavaScript
+// __capybaraType names. Those are backend-specific generated shapes, so these
+// checks use portable data equality and field assertions instead.
+
+private fun calculator_uses_imported_arithmetic_functions(): Assert =
+    assert_all([
+        assert_int_equal(calculator(2, 3, "+"), 5),
+        assert_int_equal(calculator(2, 3, "-"), -1),
+        assert_int_equal(calculator(2, 3, "*"), 6),
+        assert_int_equal(calculator(8, 2, "/"), 4),
+        assert_int_equal(calculator(2, 3, "%"), 1),
+        assert_int_equal(calculator(2, -2, "%"), 0),
+        assert_int_equal(calculator(-5, 2, "%"), -1),
+        assert_int_equal(calculator(15, 0, "p3"), 100),
+    ])
+
+private fun package_qualified_imports_are_callable(): Assert =
+    assert_all([
+        assert_int_equal(what_to_do(5), 1),
+        assert_int_equal(what_to_do(15), 100),
+        assert_int_equal(what_to_do(25), 10),
+        assert_string_equal(x(2, 3, "+"), "Day as usual"),
+        assert_string_equal(y(2, 3, "+"), "Keep pumping!"),
+        assert_string_equal(y(15, 0, "p3"), "IT'S OVER NINE THOUSAND!!!"),
+    ])
+
+private fun qualified_type_imports_construct_expected_data(): Assert =
+    assert_all([
+        assert_that(t1_types1(7)).is_equal_to(D1 { foo: 7 }),
+        assert_that(t1(7)).is_equal_to(TD1 { x: "x: 7" }),
+        assert_that(xyz(1, 2, 3)).is_equal_to(DataX { xyz: "123" }),
+        assert_that(xyz(1, 2, 3).xyz).is_equal_to("123"),
+    ])
+
+private fun fully_qualified_types_and_constructors_construct_expected_variants(): Assert =
+    assert_all([
+        assert_that(type5(5, 2)).is_equal_to(/dev/capylang/capybara/imports2/Types3.D5_1 { x: 5 }),
+        assert_that(/dev/capylang/capybara/imports2/Types3.D5_1 { x: 5 }.x).is_equal_to(5),
+        assert_that(type5(0, 7)).is_equal_to(/dev/capylang/capybara/imports2/Types3.D5_2 { y: 7 }),
+        assert_that(/dev/capylang/capybara/imports2/Types3.D5_2 { y: 7 }.y).is_equal_to(7),
+    ])
+
+private fun qualified_only_imports_stay_isolated_by_module_alias(): Assert =
+    let value = qualified_import_data(7)
+    assert_all([
+        assert_that(qualified_import_result(10)).is_equal_to(20),
+        assert_that(value).is_equal_to(Value { amount: 7 }),
+        assert_that(value.amount).is_equal_to(7),
+        assert_that(qualified_import_function_data(10)).is_equal_to(20),
+    ])
+
+private fun assert_int_equal(value: int, expected: int): Assert =
+    assert_that(value).is_equal_to(expected)
+
+private fun assert_string_equal(value: String, expected: String): Assert =
+    assert_that(value).is_equal_to(expected)

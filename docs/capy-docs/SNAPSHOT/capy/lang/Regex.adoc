@@ -1,0 +1,132 @@
+= Module Regex
+
+== Functions
+
+=== fun from_literal(pattern: xref:../../capy/lang/String.adoc#type-String[String], flags: xref:../../capy/lang/String.adoc#type-String[String]): xref:#type-Regex[Regex]
+
+Builds a regex value from a pattern and flags.
+
+Prefer regex literals when the pattern is known at compile time:
+```cfun
+let digits = regex/\d+/
+```
+
+
+
+
+== Types
+
+[[type-Match]]
+=== data Match
+
+Single regex match.
+
+==== Fields
+
+* `group_value`: xref:../../capy/lang/String.adoc#type-String[String]
+
+==== Functions
+
+===== fun Match.group(idx: xref:../../capy/collection/CollectionTypes.adoc#type-index[index]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+
+Returns the capture group at `idx`.
+
+Current matches expose the full match at index `0`.
+
+
+===== fun Match.groups(): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;&#93;
+
+Returns all capture groups for this match.
+
+
+[[type-Regex]]
+=== data Regex
+
+Regular expression value used by matching, replacement, and split helpers.
+
+Regex values can be created from regex literals or with `from_literal`.
+
+Example:
+```cfun
+let digits = from_literal("\\d+", "")
+digits.matches("123")
+```
+
+==== Fields
+
+* `flags`: xref:../../capy/lang/String.adoc#type-String[String]
+* `pattern`: xref:../../capy/lang/String.adoc#type-String[String]
+
+==== Functions
+
+===== fun Regex.`/>`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+
+Operator alias for `split`.
+
+
+===== fun Regex.`?`(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
+
+Operator alias for `matches`.
+
+
+===== fun Regex.`~>`(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
+
+Operator alias for `replace`.
+
+Example:
+```cfun
+(regex/\d+/ ~> "#")("a1b22")
+```
+Returns `a#b#`.
+
+
+===== fun Regex.`~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Match[Match]&#93;
+
+Operator alias for `find`.
+
+
+===== fun Regex.`~~`(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-Match[Match]&#93;
+
+Operator alias for `find_all`.
+
+
+===== fun Regex.find(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Option.adoc#type-Option[Option]&#91;xref:#type-Match[Match]&#93;
+
+Returns the first match, or `None` when no match exists.
+
+
+===== fun Regex.find_all(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/Seq.adoc#type-Seq[Seq]&#91;xref:#type-Match[Match]&#93;
+
+Returns all matches as a lazy sequence.
+
+Example:
+```cfun
+regex/na/.find_all("banana").map(match => match.group_value).as_list()
+```
+Produces `["na", "na"]`.
+
+
+===== fun Regex.matches(input: xref:../../capy/lang/String.adoc#type-String[String]): bool
+
+Returns true when the input matches this regex pattern.
+
+Example: `regex/capy/.matches("capybara")` returns true.
+
+
+===== fun Regex.replace(replacement: xref:../../capy/lang/String.adoc#type-String[String]): String=>String
+
+Returns a function that replaces matches with `replacement`.
+
+Example:
+```cfun
+let redact_digits = regex/\d+/.replace("#")
+redact_digits("room 42")
+```
+Returns `room #`.
+
+
+===== fun Regex.split(input: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/collection/List.adoc#type-List[List]&#91;xref:../../capy/lang/String.adoc#type-String[String]&#93;
+
+Splits `input` around this regex pattern.
+
+

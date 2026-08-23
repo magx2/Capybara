@@ -1,0 +1,4 @@
+data Pair { left: int, right: int }
+
+fun swap(p: Pair): Pair =
+    Pair { left: p.right, right: p.left }

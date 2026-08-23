@@ -1,0 +1,4 @@
+data Documentation {
+    path: String,
+    content: String,
+}

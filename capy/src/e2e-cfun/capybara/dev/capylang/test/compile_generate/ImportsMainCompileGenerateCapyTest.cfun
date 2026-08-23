@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ImportsMainCompileGenerate import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/compile_generate/ImportsMainCompileGenerate.cfun", [
+        test("swap returns a pair with left and right exchanged", () => swap_returns_pair_with_left_and_right_exchanged()),
+    ])
+
+// The legacy Java fixture asserted compile/generate artifacts, and the legacy
+// JS fixture scanned generated module internals. Running this Capybara test on
+// each backend covers compilation, module loading, and portable behavior.
+
+private fun swap_returns_pair_with_left_and_right_exchanged(): Assert =
+    let swapped: Pair = swap(Pair { left: 1, right: 2 })
+    assert_all([
+        assert_that(swapped.left).is_equal_to(2),
+        assert_that(swapped.right).is_equal_to(1),
+    ])
