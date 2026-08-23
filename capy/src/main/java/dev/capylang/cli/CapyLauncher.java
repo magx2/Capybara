@@ -1,6 +1,7 @@
 package dev.capylang.cli;
 
 import capy.lang.Program;
+import dev.capylang.compiler.parser.ParserException;
 
 import java.util.List;
 
@@ -12,7 +13,7 @@ public final class CapyLauncher {
     public static void main(String[] args) {
         try {
             run(args);
-        } catch (IllegalArgumentException exception) {
+        } catch (ParserException exception) {
             System.err.println(exception.getMessage());
             System.exit(1);
         }

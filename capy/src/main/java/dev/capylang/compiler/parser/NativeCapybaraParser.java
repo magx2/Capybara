@@ -209,7 +209,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         }
 
         var error = errors.getFirst();
-        throw new IllegalArgumentException(
+        throw new ParserException(
                 "%s:%d:%d: ParserError: %s".formatted(
                         moduleFile(module),
                         error.line(),

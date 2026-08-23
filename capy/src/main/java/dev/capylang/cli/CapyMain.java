@@ -1,6 +1,7 @@
 package dev.capylang.cli;
 
 import dev.capylang.compiler.BackendCompilationContext;
+import dev.capylang.compiler.parser.ParserException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +20,7 @@ public final class CapyMain {
     public static void main(String... arguments) {
         try {
             run(arguments);
-        } catch (IllegalArgumentException exception) {
+        } catch (ParserException exception) {
             System.err.println(exception.getMessage());
             System.exit(1);
         }

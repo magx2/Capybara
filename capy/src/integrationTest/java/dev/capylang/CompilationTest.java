@@ -14,6 +14,7 @@ import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.LinkedJsonCodec;
 import dev.capylang.compiler.NativeProviderManifest;
+import dev.capylang.compiler.parser.ParserException;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Either;
@@ -368,7 +369,7 @@ class CompilationTest {
                 emptyNativeProviders(),
                 emptyNativeProviders()
         ).unsafeRun())
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ParserException.class)
                 .hasMessageContaining("main.cfun:1:0: ParserError");
     }
 
