@@ -86,13 +86,69 @@ fun python_generator(program: CompiledProgram): GeneratedProgram =
 fun python_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
     let objectOrientedUnitIndex = python_object_oriented_unit_index(lookupProgram.objectOrientedModules)
     let nativeProviderIndex = python_native_provider_index(lookupProgram.nativeProviderCatalog)
-    let emittedModules = python_runtime_source_modules(sourceProgram.modules, lookupProgram.modules)
+    let lookupModules = python_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
+    let emittedModules = python_runtime_source_modules(sourceProgram.modules, lookupModules)
     GeneratedProgram {
         modules: python_native_provider_interface_modules(sourceProgram.nativeProviderCatalog.declarations)
-            + python_modules(emittedModules, lookupProgram.modules, objectOrientedUnitIndex, nativeProviderIndex)
-            + python_test_runtime_modules(sourceProgram.modules, lookupProgram.modules)
+            + python_modules(emittedModules, lookupModules, objectOrientedUnitIndex, nativeProviderIndex)
+            + python_test_runtime_modules(sourceProgram.modules, lookupModules)
             + python_native_runtime_modules()
     }
+
+/// Removes value definitions from packaged standard-library metadata while retaining them for source modules.
+private fun python_runtime_lookup_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
+    match lookupModules[0] with
+    case None -> []
+    case Some { module } ->
+        [python_runtime_lookup_module(sourceModules, module)]
+            + python_runtime_lookup_modules(sourceModules, lookupModules[1:])
+
+/// Keeps current source definitions authoritative and masks only metadata values that require runtime lowering.
+private fun python_runtime_lookup_module(sourceModules: List[CompiledModule], module: CompiledModule): CompiledModule =
+    match python_find_module_by_path(python_module_path(module), sourceModules) with
+    case Some _ -> module
+    case None ->
+        if !python_runtime_lowered_stdlib_module(python_module_path(module))
+        then module
+        else CompiledModule {
+            name: module.name,
+            path: module.path,
+            types: module.types,
+            visiblePrimitiveBackedTypes: module.visiblePrimitiveBackedTypes,
+            functions: python_runtime_lookup_functions(module.functions, python_module_path(module)),
+            functionBindings: module.functionBindings,
+            imports: module.imports,
+            derivers: module.derivers,
+            annotations: module.annotations,
+            staticImports: module.staticImports
+        }
+
+/// Checks whether a standard-library module owns values supplied by the Python runtime.
+private fun python_runtime_lowered_stdlib_module(modulePath: String): bool =
+    modulePath == "capy/lang/Primitives"
+        | modulePath == "capy/date_time/Date"
+        | modulePath == "capy/date_time/Time"
+        | modulePath == "capy/date_time/DateTime"
+        | modulePath == "capy/date_time/Duration"
+
+/// Retains metadata needed for type resolution while hiding packaged values that have backend-native lowering.
+private fun python_runtime_lookup_functions(functions: List[CompiledFunction], modulePath: String): List[CompiledFunction] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if python_packaged_stdlib_value_function(function, modulePath)
+        then python_runtime_lookup_functions(functions[1:], modulePath)
+        else [function] + python_runtime_lookup_functions(functions[1:], modulePath)
+
+/// Checks whether a lookup-only standard-library value must be supplied by the Python runtime.
+private fun python_packaged_stdlib_value_function(function: CompiledFunction, modulePath: String): bool =
+    if modulePath == "capy/lang/Primitives" & function.name == "__capy_constructor|digit"
+    then true
+    else if python_compiled_constant(function)
+    then match python_stdlib_constant(function.name, modulePath) with
+        case Some _ -> true
+        case None -> false
+    else false
 
 private fun python_runtime_source_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
     match python_find_module_by_path("capy/test/Assert", sourceModules) with
@@ -1112,11 +1168,11 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
 private fun python_unbound_variable_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_qualified_enum_value_name(name, module, allModules)
     then python_enum_qualified_value_code(name, module, allModules)
-    else match python_imported_stdlib_constant(name, module.imports) with
-        case Some { value } -> value.pythonName
+    else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> python_module_import_expression(binding.module) + "." + python_identifier(binding.function.name)
         case None ->
-            match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
-            case Some { binding } -> python_module_import_expression(binding.module) + "." + python_identifier(binding.function.name)
+            match python_imported_stdlib_constant(name, module.imports) with
+            case Some { value } -> value.pythonName
             case None -> python_identifier(name)
 
 /// Emits Python code for binary expression.
@@ -3044,8 +3100,6 @@ private fun python_primitive_backed_data_literal_code(typeName: String, literal:
                 + python_data_constructor_call_arguments(binding.function.parameters, literal.fields, literal.typeName, env, module, allModules)
                 + "))"
         case None -> python_primitive_backed_literal_value_code(literal, env, module, allModules)
-    else if typeName == "digit" & python_primitives_member_imported(typeName, module.imports)
-    then "__capy_digit(" + python_primitive_backed_literal_value_code(literal, env, module, allModules) + ")"
     else match python_data_constructor_binding(typeName, module, allModules) with
     case Some { binding } ->
         "__capy_primitive_constructor_result("
@@ -3053,7 +3107,10 @@ private fun python_primitive_backed_data_literal_code(typeName: String, literal:
             + "("
             + python_data_constructor_call_arguments(binding.function.parameters, literal.fields, literal.typeName, env, module, allModules)
             + "))"
-    case None -> python_primitive_backed_literal_value_code(literal, env, module, allModules)
+    case None ->
+        if typeName == "digit" & python_primitives_member_imported(typeName, module.imports)
+        then "__capy_digit(" + python_primitive_backed_literal_value_code(literal, env, module, allModules) + ")"
+        else python_primitive_backed_literal_value_code(literal, env, module, allModules)
 
 /// Emits Python code for primitive backed literal value.
 private fun python_primitive_backed_literal_value_code(literal: CompiledDataLiteral, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -3765,12 +3822,12 @@ private fun python_unbound_variable_type(name: String, module: CompiledModule, a
     then python_enum_qualified_type_name(name)
     else match python_find_constant(name, module.functions) with
         case Some { function } -> function.returnType.name
-        case None -> match python_imported_stdlib_constant(name, module.imports) with
+        case None -> match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+        case Some { binding } -> binding.function.returnType.name
+        case None ->
+            match python_imported_stdlib_constant(name, module.imports) with
             case Some { value } -> value.typeName
-            case None ->
-                match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
-                case Some { binding } -> binding.function.returnType.name
-                case None -> python_unknown_type()
+            case None -> python_unknown_type()
 
 /// Collects imported standard-library constant visible to the current module.
 private fun python_imported_stdlib_constant(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[PythonStdlibValue] =
@@ -4385,7 +4442,9 @@ private fun python_data_literal_expression_type(literal: CompiledDataLiteral, en
     else
         let declaredTypeName = python_data_literal_declared_type_name(literal.typeName)
         let parentConstructors = python_data_parent_constructor_type_names(declaredTypeName, module, allModules)
-        if parentConstructors.is_empty()
+        if declaredTypeName == "digit" & python_primitives_member_imported(declaredTypeName, module.imports)
+        then python_result_type()
+        else if parentConstructors.is_empty()
         then match python_data_constructor_binding(declaredTypeName, module, allModules) with
             case Some _ ->
                 if python_data_constructor_type_returns_result(declaredTypeName, module, allModules)

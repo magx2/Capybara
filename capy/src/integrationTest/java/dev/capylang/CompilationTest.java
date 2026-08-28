@@ -1926,6 +1926,51 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferCurrentStdlibSourceValuesOverPackagedFallbacks() {
+        var primitivesSource = """
+                from /capy/lang/Result import { Success }
+
+                type digit -> int with constructor {
+                    Success { value + 1 }
+                }
+
+                const ONE_DIGIT: digit = digit! { 40 }
+                """;
+        var consumerSource = """
+                from /capy/lang/Primitives import { digit, ONE_DIGIT }
+                from /capy/lang/Result import { Result }
+
+                fun current_constant(): digit = ONE_DIGIT
+                fun current_constructor(value: int): Result[digit] = digit { value }
+                """;
+        var program = compileProgram(List.of(
+                rawModule("Primitives", "/capy/lang", primitivesSource, SourceKind.FUNCTIONAL),
+                rawModule("Consumer", "/sample/app", consumerSource, SourceKind.FUNCTIONAL)
+        ));
+
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Consumer.js"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(javaScriptCode)
+                .contains("__capy_import_capy_lang_Primitives[\"ONE_DIGIT")
+                .contains("require(\"../../capy/lang/Primitives\")[\"__capy_constructor_digit")
+                .doesNotContain("return 1;")
+                .doesNotContain("__capy_digit(value)");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Consumer.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonCode)
+                .contains("return __import__(\"capy.lang.Primitives\", fromlist=['*']).ONE_DIGIT")
+                .contains("__import__(\"capy.lang.Primitives\", fromlist=['*']).__capy_constructor_digit")
+                .doesNotContain("__capy_digit(value)");
+    }
+
+    @Test
     void shouldKeepIndexExpressionsBeforePipeLambdas() {
         var source = """
                 from /capy/lang/Option import { Option, Some }

@@ -80,11 +80,67 @@ fun java_script_generator(program: CompiledProgram): GeneratedProgram =
 /// Generates requested JavaScript modules while resolving metadata against a larger lookup program.
 fun java_script_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
     let nativeProviderIndex = java_script_native_provider_index(lookupProgram.nativeProviderCatalog)
-    let emittedModules = java_script_runtime_source_modules(sourceProgram.modules, lookupProgram.modules)
+    let lookupModules = java_script_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
+    let emittedModules = java_script_runtime_source_modules(sourceProgram.modules, lookupModules)
     GeneratedProgram {
-        modules: java_script_modules(emittedModules, emittedModules, lookupProgram.modules, nativeProviderIndex)
-            + java_script_test_runtime_modules(sourceProgram.modules, lookupProgram.modules)
+        modules: java_script_modules(emittedModules, emittedModules, lookupModules, nativeProviderIndex)
+            + java_script_test_runtime_modules(sourceProgram.modules, lookupModules)
     }
+
+/// Removes value definitions from packaged standard-library metadata while retaining them for source modules.
+private fun java_script_runtime_lookup_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
+    match lookupModules[0] with
+    case None -> []
+    case Some { module } ->
+        [java_script_runtime_lookup_module(sourceModules, module)]
+            + java_script_runtime_lookup_modules(sourceModules, lookupModules[1:])
+
+/// Keeps current source definitions authoritative and masks only metadata values that require runtime lowering.
+private fun java_script_runtime_lookup_module(sourceModules: List[CompiledModule], module: CompiledModule): CompiledModule =
+    match java_script_find_module_by_path(java_script_module_path(module), sourceModules) with
+    case Some _ -> module
+    case None ->
+        if !java_script_runtime_lowered_stdlib_module(java_script_module_path(module))
+        then module
+        else CompiledModule {
+            name: module.name,
+            path: module.path,
+            types: module.types,
+            visiblePrimitiveBackedTypes: module.visiblePrimitiveBackedTypes,
+            functions: java_script_runtime_lookup_functions(module.functions, java_script_module_path(module)),
+            functionBindings: module.functionBindings,
+            imports: module.imports,
+            derivers: module.derivers,
+            annotations: module.annotations,
+            staticImports: module.staticImports
+        }
+
+/// Checks whether a standard-library module owns values supplied by the JavaScript runtime.
+private fun java_script_runtime_lowered_stdlib_module(modulePath: String): bool =
+    modulePath == "capy/lang/Primitives"
+        | modulePath == "capy/date_time/Date"
+        | modulePath == "capy/date_time/Time"
+        | modulePath == "capy/date_time/DateTime"
+        | modulePath == "capy/date_time/Duration"
+
+/// Retains metadata needed for type resolution while hiding packaged values that have backend-native lowering.
+private fun java_script_runtime_lookup_functions(functions: List[CompiledFunction], modulePath: String): List[CompiledFunction] =
+    match functions[0] with
+    case None -> []
+    case Some { function } ->
+        if java_script_packaged_stdlib_value_function(function, modulePath)
+        then java_script_runtime_lookup_functions(functions[1:], modulePath)
+        else [function] + java_script_runtime_lookup_functions(functions[1:], modulePath)
+
+/// Checks whether a lookup-only standard-library value must be supplied by the JavaScript runtime.
+private fun java_script_packaged_stdlib_value_function(function: CompiledFunction, modulePath: String): bool =
+    if modulePath == "capy/lang/Primitives" & function.name == "__capy_constructor|digit"
+    then true
+    else if java_script_compiled_constant(function)
+    then match java_script_stdlib_constant_code(function.name, modulePath) with
+        case Some _ -> true
+        case None -> false
+    else false
 
 private fun java_script_runtime_source_modules(sourceModules: List[CompiledModule], lookupModules: List[CompiledModule]): List[CompiledModule] =
     match java_script_find_module_by_path("capy/test/Assert", sourceModules) with
@@ -2042,10 +2098,10 @@ private fun java_script_variable_code(name: String, env: List[JavaScriptBinding]
         else match java_script_find_local_constant(name, module.functions) with
         case Some { function } -> java_script_constant_name(function)
         case None ->
-            match java_script_imported_stdlib_constant_code(name, module.imports) with
+            match java_script_find_constant_in_imports(name, module.imports, module, allModules) with
             case Some { binding } -> binding
             case None ->
-                match java_script_find_constant_in_imports(name, module.imports, module, allModules) with
+                match java_script_imported_stdlib_constant_code(name, module.imports) with
                 case Some { binding } -> binding
                 case None -> java_script_identifier(name)
 
@@ -4197,8 +4253,6 @@ private fun java_script_data_literal_code(literal: CompiledDataLiteral, env: Lis
 private fun java_script_primitive_backed_data_literal_code(typeName: String, literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_script_raw_data_literal(literal.typeName)
     then java_script_primitive_backed_literal_value_code(literal, env, module, allModules)
-    else if typeName == "digit" & java_script_primitives_member_imported(typeName, module.imports)
-    then "__capy_digit(" + java_script_primitive_backed_literal_value_code(literal, env, module, allModules) + ")"
     else match java_script_data_constructor_binding(typeName, module, allModules) with
     case Some { binding } ->
         "__capy_primitive_constructor_result("
@@ -4206,7 +4260,10 @@ private fun java_script_primitive_backed_data_literal_code(typeName: String, lit
             + "("
             + java_script_data_constructor_call_arguments(binding.function.parameters, literal.fields, 0, env, module, allModules)
             + "))"
-    case None -> java_script_primitive_backed_literal_value_code(literal, env, module, allModules)
+    case None ->
+        if typeName == "digit" & java_script_primitives_member_imported(typeName, module.imports)
+        then "__capy_digit(" + java_script_primitive_backed_literal_value_code(literal, env, module, allModules) + ")"
+        else java_script_primitive_backed_literal_value_code(literal, env, module, allModules)
 
 /// Emits the backing value of a primitive-backed literal.
 private fun java_script_primitive_backed_literal_value_code(literal: CompiledDataLiteral, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
