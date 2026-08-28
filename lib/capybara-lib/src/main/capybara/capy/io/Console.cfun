@@ -1,0 +1,128 @@
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+
+/// Writes a string to standard output without a trailing newline and returns the consumed value.
+///
+/// Example:
+/// ```cfun
+/// let _ <- print("status: ")
+/// println("ready")
+/// ```
+/// Use `println` when a trailing newline should be written.
+fun print(text: String): Effect[String] = <native>
+
+/// Writes a byte to standard output without a trailing newline and returns the consumed value.
+fun print(text: byte): Effect[byte] = <native>
+
+/// Writes an int to standard output without a trailing newline and returns the consumed value.
+fun print(text: int): Effect[int] = <native>
+
+/// Writes a long to standard output without a trailing newline and returns the consumed value.
+fun print(text: long): Effect[long] = <native>
+
+/// Writes a float to standard output without a trailing newline and returns the consumed value.
+fun print(text: float): Effect[float] = <native>
+
+/// Writes a double to standard output without a trailing newline and returns the consumed value.
+fun print(text: double): Effect[double] = <native>
+
+/// Writes a bool to standard output without a trailing newline and returns the consumed value.
+fun print(text: bool): Effect[bool] = <native>
+
+/// Writes bytes to standard output without a trailing newline and returns the consumed value.
+fun print(text: List[byte]): Effect[List[byte]] = <native>
+
+/// Writes a string to standard output followed by a newline and returns the consumed value.
+///
+/// `println` is useful in `main` effects because it preserves the printed value
+/// for later effect composition.
+fun println(text: String): Effect[String] = <native>
+
+/// Writes a byte to standard output followed by a newline and returns the consumed value.
+fun println(text: byte): Effect[byte] = <native>
+
+/// Writes an int to standard output followed by a newline and returns the consumed value.
+fun println(text: int): Effect[int] = <native>
+
+/// Writes a long to standard output followed by a newline and returns the consumed value.
+fun println(text: long): Effect[long] = <native>
+
+/// Writes a float to standard output followed by a newline and returns the consumed value.
+fun println(text: float): Effect[float] = <native>
+
+/// Writes a double to standard output followed by a newline and returns the consumed value.
+fun println(text: double): Effect[double] = <native>
+
+/// Writes a bool to standard output followed by a newline and returns the consumed value.
+fun println(text: bool): Effect[bool] = <native>
+
+/// Writes bytes to standard output followed by a newline and returns the consumed value.
+fun println(text: List[byte]): Effect[List[byte]] = <native>
+
+/// Writes a string to standard error without a trailing newline and returns the consumed value.
+///
+/// Example:
+/// ```cfun
+/// let _ <- print_error("warning: ")
+/// println_error("configuration missing")
+/// ```
+fun print_error(text: String): Effect[String] = <native>
+
+/// Writes a byte to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: byte): Effect[byte] = <native>
+
+/// Writes an int to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: int): Effect[int] = <native>
+
+/// Writes a long to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: long): Effect[long] = <native>
+
+/// Writes a float to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: float): Effect[float] = <native>
+
+/// Writes a double to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: double): Effect[double] = <native>
+
+/// Writes a bool to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: bool): Effect[bool] = <native>
+
+/// Writes bytes to standard error without a trailing newline and returns the consumed value.
+fun print_error(text: List[byte]): Effect[List[byte]] = <native>
+
+/// Writes a string to standard error followed by a newline and returns the consumed value.
+///
+/// Use this for diagnostics, progress messages, or errors that should not be
+/// mixed with normal program output.
+fun println_error(text: String): Effect[String] = <native>
+
+/// Writes a byte to standard error followed by a newline and returns the consumed value.
+fun println_error(text: byte): Effect[byte] = <native>
+
+/// Writes an int to standard error followed by a newline and returns the consumed value.
+fun println_error(text: int): Effect[int] = <native>
+
+/// Writes a long to standard error followed by a newline and returns the consumed value.
+fun println_error(text: long): Effect[long] = <native>
+
+/// Writes a float to standard error followed by a newline and returns the consumed value.
+fun println_error(text: float): Effect[float] = <native>
+
+/// Writes a double to standard error followed by a newline and returns the consumed value.
+fun println_error(text: double): Effect[double] = <native>
+
+/// Writes a bool to standard error followed by a newline and returns the consumed value.
+fun println_error(text: bool): Effect[bool] = <native>
+
+/// Writes bytes to standard error followed by a newline and returns the consumed value.
+fun println_error(text: List[byte]): Effect[List[byte]] = <native>
+
+/// Reads one line from standard input, or None at end of input.
+///
+/// Example:
+/// ```cfun
+/// let line <- read_line()
+/// match line with
+/// case Some { value } -> println("hello " + value)
+/// case None -> println_error("no input")
+/// ```
+fun read_line(): Effect[Option[String]] = <native>

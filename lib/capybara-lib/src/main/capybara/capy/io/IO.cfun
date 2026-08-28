@@ -1,0 +1,114 @@
+from /capy/io/Path import { * }
+from /capy/io/ByteSize import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+
+/// Reads the entire file as UTF-8 text.
+///
+/// Example:
+/// ```cfun
+/// let content_result <- read_text(from_string("notes/today.txt"))
+/// match content_result with
+/// case Success { text } -> text
+/// case Error { message } -> "Could not read file: " + message
+/// ```
+/// File operations are effects because they interact with the host file system.
+/// The inner `Result` reports path, permission, or decoding failures.
+fun read_text(path: Path): Effect[Result[String]] = <native>
+
+/// Reads all lines from the file as UTF-8 text.
+///
+/// The returned list contains text lines without requiring callers to split the
+/// file manually.
+fun read_lines(path: Path): Effect[Result[List[String]]] = <native>
+
+/// Reads the entire file as bytes.
+fun read_bytes(path: Path): Effect[Result[List[byte]]] = <native>
+
+/// Writes UTF-8 text to the file, replacing existing content, and returns the consumed text.
+///
+/// Example:
+/// ```cfun
+/// let path = from_string("build/report.txt")
+/// let written <- write_text(path, "ready\n")
+/// ```
+/// Use `append_text` when existing content should be preserved.
+fun write_text(path: Path, text: String): Effect[Result[String]] = <native>
+
+/// Writes UTF-8 lines to the file, replacing existing content, and returns the consumed lines.
+fun write_lines(path: Path, lines: List[String]): Effect[Result[List[String]]] = <native>
+
+/// Writes bytes to the file, replacing existing content, and returns the consumed bytes.
+fun write_bytes(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = <native>
+
+/// Appends UTF-8 text to the file, creating the file when needed, and returns the consumed text.
+///
+/// Example:
+/// ```cfun
+/// let _ <- append_text(from_string("app.log"), "started\n")
+/// ```
+/// The file is created if it does not already exist.
+fun append_text(path: Path, text: String): Effect[Result[String]] = <native>
+
+/// Appends UTF-8 lines to the file, creating the file when needed, and returns the consumed lines.
+fun append_lines(path: Path, lines: List[String]): Effect[Result[List[String]]] = <native>
+
+/// Appends bytes to the file, creating the file when needed, and returns the consumed bytes.
+fun append_bytes(path: Path, bytes: List[byte]): Effect[Result[List[byte]]] = <native>
+
+/// Returns true when the path exists.
+///
+/// Example:
+/// ```cfun
+/// let present <- exists(from_string("config.json"))
+/// if present then "configured" else "missing config"
+/// ```
+fun exists(path: Path): Effect[bool] = <native>
+
+/// Returns true when the path exists and is a regular file.
+fun is_file(path: Path): Effect[bool] = <native>
+
+/// Returns true when the path exists and is a directory.
+fun is_directory(path: Path): Effect[bool] = <native>
+
+/// Returns the size of a file in bytes.
+///
+/// The byte count can be converted with `to_kib`, `to_mib`, or `to_gib`.
+fun size(path: Path): Effect[Result[byte_count]] = <native>
+
+/// Creates a new empty file and returns the created path.
+fun create_file(path: Path): Effect[Result[Path]] = <native>
+
+/// Creates a single directory and returns the created path.
+fun create_directory(path: Path): Effect[Result[Path]] = <native>
+
+/// Creates a directory and any missing parent directories, returning the created path.
+///
+/// Example:
+/// ```cfun
+/// let created <- create_directories(from_string("reports/2026/06"))
+/// ```
+/// Use this for nested output directories where parent paths may not exist yet.
+fun create_directories(path: Path): Effect[Result[Path]] = <native>
+
+/// Lists direct child entries of a directory.
+fun list_entries(path: Path): Effect[Result[List[Path]]] = <native>
+
+/// Deletes a file or empty directory and returns true when something was deleted.
+fun delete(path: Path): Effect[Result[bool]] = <native>
+
+/// Copies a file and returns the target path. Fails if the target already exists.
+///
+/// Use `copy_replace` when overwriting the target is intentional.
+fun copy(source: Path, target: Path): Effect[Result[Path]] = <native>
+
+/// Copies a file and returns the target path, replacing an existing target.
+fun copy_replace(source: Path, target: Path): Effect[Result[Path]] = <native>
+
+/// Moves a file or directory and returns the target path. Fails if the target already exists.
+///
+/// Use `move_replace` when overwriting the target is intentional.
+fun move(source: Path, target: Path): Effect[Result[Path]] = <native>
+
+/// Moves a file or directory and returns the target path, replacing an existing target.
+fun move_replace(source: Path, target: Path): Effect[Result[Path]] = <native>

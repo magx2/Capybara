@@ -1,0 +1,5 @@
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+from /dev/capylang/compiler/CapybaraValidator import { CapybaraValidator }
+
+@NativeProvider
+fun validator(): Effect[CapybaraValidator] = <native>

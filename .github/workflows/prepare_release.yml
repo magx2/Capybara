@@ -1,0 +1,203 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release-${{ github.event.repository.default_branch }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Validate default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          if [[ "${GITHUB_REF_NAME}" != "${DEFAULT_BRANCH}" ]]; then
+            echo "::error::Prepare Release must be run from '${DEFAULT_BRANCH}', got '${GITHUB_REF_NAME}'."
+            exit 1
+          fi
+
+      - name: Prepare release branch metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk -F= '/^version[[:space:]]*=/ { v=$2; gsub(/\r/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v }' gradle.properties)"
+          if [[ ! "${VERSION}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-SNAPSHOT$ ]]; then
+            echo "::error::Default branch version must be x.y.z-SNAPSHOT, got '${VERSION}'."
+            exit 1
+          fi
+
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          NEXT_MINOR_VERSION="${MAJOR}.$((MINOR + 1)).0-SNAPSHOT"
+          RELEASE_BRANCH="release/${MAJOR}.${MINOR}.x"
+          BUMP_BRANCH="automation/prepare-release-${MAJOR}.${MINOR}.x"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          RELEASE_BRANCH_SHA="$(git ls-remote --heads origin "${RELEASE_BRANCH}" | awk '{ print $1 }')"
+
+          if [[ -n "${RELEASE_BRANCH_SHA}" ]]; then
+            git fetch --no-tags origin "${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+            RELEASE_BRANCH_PROPERTIES="${RUNNER_TEMP:-/tmp}/release-branch-gradle.properties"
+            git show "${RELEASE_BRANCH_SHA}:gradle.properties" > "${RELEASE_BRANCH_PROPERTIES}"
+            RELEASE_BRANCH_VERSION="$(awk -F= '/^version[[:space:]]*=/ { v=$2; gsub(/\r/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v }' "${RELEASE_BRANCH_PROPERTIES}")"
+            if [[ "${RELEASE_BRANCH_VERSION}" != "${VERSION}" ]]; then
+              echo "::error::Release branch '${RELEASE_BRANCH}' has version '${RELEASE_BRANCH_VERSION}', expected '${VERSION}'."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "release_branch=${RELEASE_BRANCH}"
+            echo "next_minor_version=${NEXT_MINOR_VERSION}"
+            echo "bump_branch=${BUMP_BRANCH}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Configure git user
+        run: |
+          git config user.name "CapyAutomata"
+          git config user.email "CapyAutomata@capylang.dev"
+
+      - name: Create release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_BRANCH="${{ steps.version.outputs.release_branch }}"
+          CURRENT_SHA="$(git rev-parse HEAD)"
+          CURRENT_TREE="$(git rev-parse HEAD^{tree})"
+          RELEASE_BRANCH_SHA="$(git ls-remote --heads origin "${RELEASE_BRANCH}" | awk '{ print $1 }')"
+          SOURCE_MESSAGE="Source-Commit: ${CURRENT_SHA}"
+
+          if [[ -z "${RELEASE_BRANCH_SHA}" ]]; then
+            # Release branches must satisfy linear-history rules even if default branch has legacy merge commits.
+            LINEAR_BASE_SHA="$(git rev-list --max-parents=0 --reverse HEAD | sed -n '1p')"
+            if [[ -z "${LINEAR_BASE_SHA}" ]]; then
+              echo "::error::Could not determine a linear base commit for ${CURRENT_SHA}."
+              exit 1
+            fi
+            RELEASE_COMMIT_SHA="$(git commit-tree "${CURRENT_TREE}" -p "${LINEAR_BASE_SHA}" -m "chore: prepare ${RELEASE_BRANCH}" -m "${SOURCE_MESSAGE}")"
+            git push origin "${RELEASE_COMMIT_SHA}:refs/heads/${RELEASE_BRANCH}"
+          else
+            git fetch --no-tags origin "${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+            RELEASE_BRANCH_TREE="$(git rev-parse "${RELEASE_BRANCH_SHA}^{tree}")"
+            if [[ "${RELEASE_BRANCH_TREE}" != "${CURRENT_TREE}" ]]; then
+              echo "Fast-forwarding release branch ${RELEASE_BRANCH} from ${RELEASE_BRANCH_SHA} to the current default-branch tree."
+              RELEASE_COMMIT_SHA="$(git commit-tree "${CURRENT_TREE}" -p "${RELEASE_BRANCH_SHA}" -m "chore: update ${RELEASE_BRANCH}" -m "${SOURCE_MESSAGE}")"
+              git push origin "${RELEASE_COMMIT_SHA}:refs/heads/${RELEASE_BRANCH}"
+            else
+              echo "Release branch ${RELEASE_BRANCH} already matches the current default-branch tree at ${CURRENT_SHA}."
+            fi
+          fi
+
+          gh workflow run check.yml --ref "${RELEASE_BRANCH}"
+          gh workflow run verify_version.yml --ref "${RELEASE_BRANCH}"
+
+      - name: Bump minor on default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          BUMP_BRANCH="${{ steps.version.outputs.bump_branch }}"
+          NEXT_MINOR_VERSION="${{ steps.version.outputs.next_minor_version }}"
+
+          git switch -C "${BUMP_BRANCH}"
+          sed -i "s/^version=.*/version=${NEXT_MINOR_VERSION}/" gradle.properties
+          git add gradle.properties
+          git commit -m "chore: bump version to ${NEXT_MINOR_VERSION}"
+
+          BUMP_BRANCH_SHA="$(git ls-remote --heads origin "${BUMP_BRANCH}" | awk '{ print $1 }')"
+          if [[ -n "${BUMP_BRANCH_SHA}" ]]; then
+            git push --force-with-lease="refs/heads/${BUMP_BRANCH}:${BUMP_BRANCH_SHA}" origin "HEAD:${BUMP_BRANCH}"
+          else
+            git push origin "HEAD:${BUMP_BRANCH}"
+          fi
+
+          PR_NUMBER="$(
+            gh pr list \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${BUMP_BRANCH}" \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [[ -z "${PR_NUMBER}" ]]; then
+            PR_URL="$(
+              gh pr create \
+                --base "${DEFAULT_BRANCH}" \
+                --head "${BUMP_BRANCH}" \
+                --title "chore: bump version to ${NEXT_MINOR_VERSION}" \
+                --body "Bumps the default branch to ${NEXT_MINOR_VERSION} after creating ${{ steps.version.outputs.release_branch }}."
+            )"
+            PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
+          fi
+
+          WORKFLOW="check.yml"
+          SHA="$(git rev-parse HEAD)"
+          gh workflow run "${WORKFLOW}" --ref "${BUMP_BRANCH}"
+
+          find_check_run() {
+            gh run list \
+              --workflow "${WORKFLOW}" \
+              --branch "${BUMP_BRANCH}" \
+              --commit "${SHA}" \
+              --json databaseId,event,status,conclusion,url \
+              --limit 20 \
+              --jq '[.[] | select(.event == "workflow_dispatch")][0] // empty'
+          }
+
+          CHECK_RUN="$(find_check_run)"
+          CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            for _ in {1..30}; do
+              sleep 10
+              CHECK_RUN="$(find_check_run)"
+              CHECK_RUN_ID="$(jq -r '.databaseId // empty' <<< "${CHECK_RUN}")"
+              if [[ -n "${CHECK_RUN_ID}" ]]; then
+                break
+              fi
+            done
+          fi
+
+          if [[ -z "${CHECK_RUN_ID}" ]]; then
+            echo "::error::No Build & Check run found for ${BUMP_BRANCH} at ${SHA}."
+            exit 1
+          fi
+
+          CHECK_RUN_URL="$(jq -r '.url' <<< "${CHECK_RUN}")"
+          echo "Watching Build & Check run ${CHECK_RUN_ID}: ${CHECK_RUN_URL}"
+          gh run watch "${CHECK_RUN_ID}" --exit-status
+
+          gh pr merge "${PR_NUMBER}" --rebase --delete-branch
+          gh workflow run check.yml --ref "${DEFAULT_BRANCH}"

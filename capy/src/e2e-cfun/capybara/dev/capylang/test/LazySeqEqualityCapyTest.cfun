@@ -1,0 +1,14 @@
+from /capy/collection/Seq import { Seq, Cons, End }
+from /capy/lang/Effect import { Effect }
+from /capy/test/Assert import { Assert, assert_that }
+from /capy/test/CapyTest import { TestFile, test, test_file }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/LazySeqEquality.cfun", [
+        test("lazy sequences compare their values instead of supplier identity", () => lazy_sequences_compare_by_value()),
+    ])
+
+private fun lazy_sequences_compare_by_value(): Assert =
+    let actual: Seq[int] = Cons { value: 1, rest: () => End {} }
+    let expected: Seq[int] = Cons { value: 1, rest: () => End {} }
+    assert_that(actual).is_equal_to(expected)

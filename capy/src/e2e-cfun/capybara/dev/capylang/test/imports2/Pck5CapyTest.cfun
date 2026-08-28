@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Pck5 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports2/Pck5.cfun", [
+        test("lvl_multiplier squares levels", () => lvl_multiplier_squares_levels()),
+    ])
+
+private fun lvl_multiplier_squares_levels(): Assert =
+    assert_all([
+        pck5_assert_int_equal(lvl_multiplier(0), 0),
+        pck5_assert_int_equal(lvl_multiplier(2), 4),
+        pck5_assert_int_equal(lvl_multiplier(10), 100),
+        pck5_assert_int_equal(lvl_multiplier(-3), 9),
+    ])
+
+private fun pck5_assert_int_equal(value: int, expected: int): Assert =
+    assert_that(value).is_equal_to(expected)

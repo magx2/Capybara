@@ -1,0 +1,51 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from GroupedExpression import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/GroupedExpression.cfun", [
+        test("nested_pipe_in_match_branch maps nested grouped pipe result", () => nested_pipe_in_match_branch_maps_nested_grouped_pipe_result()),
+        test("grouped_guarded_match_is_exhaustive handles all match branches", () => grouped_guarded_match_is_exhaustive_handles_all_match_branches()),
+        test("semver_style_mixed_case_pipe_bodies parses grouped and ungrouped branches", () => semver_style_mixed_case_pipe_bodies_parses_grouped_and_ungrouped_branches()),
+        test("inner_ungrouped_pipe_in_match_inside_lambda parses nested match branches", () => inner_ungrouped_pipe_in_match_inside_lambda_parses_nested_match_branches()),
+        test("nested_result_error_match_case preserves nested error messages", () => nested_result_error_match_case_preserves_nested_error_messages()),
+    ])
+
+private fun nested_pipe_in_match_branch_maps_nested_grouped_pipe_result(): Assert =
+    assert_that(nested_pipe_in_match_branch(1)).succeeds(3)
+
+private fun grouped_guarded_match_is_exhaustive_handles_all_match_branches(): Assert =
+    assert_all([
+        assert_that(grouped_guarded_match_is_exhaustive("-+abc")).succeeds("plus:pre:tail:build"),
+        assert_that(grouped_guarded_match_is_exhaustive("-abc")).fails("bad:a"),
+        assert_that(grouped_guarded_match_is_exhaustive("+abc")).succeeds("plus:build"),
+        assert_that(grouped_guarded_match_is_exhaustive("xabc")).succeeds("other:x"),
+        assert_that(grouped_guarded_match_is_exhaustive("")).succeeds("none"),
+    ])
+
+private fun semver_style_mixed_case_pipe_bodies_parses_grouped_and_ungrouped_branches(): Assert =
+    assert_all([
+        assert_that(semver_style_mixed_case_pipe_bodies("-+meta")).succeeds("1.2.3-rc1+001"),
+        assert_that(semver_style_mixed_case_pipe_bodies("+meta")).succeeds("1.2.3+001"),
+        assert_that(semver_style_mixed_case_pipe_bodies("-meta")).fails("bad:m"),
+        assert_that(semver_style_mixed_case_pipe_bodies("xmeta")).fails("unexpected:x"),
+        assert_that(semver_style_mixed_case_pipe_bodies("")).succeeds("1.2.3"),
+    ])
+
+private fun inner_ungrouped_pipe_in_match_inside_lambda_parses_nested_match_branches(): Assert =
+    assert_all([
+        assert_that(inner_ungrouped_pipe_in_match_inside_lambda("-+meta")).succeeds("1.2.3-rc1+001"),
+        assert_that(inner_ungrouped_pipe_in_match_inside_lambda("+meta")).succeeds("1.2.3+001"),
+        assert_that(inner_ungrouped_pipe_in_match_inside_lambda("-meta")).fails("bad:m"),
+        assert_that(inner_ungrouped_pipe_in_match_inside_lambda("xmeta")).fails("unexpected:x"),
+        assert_that(inner_ungrouped_pipe_in_match_inside_lambda("")).succeeds("1.2.3"),
+    ])
+
+private fun nested_result_error_match_case_preserves_nested_error_messages(): Assert =
+    assert_all([
+        assert_that(nested_result_error_match_case("x")).succeeds(1),
+        assert_that(nested_result_error_match_case("a")).fails("bad:a:end"),
+        assert_that(nested_result_error_match_case("abc")).fails("bad:a:bc"),
+        assert_that(nested_result_error_match_case("")).fails("empty"),
+    ])

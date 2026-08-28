@@ -1,0 +1,3 @@
+interface LinkedProgramIO {
+    def read_program(inputDir: any, requireModules: bool): LinkedProgramReadResult
+}

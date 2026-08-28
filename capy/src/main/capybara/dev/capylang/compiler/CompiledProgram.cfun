@@ -1,0 +1,27 @@
+from /capy/collection/List import { List }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledNativeProviderBinding import { CompiledNativeProviderBinding }
+from /dev/capylang/compiler/CompiledNativeProviderDeclaration import { CompiledNativeProviderDeclaration }
+from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
+from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+
+/// Whole-program compiler output passed to generators, including modules, object metadata, and native-provider catalogs.
+data CompiledProgram {
+    modules: List[CompiledModule],
+    objectOrientedModules: List[CompiledObjectOrientedUnit],
+    nativeProviders: NativeProviderManifest,
+    nativeProviderCatalog: NativeProviderCatalog,
+}
+
+/// Creates an empty native-provider manifest for compile runs without provider declarations.
+fun empty_native_provider_manifest(): NativeProviderManifest =
+    NativeProviderManifest { providers: [] }
+
+/// Creates an empty native-provider catalog for generated programs without native bindings.
+fun empty_native_provider_catalog(): NativeProviderCatalog =
+    NativeProviderCatalog {
+        declarations: [],
+        bindings: []
+    }

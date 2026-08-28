@@ -1,0 +1,38 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Modulo import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Modulo.cfun", [
+        test("mod_int returns the integer remainder", () => mod_int_returns_the_integer_remainder()),
+        test("mod_long returns the long remainder", () => mod_long_returns_the_long_remainder()),
+        test("mod_byte returns the byte remainder", () => mod_byte_returns_the_byte_remainder()),
+        test("mod_float returns the float remainder", () => mod_float_returns_the_float_remainder()),
+        test("mod_double returns the double remainder", () => mod_double_returns_the_double_remainder()),
+        test("mod_mixed_int_long returns the long remainder", () => mod_mixed_int_long_returns_the_long_remainder()),
+    ])
+
+private fun mod_int_returns_the_integer_remainder(): Assert =
+    assert_all([
+        assert_that(mod_int(10, 3)).is_equal_to(1),
+        assert_that(mod_int(-10, 3)).is_equal_to(-1),
+    ])
+
+private fun mod_long_returns_the_long_remainder(): Assert =
+    assert_that(mod_long(10L, 4L)).is_equal_to(2L)
+
+private fun mod_byte_returns_the_byte_remainder(): Assert =
+    assert_mod_byte(mod_byte(0x07, 0x03), 0x01)
+
+private fun mod_float_returns_the_float_remainder(): Assert =
+    assert_that(mod_float(7.5f, 2.0f)).is_equal_to(1.5f)
+
+private fun mod_double_returns_the_double_remainder(): Assert =
+    assert_that(mod_double(7.5, 2.0)).is_equal_to(1.5)
+
+private fun mod_mixed_int_long_returns_the_long_remainder(): Assert =
+    assert_that(mod_mixed_int_long(10, 4L)).is_equal_to(2L)
+
+private fun assert_mod_byte(actual: byte, expected: byte): Assert =
+    assert_that([actual]).is_equal_to([expected])

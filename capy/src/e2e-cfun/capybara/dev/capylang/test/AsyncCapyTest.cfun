@@ -1,0 +1,20 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Async import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Async.cfun", [
+        async_value().map(assertion => test("async value", () => assert_that(assertion).is_equal_to(42))),
+        async_compute_value().map(assertion => test("async compute value", () => assert_that(assertion).is_equal_to(42))),
+        async_failure_kind().map(assertion => test("async failure kind", () => assert_that(assertion).is_equal_to("capy.lang.async.failed"))),
+        async_all_values().map(assertion => test("async all values", () => assert_that(assertion).is_equal_to([1, 2]))),
+        async_all_failure_kinds().map(assertion => test("async all failure kinds", () => assert_that(assertion).is_equal_to(["success", "capy.lang.async.failed"]))),
+        async_any_value().map(assertion => test("async any value", () => assert_that(assertion).is_equal_to(42))),
+        async_any_empty_kind().map(assertion => test("async any empty kind", () => assert_that(assertion).is_equal_to("capy.lang.async.empty"))),
+        async_mapped_value().map(assertion => test("async mapped value", () => assert_that(assertion).is_equal_to(42))),
+        async_pipe_value().map(assertion => test("async pipe value", () => assert_that(assertion).is_equal_to(42))),
+        async_flat_mapped_value().map(assertion => test("async flat mapped value", () => assert_that(assertion).is_equal_to(42))),
+        async_flat_pipe_value().map(assertion => test("async flat pipe value", () => assert_that(assertion).is_equal_to(42))),
+        async_flat_map_error_kind().map(assertion => test("async flat map error kind", () => assert_that(assertion).is_equal_to("capy.test.async.mapper"))),
+    ])

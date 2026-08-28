@@ -1,0 +1,26 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from PrivateData import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/PrivateData.cfun", [
+        test("private data can be used inside its module", () => private_data_can_be_used_inside_its_module()),
+        test("public data remains usable from importing modules", () => public_data_remains_usable_from_importing_modules()),
+    ])
+
+private fun private_data_can_be_used_inside_its_module(): Assert =
+    assert_all([
+        assert_that(parse_int(7)).is_equal_to("ok:7"),
+        assert_that(parse_conflict("x")).is_equal_to("internal:x"),
+    ])
+
+// Legacy host tests also inspect generated Java modifiers and JavaScript module
+// properties. Those are backend-shape checks, while this portable e2e test
+// covers the source-level contract visible on Java, JavaScript, and Python.
+private fun public_data_remains_usable_from_importing_modules(): Assert =
+    let parsed = Parse[String] { message: "public" }
+    assert_all([
+        assert_that(parsed.message).is_equal_to("public"),
+        assert_that(parsed).is_equal_to(Parse[String] { message: "public" }),
+    ])

@@ -1,0 +1,92 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/List import { * }
+from /capy/meta_prog/Reflection import { * }
+from DeprecatedAnnotationReflection import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/DeprecatedAnnotationReflection.cfun", [
+        test("reflects standard Deprecated annotation", () => reflects_standard_deprecated_annotation()),
+        test("reflects standard Deprecated annotation on enum values", () => reflects_standard_deprecated_annotation_on_enum_values()),
+    ])
+
+fun reflects_standard_deprecated_annotation(): Assert =
+    let info = deprecated_annotation_reflection_sample()
+    let data_annotation = info.annotations[0]
+    let field_annotation = dar_field_annotation(info, 0, 0)
+    assert_all([
+        assert_that(info.name).is_equal_to("DeprecatedCustomer"),
+        assert_that(dar_annotation_names(info.annotations)).is_equal_to(["Deprecated"]),
+        assert_that(dar_annotation_pkg_name(data_annotation)).is_equal_to("Annotations"),
+        assert_that(dar_annotation_pkg_path(data_annotation)).is_equal_to("capy/meta_prog"),
+        assert_that(dar_annotation_string(data_annotation, "message")).is_equal_to("use CurrentCustomer"),
+        assert_that(dar_annotation_string(data_annotation, "since")).is_equal_to("2.0"),
+        assert_that(dar_field_annotation_names(info, 0)).is_equal_to(["Deprecated"]),
+        assert_that(dar_annotation_string(field_annotation, "message")).is_equal_to("use display_name"),
+        assert_that(dar_annotation_string(field_annotation, "since")).is_equal_to(""),
+    ])
+
+fun reflects_standard_deprecated_annotation_on_enum_values(): Assert =
+    let info = deprecated_enum_annotation_reflection_sample()
+    let enum_annotation = info.annotations[0]
+    assert_all([
+        assert_that(info.name).is_equal_to("DEPRECATED_READY"),
+        assert_that(info.fields).is_empty(),
+        assert_that(dar_annotation_names(info.annotations)).is_equal_to(["Deprecated"]),
+        assert_that(dar_annotation_pkg_name(enum_annotation)).is_equal_to("Annotations"),
+        assert_that(dar_annotation_string(enum_annotation, "message")).is_equal_to("use CurrentStatus"),
+        assert_that(dar_annotation_string(enum_annotation, "since")).is_equal_to("2.2"),
+    ])
+
+private fun dar_field_annotation(info: DataValueInfo, field_idx: int, annotation_idx: int): Option[AnnotationInfo] =
+    match info.fields[field_idx] with
+    case Some { field } -> field.annotations[annotation_idx]
+    case None -> None {}
+
+private fun dar_field_annotation_names(info: DataValueInfo, field_idx: int): List[String] =
+    match info.fields[field_idx] with
+    case Some { field } -> dar_annotation_names(field.annotations)
+    case None -> []
+
+private fun dar_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    dar_annotation_names_at(annotations, 0, [])
+
+private fun dar_annotation_names_at(annotations: List[AnnotationInfo], idx: int, acc: List[String]): List[String] =
+    match annotations[idx] with
+    case Some { annotation } -> dar_annotation_names_at(annotations, idx + 1, acc + annotation.name)
+    case None -> acc
+
+private fun dar_annotation_pkg_name(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.name
+    case None -> ""
+
+private fun dar_annotation_pkg_path(annotation: Option[AnnotationInfo]): String =
+    match annotation with
+    case Some { value } -> value.pkg.path
+    case None -> ""
+
+private fun dar_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> dar_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun dar_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else dar_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun dar_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match dar_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""

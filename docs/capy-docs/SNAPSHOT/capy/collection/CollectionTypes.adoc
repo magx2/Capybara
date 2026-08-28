@@ -1,0 +1,216 @@
+= Module CollectionTypes
+
+== Constants
+
+=== const EMPTY: xref:#type-size[size]
+
+Size of an empty collection.
+
+
+=== const FIRST_ELEMENT: xref:#type-index[index]
+
+Index of the first element in a collection.
+
+
+
+
+== Types
+
+[[type-index]]
+=== type index: int
+
+Zero-based collection position.
+
+Example:
+```cfun
+let first = FIRST_ELEMENT
+let second <- first.next()
+second == 1
+```
+
+==== Functions
+
+===== fun index.`+`(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-index[index]&#93;
+
+Operator form of `index.plus(offset)` for a size offset.
+
+
+===== fun index.`+`(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-index[index]&#93;
+
+Operator form of `index.plus(offset)` for an integer offset.
+
+
+===== fun index.`<=`(other: xref:#type-index[index]): bool
+
+Returns whether this index is less than or equal to `other`.
+
+
+===== fun index.`<=`(other: int): bool
+
+Returns whether this index is less than or equal to the integer `other`.
+
+
+===== fun index.`<`(other: xref:#type-index[index]): bool
+
+Returns whether this index is less than `other`.
+
+
+===== fun index.`<`(other: int): bool
+
+Returns whether this index is less than the integer `other`.
+
+
+===== fun index.`==`(other: xref:#type-index[index]): bool
+
+Returns whether this index has the same value as `other`.
+
+
+===== fun index.`==`(other: int): bool
+
+Returns whether this index has the same value as the integer `other`.
+
+
+===== fun index.`>=`(other: xref:#type-index[index]): bool
+
+Returns whether this index is greater than or equal to `other`.
+
+
+===== fun index.`>=`(other: int): bool
+
+Returns whether this index is greater than or equal to the integer `other`.
+
+
+===== fun index.`>`(other: xref:#type-index[index]): bool
+
+Returns whether this index is greater than `other`.
+
+
+===== fun index.`>`(other: int): bool
+
+Returns whether this index is greater than the integer `other`.
+
+
+===== fun index.next(): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-index[index]&#93;
+
+Returns the next index, or an error when incrementing would overflow.
+
+
+===== fun index.plus(offset: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-index[index]&#93;
+
+Adds a non-negative size to this index, returning an error on overflow.
+
+
+===== fun index.plus(offset: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-index[index]&#93;
+
+Adds a non-negative integer to this index, returning an error for negative values or overflow.
+
+
+===== fun index.to_size(): xref:#type-size[size]
+
+Converts this index to a collection size with the same numeric value.
+
+
+
+[[type-size]]
+=== type size: int
+
+Collection size value.
+
+==== Functions
+
+===== fun size.`+`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Operator form of `size.plus(other)` for another size.
+
+
+===== fun size.`+`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Operator form of `size.plus(other)` for an integer.
+
+
+===== fun size.`-`(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Operator form of `size.minus(other)` for another size.
+
+
+===== fun size.`-`(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Operator form of `size.minus(other)` for an integer.
+
+
+===== fun size.`<=`(other: xref:#type-size[size]): bool
+
+Returns whether this size is less than or equal to `other`.
+
+
+===== fun size.`<=`(other: int): bool
+
+Returns whether this size is less than or equal to the integer `other`.
+
+
+===== fun size.`<`(other: xref:#type-size[size]): bool
+
+Returns whether this size is less than `other`.
+
+
+===== fun size.`<`(other: int): bool
+
+Returns whether this size is less than the integer `other`.
+
+
+===== fun size.`==`(other: xref:#type-size[size]): bool
+
+Returns whether this size has the same value as `other`.
+
+
+===== fun size.`==`(other: int): bool
+
+Returns whether this size has the same value as the integer `other`.
+
+
+===== fun size.`>=`(other: xref:#type-size[size]): bool
+
+Returns whether this size is greater than or equal to `other`.
+
+
+===== fun size.`>=`(other: int): bool
+
+Returns whether this size is greater than or equal to the integer `other`.
+
+
+===== fun size.`>`(other: xref:#type-size[size]): bool
+
+Returns whether this size is greater than `other`.
+
+
+===== fun size.`>`(other: int): bool
+
+Returns whether this size is greater than the integer `other`.
+
+
+===== fun size.minus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Subtracts another size, returning an error when the result would be negative.
+
+
+===== fun size.minus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Subtracts an integer, returning an error when the result would be negative.
+
+
+===== fun size.plus(other: xref:#type-size[size]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Adds two sizes, returning an error on overflow.
+
+
+===== fun size.plus(other: int): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-size[size]&#93;
+
+Adds a non-negative integer to this size, returning an error for negative values or overflow.
+
+
+===== fun size.to_index(): xref:#type-index[index]
+
+Converts this size to an index with the same numeric value.
+
+
+

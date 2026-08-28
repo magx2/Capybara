@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ConstructorResultAssert import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ConstructorResultAssert.cfun", [
+        test("constructor expression uses result assert for success checks", () => constructor_expression_uses_result_assert_for_success_checks()),
+        test("constructor expression uses result assert for failure checks", () => constructor_expression_uses_result_assert_for_failure_checks()),
+    ])
+
+fun constructor_expression_uses_result_assert_for_success_checks(): Assert =
+    assert_that(valid_date_assert_succeeds()).is_true()
+
+fun constructor_expression_uses_result_assert_for_failure_checks(): Assert =
+    assert_that(invalid_date_assert_fails()).is_true()

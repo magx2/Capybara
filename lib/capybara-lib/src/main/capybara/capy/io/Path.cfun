@@ -1,0 +1,348 @@
+import /capy/io/IO
+
+from /capy/io/ByteSize import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import {*}
+from /capy/lang/Result import { * }
+from /capy/lang/String import { * }
+from /capy/collection/CollectionTypes import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/meta_prog/Recursive import { Recursive }
+
+/// Kind of root used by a `Path`.
+///
+/// `RELATIVE` paths are resolved from the current working directory,
+/// `ABSOLUTE` paths start at `/`, `HOME` paths start at `~`, and `TEMP`
+/// paths start at the platform temporary directory.
+enum PathRoot { RELATIVE, ABSOLUTE, HOME, TEMP }
+
+/// Single ASCII drive letter for Windows drive-rooted paths.
+type windows_drive_letter -> String with constructor {
+    if value.size() == 1 & ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" ? value)
+    then Success { value.to_upper_case() }
+    else Error { kind: "capy.io.path.invalid_drive_letter", message: "windows_drive_letter must be a single ASCII letter, was `" + value + "`" }
+}
+
+private data WindowsUncRoot { prefix: String, body_start: int }
+
+/// Returns the native root prefix for this Windows drive, e.g. `D:\`.
+fun windows_drive_letter.native_prefix(): String =
+    this.value + ":\\"
+
+/// Portable path value split into a root and path segments.
+///
+/// Build paths with `from_string` or the `/` operator instead of manually
+/// constructing segments.
+///
+/// Example:
+/// ```cfun
+/// let path = from_string("~/projects") / "capybara" / "README.md"
+/// path.is_absolute()
+/// ```
+/// The root remains `HOME`, and each joined segment is normalized separately.
+data Path {
+    root: PathRoot,
+    prefix: Option[String],
+    segments: List[String]
+}
+
+/// Parses a string path and normalizes empty, `.`, and `..` segments.
+///
+/// Example:
+/// ```cfun
+/// from_string("/var/log/../tmp/app.log")
+/// ```
+/// Produces an absolute path with segments `["var", "tmp", "app.log"]`.
+/// Windows drive-rooted paths such as `D:\work\app`, and UNC paths such as
+/// `\\server\share\app`, are represented as absolute paths with native root
+/// prefixes.
+fun from_string(path_string: String): Path =
+    @Recursive
+    fun segments(value: String, current: String, acc: List[String]): List[String] =
+        match value[0] with
+        case None ->
+            if current == ""
+            then acc
+            else acc + current
+        case Some { c } ->
+            if path_separator(c)
+            then
+                if current == ""
+                then segments(value[1, value.size()], "", acc)
+                else segments(value[1, value.size()], "", acc + current)
+            else
+                segments(value[1, value.size()], current + c, acc)
+    ---
+    Path {
+        root: path_root(path_string),
+        prefix: path_prefix(path_string),
+        segments: segments(path_body(path_string), "", [])
+    }.normalize()
+
+private fun path_root(path_string: String): PathRoot =
+    if windows_unc_absolute_path(path_string) | windows_drive_absolute_path(path_string) | path_string.starts_with('/') | path_string.starts_with('\\')
+    then PathRoot.ABSOLUTE
+    else if path_string.starts_with('~')
+    then PathRoot.HOME
+    else PathRoot.RELATIVE
+
+private fun path_prefix(path_string: String): Option[String] =
+    match windows_unc_root(path_string) with
+    case Some { unc_root } -> Some { unc_root.prefix }
+    case None -> path_windows_drive_letter(path_string).map(drive => drive.native_prefix())
+
+private fun path_body(path_string: String): String =
+    if windows_drive_absolute_path(path_string)
+    then path_string[3, path_string.size()]
+    else
+        match windows_unc_root(path_string) with
+        case Some { unc_root } -> path_string[unc_root.body_start, path_string.size()]
+        case None ->
+            if path_string.starts_with('/') | path_string.starts_with('\\')
+            then path_string[1, path_string.size()]
+            else if path_string.starts_with('~')
+            then
+                match path_string[1] with
+                case Some { separator } ->
+                    if path_separator(separator)
+                    then path_string[2, path_string.size()]
+                    else path_string[1, path_string.size()]
+                case None -> ""
+            else path_string
+
+private fun windows_unc_absolute_path(path_string: String): bool =
+    match windows_unc_root(path_string) with
+    case Some _ -> true
+    case None -> false
+
+private fun windows_unc_root(path_string: String): Option[WindowsUncRoot] =
+    match path_string[0] with
+    case Some { first } -> {
+        match path_string[1] with
+        case Some { second } ->
+            if first == '\\' & second == '\\'
+            then windows_unc_server(path_string, 2, "")
+            else None {}
+        case None -> None {}
+    }
+    case None -> None {}
+
+private fun windows_unc_server(path_string: String, idx: int, server: String): Option[WindowsUncRoot] =
+    match path_string[idx] with
+    case Some { value } ->
+        if path_separator(value)
+        then
+            if server.is_empty()
+            then None {}
+            else windows_unc_share(path_string, idx + 1, server, "")
+        else windows_unc_server(path_string, idx + 1, server + value)
+    case None -> None {}
+
+private fun windows_unc_share(path_string: String, idx: int, server: String, share: String): Option[WindowsUncRoot] =
+    match path_string[idx] with
+    case Some { value } ->
+        if path_separator(value)
+        then windows_unc_root_from_parts(server, share, idx + 1)
+        else windows_unc_share(path_string, idx + 1, server, share + value)
+    case None -> windows_unc_root_from_parts(server, share, idx)
+
+private fun windows_unc_root_from_parts(server: String, share: String, body_start: int): Option[WindowsUncRoot] =
+    if share.is_empty()
+    then None {}
+    else Some { WindowsUncRoot { prefix: "\\\\" + server + "\\" + share + "\\", body_start: body_start } }
+
+private fun windows_drive_absolute_path(path_string: String): bool =
+    match path_windows_drive_letter(path_string) with
+    case Some _ -> true
+    case None -> false
+
+private fun path_windows_drive_letter(path_string: String): Option[windows_drive_letter] =
+    match path_string[0] with
+    case Some { drive } -> {
+        match path_string[1] with
+        case Some { ':' } -> {
+            match path_string[2] with
+            case Some { separator } ->
+                if path_separator(separator)
+                then
+                    match windows_drive_letter { drive } with
+                    case Success { drive_letter } -> Some { drive_letter }
+                    case Error _ -> None {}
+                else None {}
+            case _ -> None {}
+        }
+        case _ -> None {}
+    }
+    case _ -> None {}
+
+private fun path_separator(value: String): bool =
+    value == '/' | value == '\\'
+
+/// Returns a new path with `segment` appended.
+///
+/// Example:
+/// ```cfun
+/// from_string("reports") / "junit" / "TEST-main.xml"
+/// ```
+/// The original path is unchanged.
+fun Path.`/`(segment: String) =
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: this.segments + segment
+    }
+
+/// Returns a new path with `other` path segments appended.
+///
+/// The root of `this` is preserved, so use this to join a base directory with a
+/// relative child path.
+fun Path.`/`(other: Path) =
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: this.segments + other.segments
+    }
+
+/// Returns the final segment name, or the root name for root paths.
+///
+/// Examples: `from_string("/tmp/app.log").name()` returns `app.log`,
+/// while `from_string("/").name()` returns `/`.
+fun Path.name(): String =
+    match this.prefix with
+    case Some { v } -> v
+    case None ->
+        match this.root with
+        case RELATIVE -> '.'
+        case ABSOLUTE -> '/'
+        case HOME -> '~'
+        case TEMP -> 'tmp'
+
+/// Returns the parent path, or `None` when this path has no parent segment.
+///
+/// Example:
+/// ```cfun
+/// from_string("docs/api/json.md").parent()
+/// ```
+/// Returns `Some` containing `docs/api`.
+fun Path.parent(): Option[Path] =
+    if this.segments.is_empty() then None {}
+    else Some {
+        Path {
+            root: this.root,
+            prefix: this.prefix,
+            segments: this.segments[:-1]
+        }
+    }
+
+/// Returns true for absolute, home-rooted, and temp-rooted paths.
+fun Path.is_absolute(): bool =
+    match this.root with
+    case RELATIVE -> false
+    case _ -> true
+
+/// Returns true when the path has a root but no child segments.
+fun Path.is_root(): bool = this.segments.size() == EMPTY
+
+/// Returns a path with redundant segments removed.
+///
+/// Relative leading `..` segments are preserved; rooted paths do not move above
+/// their root.
+///
+/// Example:
+/// ```cfun
+/// from_string("src/./main/../test").normalize()
+/// ```
+/// Produces the relative path `src/test`.
+fun Path.normalize(): Path =
+    @Recursive
+    fun normalize_path(root: PathRoot, segments: List[String], acc: List[String]): List[String] =
+        match segments[0] with
+        case None -> acc
+        case Some { seg } ->
+            let rest = segments[1:]
+            if seg == "" | seg == "."
+            then normalize_path(root, rest, acc)
+            else if seg == ".."
+            then
+                if acc.size() > EMPTY
+                then normalize_path(root, rest, acc[:-1])
+                else
+                    match root with
+                    case RELATIVE -> normalize_path(root, rest, acc + "..")
+                    case _ -> normalize_path(root, rest, acc)
+            else
+                normalize_path(root, rest, acc + seg)
+    ---
+    Path {
+        root: this.root,
+        prefix: this.prefix,
+        segments: normalize_path(this.root, this.segments, [])
+    }
+
+/// Reads the entire file at this path as UTF-8 text.
+fun Path.read_text(): Effect[Result[String]] = IO.read_text(this)
+
+/// Reads all lines from the file at this path as UTF-8 text.
+fun Path.read_lines(): Effect[Result[List[String]]] = IO.read_lines(this)
+
+/// Reads the entire file at this path as bytes.
+fun Path.read_bytes(): Effect[Result[List[byte]]] = IO.read_bytes(this)
+
+/// Writes UTF-8 text to this path, replacing existing content, and returns the consumed text.
+fun Path.write_text(text: String): Effect[Result[String]] = IO.write_text(this, text)
+
+/// Writes UTF-8 lines to this path, replacing existing content, and returns the consumed lines.
+fun Path.write_lines(lines: List[String]): Effect[Result[List[String]]] = IO.write_lines(this, lines)
+
+/// Writes bytes to this path, replacing existing content, and returns the consumed bytes.
+fun Path.write_bytes(bytes: List[byte]): Effect[Result[List[byte]]] = IO.write_bytes(this, bytes)
+
+/// Appends UTF-8 text to this path, creating the file when needed, and returns the consumed text.
+fun Path.append_text(text: String): Effect[Result[String]] = IO.append_text(this, text)
+
+/// Appends UTF-8 lines to this path, creating the file when needed, and returns the consumed lines.
+fun Path.append_lines(lines: List[String]): Effect[Result[List[String]]] = IO.append_lines(this, lines)
+
+/// Appends bytes to this path, creating the file when needed, and returns the consumed bytes.
+fun Path.append_bytes(bytes: List[byte]): Effect[Result[List[byte]]] = IO.append_bytes(this, bytes)
+
+/// Returns true when this path exists.
+fun Path.exists(): Effect[bool] = IO.exists(this)
+
+/// Returns true when this path exists and is a regular file.
+fun Path.is_file(): Effect[bool] = IO.is_file(this)
+
+/// Returns true when this path exists and is a directory.
+fun Path.is_directory(): Effect[bool] = IO.is_directory(this)
+
+/// Returns the size of this file in bytes.
+fun Path.size(): Effect[Result[byte_count]] = IO.size(this)
+
+/// Creates a new empty file at this path and returns the created path.
+fun Path.create_file(): Effect[Result[Path]] = IO.create_file(this)
+
+/// Creates a single directory at this path and returns the created path.
+fun Path.create_directory(): Effect[Result[Path]] = IO.create_directory(this)
+
+/// Creates a directory and any missing parent directories at this path, returning the created path.
+fun Path.create_directories(): Effect[Result[Path]] = IO.create_directories(this)
+
+/// Lists direct child entries of this directory.
+fun Path.list_entries(): Effect[Result[List[Path]]] = IO.list_entries(this)
+
+/// Deletes the file or empty directory at this path and returns true when something was deleted.
+fun Path.delete(): Effect[Result[bool]] = IO.delete(this)
+
+/// Copies this file to the target path. Fails if the target already exists.
+fun Path.copy(target: Path): Effect[Result[Path]] = IO.copy(this, target)
+
+/// Copies this file to the target path, replacing an existing target.
+fun Path.copy_replace(target: Path): Effect[Result[Path]] = IO.copy_replace(this, target)
+
+/// Moves this file or directory to the target path. Fails if the target already exists.
+fun Path.move(target: Path): Effect[Result[Path]] = IO.move(this, target)
+
+/// Moves this file or directory to the target path, replacing an existing target.
+fun Path.move_replace(target: Path): Effect[Result[Path]] = IO.move_replace(this, target)

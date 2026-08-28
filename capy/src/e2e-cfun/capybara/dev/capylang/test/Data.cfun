@@ -1,0 +1,92 @@
+// algebraic type
+
+union Shape = Circle | Rectangle
+data Circle { radius: double }
+data Rectangle { width: double, "height": double }
+
+fun area(shape: Shape): double =
+    match shape with
+    case Circle { radius } -> 3.14 * radius * radius
+    case Rectangle { width, height } -> width * height
+
+fun da_vinci(shape: Shape): Shape =
+    match shape with
+    case Circle { radius } -> Rectangle { width : radius * 2, "height" : radius * 2 }
+    case Rectangle { width, height } -> Circle { radius : (width + height) / 4 }
+
+union Typed[T] = Foo[T] | Boo[T]
+data Foo[T] { foo: T }
+data Boo[T] { boo: T }
+
+union Knight = EnglishKnight | Tom
+data EnglishKnight { power: double }
+data Tom {}
+fun summon_tom(): Knight = Tom {}
+
+fun is_tom(knight: Knight): bool =
+    match knight with
+    case Tom -> true
+    case EnglishKnight { power } -> power > 10.0
+
+union King[T] = FrenchKing[T] | Jerry
+data FrenchKing[T] { head: bool, foo: T }
+data Jerry {}
+fun summon_jerry(): King[int] = Jerry {}
+
+fun jerry_or_french(king: King[int]): String =
+    match king with
+    case Jerry -> "jerry"
+    case FrenchKing { head, foo } -> head + ":" + foo
+
+union Worker {name: String, surname: String } = BlueCollar | WhiteCollar
+data BlueCollar { strength: double }
+data WhiteCollar { intelligence: double }
+
+data PrintableData { foo: String, boo: int }
+data PositionalData { text: String, number: int }
+data KnightHolder { knight: Knight }
+data FooWithType { type: String }
+
+fun printable_data_to_string(): String =
+    PrintableData { foo: "abc", boo: 123 } + ""
+
+fun string_plus_data_left(): String =
+    "prefix=" + PrintableData { foo: "abc", boo: 123 }
+
+fun string_plus_data_right(): String =
+    PrintableData { foo: "abc", boo: 123 } + "=suffix"
+
+fun knight_holder_to_string(): String =
+    KnightHolder { knight: Tom {} } + ""
+
+fun create_positional_data(text: String, number: int): PositionalData =
+    PositionalData { text, number }
+
+fun create_positional_data_expr(text: String, number: int): PositionalData =
+    let new_text = text + "!"
+    let new_number = number + 1
+    PositionalData { new_text, new_number }
+
+fun create_data_with_type(value: String): FooWithType =
+    FooWithType { type: value }
+
+fun read_data_type(foo: FooWithType): String = foo.type
+
+data Box[T] { value: T }
+
+union BoxResult[T] = BoxSuccess[T] | BoxError
+data BoxSuccess[T] { value: T }
+data BoxError { message: String }
+
+fun BoxResult[T].`|`(map: T => BoxResult[Y]): BoxResult[Y] =
+    match this with
+    case BoxError e -> e
+    case BoxSuccess s -> map(s.value)
+
+fun to_box_long(v: String): BoxResult[long] =
+    if v == "41"
+    then BoxSuccess { 42L }
+    else BoxError { "bad long: " + v }
+
+fun generic_field_pipe(box: Box[String]): BoxResult[long] =
+    to_box_long(box.value) | number => BoxSuccess { number + 1L }

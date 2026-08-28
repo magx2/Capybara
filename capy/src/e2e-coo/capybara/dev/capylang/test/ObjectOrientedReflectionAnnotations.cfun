@@ -1,0 +1,11 @@
+annotation CooTypeMarker on class, interface, trait {
+    label: String
+}
+
+annotation CooFieldMarker on field {
+    value: String
+}
+
+annotation CooMethodMarker on method {
+    value: String
+}

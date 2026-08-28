@@ -1,0 +1,53 @@
+from /capy/collection/List import { * }
+from /capy/lang/Option import { * }
+from /capy/meta_prog/Reflection import { * }
+from /performance/sample/domain/Customer import { Customer }
+from /performance/sample/domain/Order import { Order }
+from /performance/sample/oo/Workflow import { Workflow }
+
+data ReflectionReport {
+    data_name: String,
+    field_count: int,
+    annotations: List[String],
+    first_field_annotation: String,
+    object_name: String,
+    object_methods: List[String]
+}
+
+fun customer_report(customer: Customer): ReflectionReport =
+    let info = reflection(customer)
+    let workflow = Workflow.type()
+    ReflectionReport {
+        data_name: info.name,
+        field_count: info.fields.size(),
+        annotations: _annotation_names(info.annotations),
+        first_field_annotation: _first_field_annotation(info),
+        object_name: workflow.name,
+        object_methods: _method_names(workflow.methods)
+    }
+
+fun order_report(order: Order): ReflectionReport =
+    let info = reflection(order)
+    let workflow = Workflow.type()
+    ReflectionReport {
+        data_name: info.name,
+        field_count: info.fields.size(),
+        annotations: _annotation_names(info.annotations),
+        first_field_annotation: _first_field_annotation(info),
+        object_name: workflow.name,
+        object_methods: _method_names(workflow.methods)
+    }
+
+private fun _annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    (annotations | annotation => annotation.name).as_list()
+
+private fun _method_names(methods: List[MethodInfo]): List[String] =
+    (methods | method => method.name).as_list()
+
+private fun _first_field_annotation(info: DataValueInfo): String =
+    match info.fields[0] with
+    case Some { field } ->
+        match field.annotations[0] with
+        case Some { annotation } -> annotation.name
+        case None -> ""
+    case None -> ""

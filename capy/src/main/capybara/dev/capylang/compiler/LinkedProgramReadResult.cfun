@@ -1,0 +1,7 @@
+from /capy/lang/Result import { Result }
+from /dev/capylang/compiler/CompiledProgram import { CompiledProgram }
+
+/// Native linked-program reader result wrapped to keep provider interface signatures non-generic.
+data LinkedProgramReadResult {
+    result: Result[CompiledProgram]
+}

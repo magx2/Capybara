@@ -1,0 +1,43 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Types3 import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/imports2/Types3.cfun", [
+        test("D5_1 preserves its x field", () => types3_d5_1_preserves_its_x_field()),
+        test("D5_2 preserves its y field", () => types3_d5_2_preserves_its_y_field()),
+        test("T5 accepts both data variants", () => types3_t5_accepts_both_data_variants()),
+    ])
+
+// Legacy host tests asserted generated Java classes and JavaScript
+// __capybaraType names. Portable coverage asserts data equality, fields, and
+// union variant matching instead.
+private fun types3_d5_1_preserves_its_x_field(): Assert =
+    let actual = D5_1 { x: 5 }
+    assert_all([
+        assert_that(actual).is_equal_to(D5_1 { x: 5 }),
+        assert_that(actual.x).is_equal_to(5),
+    ])
+
+private fun types3_d5_2_preserves_its_y_field(): Assert =
+    let actual = D5_2 { y: 7 }
+    assert_all([
+        assert_that(actual).is_equal_to(D5_2 { y: 7 }),
+        assert_that(actual.y).is_equal_to(7),
+    ])
+
+private fun types3_t5_accepts_both_data_variants(): Assert =
+    let first: T5 = D5_1 { x: 5 }
+    let second: T5 = D5_2 { y: 7 }
+    assert_all([
+        assert_that(first).is_equal_to(D5_1 { x: 5 }),
+        assert_that(second).is_equal_to(D5_2 { y: 7 }),
+        assert_that(types3_t5_variant_summary(first)).is_equal_to("D5_1:5"),
+        assert_that(types3_t5_variant_summary(second)).is_equal_to("D5_2:7"),
+    ])
+
+private fun types3_t5_variant_summary(value: T5): String =
+    match value with
+    case D5_1 { x } -> "D5_1:" + x
+    case D5_2 { y } -> "D5_2:" + y

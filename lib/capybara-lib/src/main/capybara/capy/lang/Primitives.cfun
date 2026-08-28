@@ -1,0 +1,92 @@
+from /capy/lang/Result import { * }
+
+/// Largest value representable by `int`.
+const MAX_INT_VALUE: int = 2147483647
+/// Smallest value representable by `int`.
+const MIN_INT_VALUE: int = -2147483648
+
+/// Largest value representable by `long`.
+const MAX_LONG_VALUE: long = 9223372036854775807L
+/// Smallest value representable by `long`.
+const MIN_LONG_VALUE: long = -9223372036854775808L
+
+/// Number of distinct mantissa steps used to map random long values into `float`.
+const FLOAT_BOUND: long = 16777216L
+
+/// Number of distinct mantissa steps used to map random long values into `double`.
+const DOUBLE_BOUND: long = 9007199254740992L
+
+/// Floating-point representation of `FLOAT_BOUND`.
+const FLOAT_BOUND_AS_FLOAT: float = 16777216.0f
+
+/// Floating-point representation of `DOUBLE_BOUND`.
+const DOUBLE_BOUND_AS_DOUBLE: double = 9007199254740992.0
+
+/// Decimal digit between zero and nine.
+type digit -> int with constructor {
+    if value >= 0 & value <= 9
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "Digits must be between 0 and 9. Was `{value}`." }
+}
+
+/// Decimal digit zero.
+const ZERO_DIGIT: digit = digit! { 0 }
+/// Decimal digit one.
+const ONE_DIGIT: digit = digit! { 1 }
+/// Decimal digit two.
+const TWO_DIGIT: digit = digit! { 2 }
+/// Decimal digit three.
+const THREE_DIGIT: digit = digit! { 3 }
+/// Decimal digit four.
+const FOUR_DIGIT: digit = digit! { 4 }
+/// Decimal digit five.
+const FIVE_DIGIT: digit = digit! { 5 }
+/// Decimal digit six.
+const SIX_DIGIT: digit = digit! { 6 }
+/// Decimal digit seven.
+const SEVEN_DIGIT: digit = digit! { 7 }
+/// Decimal digit eight.
+const EIGHT_DIGIT: digit = digit! { 8 }
+/// Decimal digit nine.
+const NINE_DIGIT: digit = digit! { 9 }
+
+/// Returns the following digit, wrapping nine to zero.
+fun digit.next(): digit =
+    if this.value == 9 then ZERO_DIGIT else digit! { this.value + 1 }
+
+/// Returns the preceding digit, wrapping zero to nine.
+fun digit.previous(): digit =
+    if this.value == 0 then NINE_DIGIT else digit! { this.value - 1 }
+
+/// Parses this String as an int.
+///
+/// Example: `to_int("42")` returns `Success { value: 42 }`.
+fun to_int(s: String): Result[int] = <native>
+
+/// Parses this String as a long.
+fun to_long(s: String): Result[long] = <native>
+
+/// Parses this String as a double.
+fun to_double(s: String): Result[double] = <native>
+
+/// Parses this String as a float.
+fun to_float(s: String): Result[float] = <native>
+
+/// Parses this String as a bool.
+fun to_bool(s: String): Result[bool] = <native>
+
+/// Clamps a long to the inclusive int range.
+fun clamp_long_to_int(value: long): int =
+    if value > MAX_INT_VALUE
+    then MAX_INT_VALUE
+    else if value < MIN_INT_VALUE
+    then MIN_INT_VALUE
+    else value.to_int()
+
+/// Converts a long to int, returning an error when it is outside the int range.
+fun safe_long_to_int(value: long): Result[int] =
+    if value > MAX_INT_VALUE
+    then Error { kind: "capy.lang.number.out_of_range", message: "long value `{value}` is greater than max int value" }
+    else if value < MIN_INT_VALUE
+    then Error { kind: "capy.lang.number.out_of_range", message: "long value `{value}` is smaller than min int value" }
+    else Success { value.to_int() }

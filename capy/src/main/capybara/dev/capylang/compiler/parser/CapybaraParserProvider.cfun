@@ -1,0 +1,6 @@
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+from /dev/capylang/compiler/parser/CapybaraParser import { CapybaraParser }
+
+/// Creates the native parser effect used to turn raw modules into parsed modules.
+@NativeProvider
+fun parser(): Effect[CapybaraParser] = <native>
