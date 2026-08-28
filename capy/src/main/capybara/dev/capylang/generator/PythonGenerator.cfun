@@ -1112,11 +1112,11 @@ private fun python_variable_code(name: String, env: List[PythonBinding], module:
 private fun python_unbound_variable_code(name: String, module: CompiledModule, allModules: List[CompiledModule]): String =
     if python_qualified_enum_value_name(name, module, allModules)
     then python_enum_qualified_value_code(name, module, allModules)
-    else match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> python_module_import_expression(binding.module) + "." + python_identifier(binding.function.name)
+    else match python_imported_stdlib_constant(name, module.imports) with
+        case Some { value } -> value.pythonName
         case None ->
-            match python_imported_stdlib_constant(name, module.imports) with
-            case Some { value } -> value.pythonName
+            match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+            case Some { binding } -> python_module_import_expression(binding.module) + "." + python_identifier(binding.function.name)
             case None -> python_identifier(name)
 
 /// Emits Python code for binary expression.
@@ -3044,6 +3044,8 @@ private fun python_primitive_backed_data_literal_code(typeName: String, literal:
                 + python_data_constructor_call_arguments(binding.function.parameters, literal.fields, literal.typeName, env, module, allModules)
                 + "))"
         case None -> python_primitive_backed_literal_value_code(literal, env, module, allModules)
+    else if typeName == "digit" & python_primitives_member_imported(typeName, module.imports)
+    then "__capy_digit(" + python_primitive_backed_literal_value_code(literal, env, module, allModules) + ")"
     else match python_data_constructor_binding(typeName, module, allModules) with
     case Some { binding } ->
         "__capy_primitive_constructor_result("
@@ -3763,12 +3765,12 @@ private fun python_unbound_variable_type(name: String, module: CompiledModule, a
     then python_enum_qualified_type_name(name)
     else match python_find_constant(name, module.functions) with
         case Some { function } -> function.returnType.name
-        case None -> match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
-        case Some { binding } -> binding.function.returnType.name
-        case None ->
-            match python_imported_stdlib_constant(name, module.imports) with
+        case None -> match python_imported_stdlib_constant(name, module.imports) with
             case Some { value } -> value.typeName
-            case None -> python_unknown_type()
+            case None ->
+                match python_find_constant_binding_in_imports(name, module.imports, module, allModules) with
+                case Some { binding } -> binding.function.returnType.name
+                case None -> python_unknown_type()
 
 /// Collects imported standard-library constant visible to the current module.
 private fun python_imported_stdlib_constant(name: String, imports: List[CompiledImportDeclaration]): /capy/lang/Option[PythonStdlibValue] =
@@ -6820,6 +6822,7 @@ private fun python_test_runtime_header_code(): String =
     + python_newline()
     + "__all__ = ['Effect', 'Async', 'CapySet', 'pure', 'delay', 'print', 'println', 'print_error', 'println_error', 'DEFAULT_FAILED_EXIT_CODE', 'assert_all', 'assert_that', '__capy_assert_failed', 'test', 'test_file', 'reflection', 'from_string', 'read_text', 'read_lines', 'read_bytes', 'write_text', 'write_lines', 'write_bytes', 'append_text', 'append_lines', 'append_bytes', 'exists', 'is_file', 'is_directory', 'size', 'create_file', 'create_directory', 'create_directories', 'list_entries', 'delete', 'copy', 'copy_replace', 'move', 'move_replace', 'digits', 'to_seq', '__capy_async_start', '__capy_async_join', '__capy_async_all', '__capy_async_any', '__capy_async_map', '__capy_async_flat_map', '__capy_current_millis', '__capy_nano_time', '__capy_system_property', '__capy_set_system_property', '__capy_clear_system_property', '__capy_clock_now', '__capy_random_seed', '_unsafe_run', '_capy_data_is', '_capy_data_value', '__capy_dynamic_method', '__capy_bind_value', '__capy_block_bind', '__capy_effect_bind_value', '__capy_long', '__capy_to_int', '__capy_to_long', '__capy_parse_int', '__capy_parse_long', '__capy_parse_double', '__capy_parse_float', '__capy_parse_bool', '__capy_enum_parse', '__capy_enum_name', '__capy_char', '__capy_to_string', '__capy_date_unix_date', '__capy_time_midnight', '__capy_date_time_unix_epoch', '__capy_duration_zero', '__capy_date_add_days', '__capy_date_add_years_months', '__capy_date_to_days_since_unix_epoch', '__capy_date_to_iso_8601', '__capy_time_add_seconds', '__capy_time_to_seconds', '__capy_time_to_iso_8601', '__capy_date_time_plus', '__capy_date_time_minus', '__capy_date_time_timestamp', '__capy_date_time_to_iso_8601', '__capy_duration_to_iso_8601', '__capy_duration_negate', '__capy_duration_years', '__capy_duration_months', '__capy_duration_days', '__capy_duration_hours', '__capy_duration_minutes', '__capy_duration_seconds', '__capy_set', '__capy_set_values', '__capy_set_append', '__capy_set_concat', '__capy_set_remove', '__capy_set_remove_all', '__capy_set_subset', '__capy_set_proper_subset', '__capy_set_intersection', '__capy_set_symmetric_difference', '__capy_set_cartesian_product', '__capy_set_power_set', '__capy_deep_equal', '__capy_add', '__capy_sub', '__capy_mul', '__capy_div', '__capy_mod', '__capy_pow', '__capy_pow_int', '__capy_contains', '__capy_size', '__capy_is_empty', '__capy_string_trim', '__capy_string_replace', '__capy_string_starts_with', '__capy_string_end_with', '__capy_string_get', '__capy_string_slice', '__capy_regex_matches', '__capy_regex_find', '__capy_regex_find_all', '__capy_regex_replace', '__capy_regex_split', '__capy_index', '__capy_get_field', '__capy_reduce', '__capy_fold', '__capy_as_list', '__capy_seq_first_value', '__capy_seq_rest', '__capy_seq_map', '__capy_seq_filter', '__capy_seq_reject', '__capy_seq_flat_map', '__capy_option_map', '__capy_option_filter', '__capy_option_flat_map', '__capy_option_reduce', '__capy_option_or', '__capy_option_or_else', '__capy_result_from_value', '__capy_result_map', '__capy_result_flat_map', '__capy_result_or', '__capy_result_or_else', '__capy_result_reduce', '__capy_dynamic_map', '__capy_dynamic_flat_map', '__capy_any', '__capy_all', '__capy_type_matches', '__capy_match_binding', '__capy_no_match', '__capy_throw', '__capy_try', '__capy_unsupported', '__capy_not_implemented', '__capy_reflection_annotations', '__capy_data', '__capy_with', '__capy_constructor_value', '__capy_constructor_result', '__capy_primitive_constructor_result', '__capy_constructor_pipeline']" + python_newline()
     + "__all__.append('__capy_seq_first')" + python_newline()
+    + "__all__.append('__capy_digit')" + python_newline()
     + "__all__.append('__capy_error')" + python_newline()
     + "__all__.extend(['__capy_error_kind', '__capy_error_with', '__capy_error_at', '__capy_error_full'])" + python_newline()
     + python_newline()
@@ -7927,6 +7930,11 @@ private fun python_test_runtime_error_code(): String =
     + "    if _capy_data_is(value, 'Success'):" + python_newline()
     + "        return __capy_data('Success', dict(value=_capy_data_value(value)))" + python_newline()
     + "    return value" + python_newline()
+    + python_newline()
+    + "def __capy_digit(value):" + python_newline()
+    + "    if value >= 0 and value <= 9:" + python_newline()
+    + "        return __capy_data('Success', dict(value=value))" + python_newline()
+    + "    return __capy_data('Error', dict(kind='capy.lang.number.out_of_range', message='Digits must be between 0 and 9. Was `' + str(value) + '`.'))" + python_newline()
     + python_newline()
     + "def __capy_merge_data(target, source):" + python_newline()
     + "    result = dict(target) if isinstance(target, dict) else __capy_data('', dict())" + python_newline()

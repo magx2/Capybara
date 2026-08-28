@@ -486,9 +486,13 @@ class CompilationTest {
                 .orElseThrow()
                 .code();
         assertThat(javaScriptCode)
+                .contains("return [1, 9];")
                 .contains("return __capy_to_string(value);")
-                .contains("ONE_DIGIT__")
-                .contains("NINE_DIGIT__")
+                .contains("return 2147483647;")
+                .contains("return 9223372036854775807n;")
+                .doesNotContain("__capy_import_capy_lang_Primitives")
+                .doesNotContain("ONE_DIGIT__")
+                .doesNotContain("NINE_DIGIT__")
                 .doesNotContain("value.to_string()");
 
         var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
@@ -497,9 +501,13 @@ class CompilationTest {
                 .orElseThrow()
                 .code();
         assertThat(pythonCode)
+                .contains("return [1, 9]")
                 .contains("return __capy_to_string(value)")
-                .contains(".ONE_DIGIT")
-                .contains(".NINE_DIGIT")
+                .contains("return 2147483647")
+                .contains("return 9223372036854775807")
+                .doesNotContain("__import__(\"capy.lang.Primitives\"")
+                .doesNotContain(".ONE_DIGIT")
+                .doesNotContain(".NINE_DIGIT")
                 .doesNotContain("value.to_string()");
     }
 
@@ -1878,7 +1886,7 @@ class CompilationTest {
     }
 
     @Test
-    void shouldLowerImportedStandardPrimitiveConstructorAsResultInJavaScript() {
+    void shouldLowerImportedStandardPrimitiveConstructorAsResultInDynamicBackends() {
         var source = """
                 from /capy/lang/Primitives import { digit }
                 from /capy/lang/Result import { Result }
@@ -1893,16 +1901,28 @@ class CompilationTest {
                 SourceKind.FUNCTIONAL
         )));
 
-        var code = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
                 .filter(module -> module.relativePath().equals("sample/app/StandardPrimitive.js"))
                 .findFirst()
                 .orElseThrow()
                 .code();
 
-        assertThat(code)
-                .contains("__capy_result_map(__capy_primitive_constructor_result(require(\"../../capy/lang/Primitives\")[\"__capy_constructor_digit")
+        assertThat(javaScriptCode)
+                .contains("__capy_result_map(__capy_digit(value)")
+                .doesNotContain("capy/lang/Primitives")
                 .doesNotContain("__capy_result_map(value,")
                 .doesNotContain("__capy_get_field(value, 'value').map(");
+
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/StandardPrimitive.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(pythonCode)
+                .contains("__capy_result_map(__capy_digit(value)")
+                .doesNotContain("capy.lang.Primitives")
+                .doesNotContain("__capy_result_map(value,");
     }
 
     @Test
