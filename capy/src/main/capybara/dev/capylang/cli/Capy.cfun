@@ -4,6 +4,7 @@ from /capy/collection/Set import { * }
 from /capy/io/Console import { println, println_error }
 from /capy/io/IO import { create_directories, delete, exists, is_directory, is_file, list_entries, read_text, write_text }
 from /capy/io/Path import { * }
+from /capy/lang/Async import { Async, all }
 from /capy/lang/Effect import { * }
 from /capy/lang/Either import { * }
 from /capy/lang/Option import { * }
@@ -1477,22 +1478,31 @@ private fun read_source_modules(root: Path, raw_root: String): Effect[Result[Lis
     )
 
 private fun read_source_modules(root: Path, files: List[Path]): Effect[Result[List[RawModule]]] =
+    all(read_source_module_tasks(root, files)).map(results => async_raw_module_results(results))
+
+private fun read_source_module_tasks(root: Path, files: List[Path]): List[Async[Result[RawModule]]] =
     match files[0] with
-    case None -> pure(Success { [] })
+    case None -> []
     case Some { file } ->
-        read_text(file).flat_map(read_result =>
+        [read_text(file).map(read_result =>
             match read_result with
-            case Error e -> pure(e)
-            case Success { source } ->
-                match build_raw_module(cli_relative_to(root, file), source) with
-                case Error e -> pure(e)
-                case Success { raw_module } ->
-                    read_source_modules(root, files[1:]).map(rest_result =>
-                        match rest_result with
-                        case Error e -> e
-                        case Success { rest } -> Success { [raw_module] + rest }
-                    )
-        )
+            case Error e -> e
+            case Success { source } -> build_raw_module(cli_relative_to(root, file), source)
+        ).start()] + read_source_module_tasks(root, files[1:])
+
+private fun async_raw_module_results(results: List[Result[Result[RawModule]]]): Result[List[RawModule]] =
+    match results[0] with
+    case None -> Success { [] }
+    case Some { outer } ->
+        match outer with
+        case Error e -> e
+        case Success { inner } ->
+            match inner with
+            case Error e -> e
+            case Success { raw_module } ->
+                match async_raw_module_results(results[1:]) with
+                case Error e -> e
+                case Success { rest } -> Success { [raw_module] + rest }
 
 private fun build_raw_module(relative_path: Path, source: String): Result[RawModule] =
     match last_segment(relative_path.normalize().segments) with
@@ -1673,24 +1683,21 @@ private fun write_compilation_output(output_dir: Path, program: CompiledProgram)
     create_directories(output_dir).flat_map(directory_result =>
         match directory_result with
         case Error e -> pure(e)
-        case Success _ ->
-            let program_data: data = program
-            write_linked_json_file(output_dir / "program.json", program_data).flat_map(program_result =>
-                match program_result with
-                case Error e -> pure(e)
-                case Success _ -> write_linked_modules(output_dir, program.modules)
-            )
+        case Success _ -> all(write_compilation_tasks(output_dir, program))
+            .map(results => async_string_results(results, "linked modules written"))
     )
 
-private fun write_linked_modules(output_dir: Path, modules: List[CompiledModule]): Effect[Result[String]] =
+private fun write_compilation_tasks(output_dir: Path, program: CompiledProgram): List[Async[Result[String]]] =
+    let program_data: data = program
+    [write_linked_json_file(output_dir / "program.json", program_data).start()]
+        + write_linked_module_tasks(output_dir, program.modules)
+
+private fun write_linked_module_tasks(output_dir: Path, modules: List[CompiledModule]): List[Async[Result[String]]] =
     match modules[0] with
-    case None -> pure(Success { "linked modules written" })
+    case None -> []
     case Some { module } ->
-        write_linked_module(output_dir, module).flat_map(module_result =>
-            match module_result with
-            case Error e -> pure(e)
-            case Success _ -> write_linked_modules(output_dir, modules[1:])
-        )
+        [write_linked_module(output_dir, module).start()]
+            + write_linked_module_tasks(output_dir, modules[1:])
 
 private fun write_linked_module(output_dir: Path, module: CompiledModule): Effect[Result[String]] =
     let module_file = linked_module_file(output_dir, module)
@@ -2900,14 +2907,26 @@ private fun delete_entry(path: Path): Effect[Result[String]] =
     )
 
 private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModule]): Effect[Result[String]] =
+    all(write_generated_module_tasks(outputDir, modules))
+        .map(results => async_string_results(results, "generated modules written"))
+
+private fun write_generated_module_tasks(outputDir: Path, modules: List[GeneratedModule]): List[Async[Result[String]]] =
     match modules[0] with
-    case None -> pure(Success { "generated modules written" })
+    case None -> []
     case Some { module } ->
-        write_generated_module(outputDir, module).flat_map(moduleResult =>
-            match moduleResult with
-            case Error e -> pure(e)
-            case Success _ -> write_generated_modules(outputDir, modules[1:])
-        )
+        [write_generated_module(outputDir, module).start()]
+            + write_generated_module_tasks(outputDir, modules[1:])
+
+private fun async_string_results(results: List[Result[Result[String]]], successMessage: String): Result[String] =
+    match results[0] with
+    case None -> Success { successMessage }
+    case Some { outer } ->
+        match outer with
+        case Error e -> e
+        case Success { inner } ->
+            match inner with
+            case Error e -> e
+            case Success _ -> async_string_results(results[1:], successMessage)
 
 private fun write_generated_module(outputDir: Path, module: GeneratedModule): Effect[Result[String]] =
     let outputFile = outputDir / from_string(module.relativePath)

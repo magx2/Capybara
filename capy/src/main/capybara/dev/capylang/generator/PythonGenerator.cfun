@@ -84,15 +84,48 @@ fun python_generator(program: CompiledProgram): GeneratedProgram =
 
 /// Generates requested Python modules while resolving metadata against a larger lookup program.
 fun python_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
-    let objectOrientedUnitIndex = python_object_oriented_unit_index(lookupProgram.objectOrientedModules)
-    let nativeProviderIndex = python_native_provider_index(lookupProgram.nativeProviderCatalog)
-    let lookupModules = python_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
-    let emittedModules = python_runtime_source_modules(sourceProgram.modules, lookupModules)
+    let context = python_generator_context(sourceProgram, lookupProgram)
     GeneratedProgram {
         modules: python_native_provider_interface_modules(sourceProgram.nativeProviderCatalog.declarations)
-            + python_modules(emittedModules, lookupModules, objectOrientedUnitIndex, nativeProviderIndex)
-            + python_test_runtime_modules(sourceProgram.modules, lookupModules)
+            + python_modules(context.emittedModules, context.lookupModules, context.objectOrientedUnitIndex, context.nativeProviderIndex)
+            + python_test_runtime_modules(sourceProgram.modules, context.lookupModules)
             + python_native_runtime_modules()
+    }
+
+/// Generates Python modules that must precede ordinary source modules.
+fun python_generator_prefix(sourceProgram: CompiledProgram): GeneratedProgram =
+    GeneratedProgram {
+        modules: python_native_provider_interface_modules(sourceProgram.nativeProviderCatalog.declarations)
+    }
+
+/// Generates one Python source module without whole-program support modules.
+fun python_generator_module_with_context(module: CompiledModule, context: PythonGeneratorContext): GeneratedProgram =
+    GeneratedProgram {
+        modules: python_modules([module], context.lookupModules, context.objectOrientedUnitIndex, context.nativeProviderIndex)
+    }
+
+/// Generates Python support modules that must follow ordinary source modules.
+fun python_generator_suffix_with_context(sourceProgram: CompiledProgram, context: PythonGeneratorContext): GeneratedProgram =
+    GeneratedProgram {
+        modules: python_test_runtime_modules(sourceProgram.modules, context.lookupModules)
+            + python_native_runtime_modules()
+    }
+
+/// Immutable indexes shared by asynchronous Python module generation.
+data PythonGeneratorContext {
+    emittedModules: List[CompiledModule],
+    lookupModules: List[CompiledModule],
+    objectOrientedUnitIndex: PythonObjectOrientedUnitIndex,
+    nativeProviderIndex: PythonNativeProviderIndex
+}
+
+fun python_generator_context(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): PythonGeneratorContext =
+    let lookupModules = python_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
+    PythonGeneratorContext {
+        emittedModules: python_runtime_source_modules(sourceProgram.modules, lookupModules),
+        lookupModules: lookupModules,
+        objectOrientedUnitIndex: python_object_oriented_unit_index(lookupProgram.objectOrientedModules),
+        nativeProviderIndex: python_native_provider_index(lookupProgram.nativeProviderCatalog)
     }
 
 /// Removes value definitions from packaged standard-library metadata while retaining them for source modules.

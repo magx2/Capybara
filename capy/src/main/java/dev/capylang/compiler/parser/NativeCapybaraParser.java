@@ -1,6 +1,7 @@
 package dev.capylang.compiler.parser;
 
 import dev.capylang.NativeImplementation;
+import dev.capylang.AsyncTasks;
 import dev.capylang.compiler.CapybaraValidator;
 import dev.capylang.compiler.CompilerError;
 import dev.capylang.compiler.NativeCompilerValidator;
@@ -39,11 +40,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     public ParsedProgram parse(List<RawModule> modules) {
         Objects.requireNonNull(modules, "modules");
 
-        var parsedModules = new ArrayList<ParsedModule>();
-        for (var module : modules) {
-            parsedModules.add(parseModule(module));
-        }
-        return new ParsedProgram(List.copyOf(parsedModules));
+        return new ParsedProgram(AsyncTasks.map(modules, this::parseModule));
     }
 
     @Override
