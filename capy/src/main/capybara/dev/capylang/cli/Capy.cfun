@@ -2911,11 +2911,28 @@ private fun write_generated_modules(outputDir: Path, modules: List[GeneratedModu
         .map(results => async_string_results(results, "generated modules written"))
 
 private fun write_generated_module_tasks(outputDir: Path, modules: List[GeneratedModule]): List[Async[Result[String]]] =
+    write_generated_module_tasks(outputDir, modules, {})
+
+private fun write_generated_module_tasks(outputDir: Path, modules: List[GeneratedModule], scheduledPaths: Set[String]): List[Async[Result[String]]] =
     match modules[0] with
     case None -> []
     case Some { module } ->
-        [write_generated_module(outputDir, module).start()]
-            + write_generated_module_tasks(outputDir, modules[1:])
+        if scheduledPaths.contains(module.relativePath)
+        then write_generated_module_tasks(outputDir, modules[1:], scheduledPaths)
+        else [write_generated_modules_for_path(outputDir, modules, module.relativePath).start()]
+            + write_generated_module_tasks(outputDir, modules[1:], scheduledPaths + module.relativePath)
+
+private fun write_generated_modules_for_path(outputDir: Path, modules: List[GeneratedModule], relativePath: String): Effect[Result[String]] =
+    match modules[0] with
+    case None -> pure(Success { "generated path written" })
+    case Some { module } ->
+        if module.relativePath != relativePath
+        then write_generated_modules_for_path(outputDir, modules[1:], relativePath)
+        else write_generated_module(outputDir, module).flat_map(moduleResult =>
+            match moduleResult with
+            case Error e -> pure(e)
+            case Success _ -> write_generated_modules_for_path(outputDir, modules[1:], relativePath)
+        )
 
 private fun async_string_results(results: List[Result[Result[String]]], successMessage: String): Result[String] =
     match results[0] with
