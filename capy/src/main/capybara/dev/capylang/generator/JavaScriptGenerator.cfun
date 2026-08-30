@@ -43,9 +43,9 @@ private data JavaScriptReflectionEntries { typeEntries: List[String], enumValueE
 /// JavaScript source sections collected in one pass over compiled functions.
 private data JavaScriptFunctionSections { constants: String, functions: String, hasOverloadedFunctions: bool }
 /// Native-provider declarations for a single JavaScript generated module, indexed by provider function name.
-private data JavaScriptNativeProviderDeclarations { declarations: Dict[CompiledNativeProviderDeclaration] }
+data JavaScriptNativeProviderDeclarations { declarations: Dict[CompiledNativeProviderDeclaration] }
 /// JavaScript native-provider declarations and JavaScript-capable bindings indexed for generator lookups.
-private data JavaScriptNativeProviderIndex { declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], bindings: Dict[CompiledNativeProviderBinding] }
+data JavaScriptNativeProviderIndex { declarationsByModule: Dict[JavaScriptNativeProviderDeclarations], bindings: Dict[CompiledNativeProviderBinding] }
 /// JavaScript native-provider lookup scope for one generated module.
 private data JavaScriptNativeProviderScope { declarations: Dict[CompiledNativeProviderDeclaration], bindings: Dict[CompiledNativeProviderBinding] }
 /// Constructor statements collected in one scan over object helper functions.
@@ -79,12 +79,37 @@ fun java_script_generator(program: CompiledProgram): GeneratedProgram =
 
 /// Generates requested JavaScript modules while resolving metadata against a larger lookup program.
 fun java_script_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
-    let nativeProviderIndex = java_script_native_provider_index(lookupProgram.nativeProviderCatalog)
-    let lookupModules = java_script_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
-    let emittedModules = java_script_runtime_source_modules(sourceProgram.modules, lookupModules)
+    let context = java_script_generator_context(sourceProgram, lookupProgram)
     GeneratedProgram {
-        modules: java_script_modules(emittedModules, emittedModules, lookupModules, nativeProviderIndex)
-            + java_script_test_runtime_modules(sourceProgram.modules, lookupModules)
+        modules: java_script_modules(context.emittedModules, context.emittedModules, context.lookupModules, context.nativeProviderIndex)
+            + java_script_test_runtime_modules(sourceProgram.modules, context.lookupModules)
+    }
+
+/// Generates one JavaScript source module without whole-program support modules.
+fun java_script_generator_module_with_context(module: CompiledModule, context: JavaScriptGeneratorContext): GeneratedProgram =
+    GeneratedProgram {
+        modules: java_script_modules([module], context.emittedModules, context.lookupModules, context.nativeProviderIndex)
+    }
+
+/// Generates JavaScript support modules that depend on the complete source program.
+fun java_script_generator_support_with_context(sourceProgram: CompiledProgram, context: JavaScriptGeneratorContext): GeneratedProgram =
+    GeneratedProgram {
+        modules: java_script_test_runtime_modules(sourceProgram.modules, context.lookupModules)
+    }
+
+/// Immutable indexes shared by asynchronous JavaScript module generation.
+data JavaScriptGeneratorContext {
+    emittedModules: List[CompiledModule],
+    lookupModules: List[CompiledModule],
+    nativeProviderIndex: JavaScriptNativeProviderIndex
+}
+
+fun java_script_generator_context(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): JavaScriptGeneratorContext =
+    let lookupModules = java_script_runtime_lookup_modules(sourceProgram.modules, lookupProgram.modules)
+    JavaScriptGeneratorContext {
+        emittedModules: java_script_runtime_source_modules(sourceProgram.modules, lookupModules),
+        lookupModules: lookupModules,
+        nativeProviderIndex: java_script_native_provider_index(lookupProgram.nativeProviderCatalog)
     }
 
 /// Removes value definitions from packaged standard-library metadata while retaining them for source modules.

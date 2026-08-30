@@ -136,13 +136,39 @@ fun java_generator(program: CompiledProgram): GeneratedProgram =
 
 /// Generates requested Java modules while resolving metadata against a larger lookup program.
 fun java_generator_with_lookup(sourceProgram: CompiledProgram, lookupProgram: CompiledProgram): GeneratedProgram =
-    let objectOrientedUnitIndex = java_object_oriented_unit_index(lookupProgram.objectOrientedModules)
-    let nativeProviderIndex = java_native_provider_index(lookupProgram.nativeProviderCatalog)
-    let generated = java_generated_modules(sourceProgram.modules, lookupProgram.modules, objectOrientedUnitIndex, nativeProviderIndex)
+    let context = java_generator_context(lookupProgram)
+    let generated = java_generated_modules(sourceProgram.modules, context.allModules, context.objectOrientedUnitIndex, context.nativeProviderIndex)
     GeneratedProgram {
         modules: generated.objectInterfaceModules
             + generated.javaModules
             + test_runtime_modules(sourceProgram.modules)
+    }
+
+/// Generates one Java source module without whole-program support modules.
+fun java_generator_module_with_context(module: CompiledModule, context: JavaGeneratorContext): GeneratedProgram =
+    let generated = java_generated_modules([module], context.allModules, context.objectOrientedUnitIndex, context.nativeProviderIndex)
+    GeneratedProgram {
+        modules: generated.objectInterfaceModules + generated.javaModules
+    }
+
+/// Generates Java support modules that depend on the complete source program.
+fun java_generator_support(sourceProgram: CompiledProgram): GeneratedProgram =
+    GeneratedProgram {
+        modules: test_runtime_modules(sourceProgram.modules)
+    }
+
+/// Prepares immutable indexes shared by asynchronous Java module generation.
+data JavaGeneratorContext {
+    allModules: List[CompiledModule],
+    objectOrientedUnitIndex: JavaObjectOrientedUnitIndex,
+    nativeProviderIndex: JavaNativeProviderIndex
+}
+
+fun java_generator_context(lookupProgram: CompiledProgram): JavaGeneratorContext =
+    JavaGeneratorContext {
+        allModules: lookupProgram.modules,
+        objectOrientedUnitIndex: java_object_oriented_unit_index(lookupProgram.objectOrientedModules),
+        nativeProviderIndex: java_native_provider_index(lookupProgram.nativeProviderCatalog)
     }
 
 /// Creates Java object interface and module source entries while decoding object schemas once per module.

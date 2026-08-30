@@ -1,5 +1,6 @@
 package dev.capylang.generator;
 
+import dev.capylang.AsyncTasks;
 import dev.capylang.compiler.BackendCompilationContext;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledModule;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /** Bootstrap-compatible entry point for the self-hosted Java generator. */
@@ -74,13 +76,30 @@ public final class JavaGenerator {
                 ? sourceProgram
                 : dataMap(toGeneratedValue(lookup));
         var compiledProgram = withBundledImportModules(lookupProgram);
-        var generated = dataMap(GeneratedJavaGenerator.java_generator_with_lookup__137_0(
-                sourceProgram,
-                compiledProgram
-        ));
-        var modules = list(generated.get("modules")).stream()
-                .map(JavaGenerator::generatedModule)
-                .toList();
+        var context = GeneratedJavaGenerator.java_generator_context__167_0(compiledProgram);
+        var tasks = new ArrayList<Supplier<List<GeneratedModule>>>();
+        for (var module : list(sourceProgram.get("modules"))) {
+            tasks.add(() -> generatedModules(GeneratedJavaGenerator.java_generator_module_with_context__147_0(
+                    module,
+                    context
+            )));
+        }
+        tasks.add(() -> generatedModules(GeneratedJavaGenerator.java_generator_support__154_0(
+                sourceProgram
+        )));
+        var parts = AsyncTasks.run(tasks);
+        var objectInterfaceModules = new ArrayList<GeneratedModule>();
+        var javaModules = new ArrayList<GeneratedModule>();
+        for (var index = 0; index < parts.size() - 1; index++) {
+            var part = parts.get(index);
+            if (!part.isEmpty()) {
+                objectInterfaceModules.addAll(part.subList(0, part.size() - 1));
+                javaModules.add(part.getLast());
+            }
+        }
+        javaModules.addAll(parts.getLast());
+        objectInterfaceModules.addAll(javaModules);
+        var modules = List.copyOf(objectInterfaceModules);
         modules.forEach(module -> rejectUnsupportedFunctions(module, compiledProgram));
         var result = new GeneratedProgram(modules);
         LAST_GENERATION.set(new CachedGeneration(source, lookup, result));
@@ -649,6 +668,12 @@ public final class JavaGenerator {
                 string(module.get("relativePath")),
                 string(module.get("code"))
         );
+    }
+
+    static List<GeneratedModule> generatedModules(Object value) {
+        return list(dataMap(value).get("modules")).stream()
+                .map(JavaGenerator::generatedModule)
+                .toList();
     }
 
     static Object toGeneratedValue(Object value) {

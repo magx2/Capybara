@@ -1,8 +1,13 @@
 package dev.capylang.generator;
 
+import dev.capylang.AsyncTasks;
 import dev.capylang.compiler.BackendCompilationContext;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.generator.internal.GeneratedJavaScriptGenerator;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Supplier;
 
 /** Bootstrap-compatible entry point for the self-hosted JavaScript generator. */
 public final class JavaScriptGenerator {
@@ -45,14 +50,27 @@ public final class JavaScriptGenerator {
         var lookupProgram = JavaGenerator.withBundledImportModules(source == lookup
                 ? sourceProgram
                 : JavaGenerator.dataMap(JavaGenerator.toGeneratedValue(lookup)));
-        var generated = JavaGenerator.dataMap(
-                GeneratedJavaScriptGenerator.java_script_generator_with_lookup__80_0(
-                        sourceProgram,
-                        lookupProgram
-                )
+        var context = GeneratedJavaScriptGenerator.java_script_generator_context__107_0(
+                sourceProgram,
+                lookupProgram
         );
-        var modules = JavaGenerator.list(generated.get("modules")).stream()
-                .map(JavaGenerator::generatedModule)
+        var tasks = new ArrayList<Supplier<List<GeneratedModule>>>();
+        for (var module : JavaGenerator.list(JavaGenerator.dataMap(context).get("emittedModules"))) {
+            tasks.add(() -> JavaGenerator.generatedModules(
+                    GeneratedJavaScriptGenerator.java_script_generator_module_with_context__88_0(
+                            module,
+                            context
+                    )
+            ));
+        }
+        tasks.add(() -> JavaGenerator.generatedModules(
+                GeneratedJavaScriptGenerator.java_script_generator_support_with_context__94_0(
+                        sourceProgram,
+                        context
+                )
+        ));
+        var modules = AsyncTasks.run(tasks).stream()
+                .flatMap(List::stream)
                 .toList();
         var result = new GeneratedProgram(modules);
         LAST_GENERATION.set(new CachedGeneration(source, lookup, result));
