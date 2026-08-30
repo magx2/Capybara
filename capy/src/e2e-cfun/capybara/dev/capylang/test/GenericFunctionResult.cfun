@@ -1,0 +1,12 @@
+from /capy/lang/Result import { Result, Success }
+
+data Box[T] { value: T }
+
+fun box(value: T): Box[T] = Box { value }
+
+fun Box[T].unwrap(): T = this.value
+
+fun boxed_text(): String = box("generic").unwrap()
+
+fun mapped_text(): Result[String] =
+    Success { "1234" }.map(value => value)

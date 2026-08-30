@@ -1,0 +1,44 @@
+from /dev/capylang/test/ObjectOrientedAnnotationDefinitions import { OoAnnotationMarker, OoTypeLabel, OoFieldName, OoMethodName, OoRepeatableLabel }
+from /capy/meta_prog/Annotations import { Deprecated }
+
+@OoAnnotationMarker
+@OoTypeLabel(label: "contract")
+@Deprecated(message: "use AnnotatedContractV2")
+interface AnnotatedContract {
+    @OoMethodName(value: "render")
+    def render(): String
+}
+
+@OoAnnotationMarker
+@OoTypeLabel(label: "mixin")
+@Deprecated(message: "use AnnotatedNamingV2", since: "3.0")
+trait AnnotatedNaming {
+    @OoMethodName(value: "prefix")
+    def prefix(value: String): String = "@" + value
+}
+
+@OoAnnotationMarker
+@OoTypeLabel(label: "entity")
+@Deprecated(message: "use AnnotatedView", since: "3.0")
+class AnnotatedWidget(name: String): AnnotatedContract, AnnotatedNaming {
+    @OoAnnotationMarker
+    @OoFieldName(value: "display_name")
+    @Deprecated(message: "use label")
+    field name: String = name
+
+    @OoMethodName(value: "render")
+    @Deprecated(message: "use render_label", since: "3.1")
+    override def render(): String = this.prefix(this.name)
+}
+
+@OoRepeatableLabel(value: "class-primary")
+@OoRepeatableLabel(value: "class-secondary")
+class RepeatableAnnotatedWidget(name: String) {
+    @OoRepeatableLabel(value: "field-primary")
+    @OoRepeatableLabel(value: "field-secondary")
+    field name: String = name
+
+    @OoRepeatableLabel(value: "method-primary")
+    @OoRepeatableLabel(value: "method-secondary")
+    def render(): String = this.name
+}

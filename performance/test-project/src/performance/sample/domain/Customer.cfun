@@ -1,0 +1,57 @@
+from /capy/collection/Set import { * }
+from /capy/lang/Option import { * }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkEntity, BenchmarkField }
+
+enum CustomerSegment { RETAIL, WHOLESALE, VIP }
+
+data Address {
+    street: String,
+    city: String,
+    country: String
+}
+
+@BenchmarkEntity(label: "customer", weight: 3)
+data Customer {
+    @BenchmarkField(value: "identifier")
+    id: String,
+    @BenchmarkField(value: "display")
+    display: String,
+    segment: CustomerSegment,
+    tags: Set[String],
+    address: Address
+}
+
+fun retail_customer(id: String, display: String): Customer =
+    Customer {
+        id: id,
+        display: display,
+        segment: RETAIL,
+        tags: {"retail", "email"},
+        address: Address { street: "Main", city: "Poznan", country: "PL" }
+    }
+
+fun vip_customer(id: String, display: String): Customer =
+    retail_customer(id, display).with(segment: VIP, tags: {"vip", "email", "loyal"})
+
+fun tier(customer: Customer): int =
+    match customer.segment with
+    case VIP -> 3
+    case WHOLESALE -> 2
+    case RETAIL -> 1
+
+fun is_vip(customer: Customer): bool = customer.segment == VIP
+
+fun has_tag(customer: Customer, tag: String): bool = customer.tags ? tag
+
+fun score(customer: Customer): int =
+    tier(customer) * 10 + customer.tags.size()
+
+fun preferred_channel(customer: Customer): Option[String] =
+    if customer.tags ? "email"
+    then Some { "email" }
+    else if customer.tags ? "sms"
+    then Some { "sms" }
+    else None {}
+
+fun display_label(customer: Customer): String =
+    "{customer.display} ({customer.address.city})"

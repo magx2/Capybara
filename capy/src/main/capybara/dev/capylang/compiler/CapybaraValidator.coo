@@ -1,0 +1,7 @@
+interface CapybaraValidator {
+    def validate(
+        modules: any,
+        libraryModules: List[String],
+        nativeProviders: NativeProviderManifest
+    ): List[CompilerError]
+}

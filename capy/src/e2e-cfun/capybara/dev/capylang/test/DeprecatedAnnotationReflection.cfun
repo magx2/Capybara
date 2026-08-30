@@ -1,0 +1,17 @@
+from /capy/meta_prog/Annotations import { Deprecated }
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
+@Deprecated(message: "use CurrentCustomer", since: "2.0")
+data DeprecatedCustomer {
+    @Deprecated(message: "use display_name")
+    name: String
+}
+
+@Deprecated(message: "use CurrentStatus", since: "2.2")
+enum DeprecatedStatus { DEPRECATED_READY, DEPRECATED_DONE }
+
+fun deprecated_annotation_reflection_sample(): DataValueInfo =
+    reflection(DeprecatedCustomer { name: "Ada" })
+
+fun deprecated_enum_annotation_reflection_sample(): DataValueInfo =
+    reflection(DeprecatedStatus.DEPRECATED_READY)

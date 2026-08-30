@@ -1,0 +1,10 @@
+from /capy/lang/Effect import { Effect }
+from /capy/meta_prog/NativeProvider import { NativeProvider }
+from /performance/sample/nativeinterop/NativeClock import { NativeClock }
+from /performance/sample/nativeinterop/NativeHasher import { NativeHasher }
+
+@NativeProvider(qualifier: "fixed")
+fun fixed_clock(): Effect[NativeClock] = <native>
+
+@NativeProvider(qualifier: "stable")
+fun stable_hasher(): Effect[NativeHasher] = <native>

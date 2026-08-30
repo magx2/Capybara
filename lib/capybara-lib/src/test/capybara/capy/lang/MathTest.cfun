@@ -1,0 +1,269 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Math import { CEILING, FLOOR, HALF_DOWN, HALF_EVEN, HALF_UP, RoundMode, digits, floor_div, floor_mod, max, min, round }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/collection/Seq import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    let digits_test_cases = ([
+        (0, 1),
+        (1, 1),
+        (9, 1),
+        (10, 2),
+        (99, 2),
+        (100, 3),
+        (999, 3),
+        // max int value
+        (2147483647, 10),
+        // negative numbers should have the same number of digits as their positive counterparts
+        (-1, 1),
+        (-9, 1),
+        (-10, 2),
+        (-99, 2),
+        (-100, 3),
+        (-999, 3),
+        // min int value
+        (-2147483648, 10),
+    ] | (number, expected) =>
+        test("digits(" + number + ") should return " + expected, () => test_digits(number, expected))).as_list()
+
+    let floor_div_cases = ([
+        (7, 3, 2),
+        (0, 3, 0),
+        (-1, 3, -1),
+        (-7, 3, -3),
+        (-10, 3, -4),
+        (1, -3, -1),
+        (7, -3, -3),
+        (-1, -3, 0),
+        (-7, -3, 2),
+    ] | (a, b, expected) =>
+        test("floor_div(" + a + ", " + b + ") should return " + expected, () => test_floor_div(a, b, expected))).as_list()
+
+    let floor_mod_cases = ([
+        (7, 3, 1),
+        (0, 3, 0),
+        (-1, 3, 2),
+        (-7, 3, 2),
+        (-10, 3, 2),
+        (1, -3, -2),
+        (7, -3, -2),
+        (-1, -3, -1),
+        (-7, -3, -1),
+    ] | (a, b, expected) =>
+        test("floor_mod(" + a + ", " + b + ") should return " + expected, () => test_floor_mod(a, b, expected))).as_list()
+
+    let min_int_cases = ([
+        (1, 2, 1),
+        (2, 1, 1),
+        (-5, 3, -5),
+        (4, 4, 4),
+    ] | (a, b, expected) =>
+        test("min(" + a + ", " + b + ") should return " + expected, () => test_min_int(a, b, expected))).as_list()
+
+    let max_int_cases = ([
+        (1, 2, 2),
+        (2, 1, 2),
+        (-5, 3, 3),
+        (4, 4, 4),
+    ] | (a, b, expected) =>
+        test("max(" + a + ", " + b + ") should return " + expected, () => test_max_int(a, b, expected))).as_list()
+
+    let min_long_cases = ([
+        (1L, 2L, 1L),
+        (2L, 1L, 1L),
+        (-5L, 3L, -5L),
+        (4L, 4L, 4L),
+    ] | (a, b, expected) =>
+        test("min(" + a + "L, " + b + "L) should return " + expected + "L", () => test_min_long(a, b, expected))).as_list()
+
+    let max_long_cases = ([
+        (1L, 2L, 2L),
+        (2L, 1L, 2L),
+        (-5L, 3L, 3L),
+        (4L, 4L, 4L),
+    ] | (a, b, expected) =>
+        test("max(" + a + "L, " + b + "L) should return " + expected + "L", () => test_max_long(a, b, expected))).as_list()
+
+    let list_int_cases = [
+        test("min([3, 1, 2]) should return Some { 1 }", () => test_min_values_int(1)),
+        test("min([-3, -1, -2]) should return Some { -3 }", () => test_min_negative_values_int(-3)),
+        test("min([]) should return None", () => test_empty_min_int()),
+        test("max([3, 1, 2]) should return Some { 3 }", () => test_max_values_int(3)),
+        test("max([-3, -1, -2]) should return Some { -1 }", () => test_max_negative_values_int(-1)),
+        test("max([]) should return None", () => test_empty_max_int()),
+    ]
+
+    let list_long_cases = [
+        test("min([3L, 1L, 2L]) should return Some { 1L }", () => test_min_values_long(1L)),
+        test("min([-3L, -1L, -2L]) should return Some { -3L }", () => test_min_negative_values_long(-3L)),
+        test("min([]: List[long]) should return None", () => test_empty_min_long()),
+        test("max([3L, 1L, 2L]) should return Some { 3L }", () => test_max_values_long(3L)),
+        test("max([-3L, -1L, -2L]) should return Some { -1L }", () => test_max_negative_values_long(-1L)),
+        test("max([]: List[long]) should return None", () => test_empty_max_long()),
+    ]
+
+    let round_cases = [
+        test("round FLOOR should round toward negative infinity", () => test_round_floor()),
+        test("round CEILING should round toward positive infinity", () => test_round_ceiling()),
+        test("round HALF_UP should round ties away from zero", () => test_round_half_up()),
+        test("round HALF_DOWN should round ties toward zero", () => test_round_half_down()),
+        test("round HALF_EVEN should round ties to even neighbor", () => test_round_half_even()),
+    ]
+
+    let all_cases = digits_test_cases
+        + floor_div_cases
+        + floor_mod_cases
+        + min_int_cases
+        + max_int_cases
+        + min_long_cases
+        + max_long_cases
+        + list_int_cases
+        + list_long_cases
+        + round_cases
+
+    test_file("/capy/lang/Math.cfun", all_cases)
+
+private fun test_digits(number: int, expected: int): Assert = assert_that(digits(number)).is_equal_to(expected)
+
+private fun test_floor_div(a: int, b: int, expected: int): Assert =
+    assert_that(floor_div(a, b)).is_equal_to(expected)
+
+private fun test_floor_mod(a: int, b: int, expected: int): Assert =
+    assert_that(floor_mod(a, b)).is_equal_to(expected)
+
+private fun test_min_int(a: int, b: int, expected: int): Assert =
+    assert_that(min(a, b)).is_equal_to(expected)
+
+private fun test_max_int(a: int, b: int, expected: int): Assert =
+    assert_that(max(a, b)).is_equal_to(expected)
+
+private fun test_min_long(a: long, b: long, expected: long): Assert =
+    assert_that(min(a, b)).is_equal_to(expected)
+
+private fun test_max_long(a: long, b: long, expected: long): Assert =
+    assert_that(max(a, b)).is_equal_to(expected)
+
+
+
+private fun test_min_values_int(expected: int): Assert =
+    assert_that(min_ints()).contains(expected)
+
+private fun test_empty_min_int(): Assert =
+    assert_that(min_empty_ints()).is_equal_to(None {})
+
+private fun test_max_values_int(expected: int): Assert =
+    assert_that(max_ints()).contains(expected)
+
+private fun test_empty_max_int(): Assert =
+    assert_that(max_empty_ints()).is_equal_to(None {})
+
+private fun test_min_negative_values_int(expected: int): Assert =
+    assert_that(min_negative_ints()).contains(expected)
+
+private fun test_max_negative_values_int(expected: int): Assert =
+    assert_that(max_negative_ints()).contains(expected)
+
+
+private fun test_min_values_long(expected: long): Assert =
+    assert_that(min_longs()).contains(expected)
+
+private fun test_empty_min_long(): Assert =
+    assert_that(min_empty_longs()).is_equal_to(None {})
+
+private fun test_max_values_long(expected: long): Assert =
+    assert_that(max_longs()).contains(expected)
+
+private fun test_empty_max_long(): Assert =
+    assert_that(max_empty_longs()).is_equal_to(None {})
+
+private fun test_min_negative_values_long(expected: long): Assert =
+    assert_that(min_negative_longs()).contains(expected)
+
+private fun test_max_negative_values_long(expected: long): Assert =
+    assert_that(max_negative_longs()).contains(expected)
+
+private fun test_round_floor(): Assert =
+    assert_all([
+        assert_round(1.9, FLOOR, 1L),
+        assert_round(2.0, FLOOR, 2L),
+        assert_round(-1.1, FLOOR, -2L),
+    ])
+
+private fun test_round_ceiling(): Assert =
+    assert_all([
+        assert_round(1.1, CEILING, 2L),
+        assert_round(-1.9, CEILING, -1L),
+        assert_round(-2.0, CEILING, -2L),
+    ])
+
+private fun test_round_half_up(): Assert =
+    assert_all([
+        assert_round(1.4, HALF_UP, 1L),
+        assert_round(1.5, HALF_UP, 2L),
+        assert_round(-1.4, HALF_UP, -1L),
+        assert_round(-1.5, HALF_UP, -2L),
+    ])
+
+private fun test_round_half_down(): Assert =
+    assert_all([
+        assert_round(1.5, HALF_DOWN, 1L),
+        assert_round(1.6, HALF_DOWN, 2L),
+        assert_round(-1.5, HALF_DOWN, -1L),
+        assert_round(-1.6, HALF_DOWN, -2L),
+    ])
+
+private fun test_round_half_even(): Assert =
+    assert_all([
+        assert_round(1.5, HALF_EVEN, 2L),
+        assert_round(2.5, HALF_EVEN, 2L),
+        assert_round(-1.5, HALF_EVEN, -2L),
+        assert_round(-2.5, HALF_EVEN, -2L),
+        assert_round(1.4, HALF_EVEN, 1L),
+        assert_round(1.6, HALF_EVEN, 2L),
+    ])
+
+private fun assert_round(value: double, mode: RoundMode, expected: long): Assert =
+    assert_that(round(value, mode)).is_equal_to(expected)
+
+
+private fun min_ints(): Option[int] = min(ints())
+
+private fun min_empty_ints(): Option[int] = min(empty_ints())
+
+private fun max_ints(): Option[int] = max(ints())
+
+private fun max_empty_ints(): Option[int] = max(empty_ints())
+
+private fun min_negative_ints(): Option[int] = min(negative_ints())
+
+private fun max_negative_ints(): Option[int] = max(negative_ints())
+
+
+private fun min_longs(): Option[long] = min(longs())
+
+private fun min_empty_longs(): Option[long] = min(empty_longs())
+
+private fun max_longs(): Option[long] = max(longs())
+
+private fun max_empty_longs(): Option[long] = max(empty_longs())
+
+private fun min_negative_longs(): Option[long] = min(negative_longs())
+
+private fun max_negative_longs(): Option[long] = max(negative_longs())
+
+
+private fun ints(): List[int] = [3, 1, 2]
+
+private fun longs(): List[long] = [3L, 1L, 2L]
+
+private fun negative_ints(): List[int] = [-3, -1, -2]
+
+private fun negative_longs(): List[long] = [-3L, -1L, -2L]
+
+private fun empty_ints(): List[int] = []
+
+private fun empty_longs(): List[long] = []

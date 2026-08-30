@@ -1,0 +1,49 @@
+from /capy/collection/List import { * }
+from /capy/io/IO import { create_directories, write_text }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from Documentation import { Documentation }
+from AsciiDocGenerator import { generate_asciidoc_docs }
+
+fun generate_docs(program: CompiledProgram, type: DocType): List[Documentation] =
+    match type with
+    case ADOC -> generate_asciidoc_docs(program)
+
+enum DocType {
+    ADOC,
+}
+
+fun render_adoc_docs(program: CompiledProgram, outputDir: Path): Effect[Result[String]] =
+    write_docs(outputDir, generate_docs(program, ADOC))
+
+private fun write_docs(outputDir: Path, docs: List[Documentation]): Effect[Result[String]] =
+    create_directories(outputDir).flat_map(directoryResult =>
+        match directoryResult with
+        case Error e -> pure(e)
+        case Success _ -> write_documentation_items(outputDir, docs)
+    )
+
+private fun write_documentation_items(outputDir: Path, docs: List[Documentation]): Effect[Result[String]] =
+    match docs[0] with
+    case None -> pure(Success { "documentation written" })
+    case Some { doc } ->
+        write_documentation_item(outputDir, doc).flat_map(writeResult =>
+            match writeResult with
+            case Error e -> pure(e)
+            case Success _ -> write_documentation_items(outputDir, docs[1:])
+        )
+
+private fun write_documentation_item(outputDir: Path, doc: Documentation): Effect[Result[String]] =
+    let outputFile = outputDir / from_string(doc.path)
+    doc_create_parent_directories(outputFile).flat_map(parentResult =>
+        match parentResult with
+        case Error e -> pure(e)
+        case Success _ -> write_text(outputFile, doc.content)
+    )
+
+private fun doc_create_parent_directories(path: Path): Effect[Result[Path]] =
+    match path.parent() with
+    case None -> pure(Success { path })
+    case Some { parent } -> create_directories(parent)

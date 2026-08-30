@@ -1,0 +1,62 @@
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/lang/OptionTest.cfun", [
+        test("should map some", () => should_map_some()),
+        test("should map none", () => should_map_none()),
+        test("should flatmap some", () => should_flatmap_some()),
+        test("should flatmap none", () => should_flatmap_none()),
+        test("should return value from some", () => should_return_value_from_some()),
+        test("should return fallback value from none", () => should_return_fallback_value_from_none()),
+        test("should return this option from some", () => should_return_this_option_from_some()),
+        test("should return fallback option from none", () => should_return_fallback_option_from_none()),
+    ])
+
+fun should_map_some(): Assert =
+    let option: Option[String] = Some { "value" }
+    assert_all([
+        assert_that(option.map(value => "mapped_" + value)).contains("mapped_value"),
+        assert_that(option | value => "mapped_" + value).contains("mapped_value"),
+    ])
+
+fun should_map_none(): Assert =
+    let option: Option[String] = None {}
+    assert_all([
+        assert_that(option.map(value => "mapped_" + value)).is_empty(),
+        assert_that(option | value => "mapped_" + value).is_empty(),
+    ])
+
+fun should_flatmap_some(): Assert =
+    let option: Option[String] = Some { "value" }
+    assert_all([
+        assert_that(option.flat_map(value => Some { "mapped_" + value })).contains("mapped_value"),
+        assert_that(option |* value => Some { "mapped_" + value }).contains("mapped_value"),
+    ])
+
+fun should_flatmap_none(): Assert =
+    let option: Option[String] = None {}
+    assert_all([
+        assert_that(option.flat_map(value => Some { "mapped_" + value })).is_empty(),
+        assert_that(option |* value => Some { "mapped_" + value }).is_empty(),
+    ])
+
+fun should_return_value_from_some(): Assert =
+    let option: Option[int] = Some { 100 }
+    assert_that(option.or_else(0)).is_equal_to(100)
+
+fun should_return_fallback_value_from_none(): Assert =
+    let option: Option[int] = None {}
+    assert_that(option.or_else(0)).is_equal_to(0)
+
+fun should_return_this_option_from_some(): Assert =
+    let option: Option[int] = Some { 100 }
+    let fallback: Option[int] = Some { 101 }
+    assert_that(option.or(fallback)).is_equal_to(option)
+
+fun should_return_fallback_option_from_none(): Assert =
+    let option: Option[int] = None {}
+    let fallback: Option[int] = Some { 101 }
+    assert_that(option.or(fallback)).is_equal_to(fallback)

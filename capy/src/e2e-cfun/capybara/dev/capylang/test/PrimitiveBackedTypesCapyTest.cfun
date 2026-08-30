@@ -1,0 +1,74 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from PrimitiveBackedTypes import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/PrimitiveBackedTypes.cfun", [
+        test("primitive backed values run as primitive ints and strings", () => primitive_backed_values_run_as_primitive_ints_and_strings()),
+        test("primitive backed types proxy missing methods to their backing type", () => primitive_backed_types_proxy_missing_methods_to_their_backing_type()),
+        test("numeric primitive backed types override base functions", () => numeric_primitive_backed_types_override_base_functions()),
+        test("all numeric primitive backed types proxy methods and operators", () => all_numeric_primitive_backed_types_proxy_methods_and_operators()),
+        test("result returning constructor retags payload type", () => result_returning_constructor_retags_payload_type()),
+        test("result returning constructor rejects invalid values", () => result_returning_constructor_rejects_invalid_values()),
+    ])
+
+private fun primitive_backed_values_run_as_primitive_ints_and_strings(): Assert =
+    assert_all([
+        assert_that(unwrap_user_id(raw_user_id(7))).is_equal_to(7),
+        assert_that(unwrap_raw_user_id(7)).is_equal_to(7),
+        assert_that(unwrap_user_id(plus_user_ids(raw_user_id(2), raw_user_id(3)))).is_equal_to(5),
+        assert_that(unwrap_user_id(add_user_ids(raw_user_id(4), raw_user_id(5)))).is_equal_to(9),
+        assert_that(increment_user_id(raw_user_id(6))).is_equal_to(7),
+        assert_that(unwrap_score(score_of(11))).is_equal_to(11),
+        assert_that(unwrap_token(raw_token("abc"))).is_equal_to("abc"),
+        assert_that(pass_token_to_string(raw_token("abc"))).is_equal_to("abc_suffix"),
+        assert_that(tokens_match(raw_token("abc"), raw_token("abc"))).is_true(),
+        assert_that(tokens_match(raw_token("abc"), raw_token("def"))).is_false(),
+    ])
+
+private fun result_returning_constructor_retags_payload_type(): Assert =
+    assert_that(new_user_id(7)).succeeds(value => assert_that(unwrap_user_id(value)).is_equal_to(7))
+
+private fun primitive_backed_types_proxy_missing_methods_to_their_backing_type(): Assert =
+    assert_all([
+        assert_that(uppercase_triple(triple! { "xyz" })).is_equal_to("TRIPLE"),
+        assert_that(replace_triple(triple! { "xyz" }).value).is_equal_to("abc"),
+        assert_that(append_to_triple(triple! { "xyz" }, "def")).is_equal_to("xyzdef"),
+        assert_that(plus_triple(triple! { "xyz" }, "def")).is_equal_to("xyzdef"),
+        assert_that(label_triple_with_external_backing_method(triple! { "xyz" })).is_equal_to("backing:xyz"),
+        assert_that(ordered_string_compares_equal(ordered_string! { "abc" }, "abc")).is_true(),
+    ])
+
+private fun all_numeric_primitive_backed_types_proxy_methods_and_operators(): Assert =
+    assert_all([
+        assert_that(proxied_float_to_long(proxied_float! { 6.5f })).is_equal_to(6L),
+        assert_that(proxied_double_to_long(proxied_double! { 6.5 })).is_equal_to(6L),
+        assert_that(subtract_from_proxied_byte(proxied_byte! { 0x06 })).is_equal_to(0x04),
+        assert_that(subtract_from_proxied_int(proxied_int! { 6 })).is_equal_to(4),
+        assert_that(subtract_from_proxied_long(proxied_long! { 6L })).is_equal_to(4L),
+        assert_that(subtract_from_proxied_float(proxied_float! { 6.0f })).is_equal_to(4.0f),
+        assert_that(subtract_from_proxied_double(proxied_double! { 6.0 })).is_equal_to(4.0),
+    ])
+
+private fun numeric_primitive_backed_types_override_base_functions(): Assert =
+    assert_all([
+        assert_that(proxied_long_to_int(proxied_long! { 6L })).is_equal_to(99),
+        assert_that(proxied_float_to_int(proxied_float! { 6.5f })).is_equal_to(98),
+        assert_that(proxied_double_to_int(proxied_double! { 6.5 })).is_equal_to(97),
+        assert_that(add_to_proxied_byte(proxied_byte! { 0x06 })).is_equal_to(0x7f),
+        assert_that(add_to_proxied_int(proxied_int! { 6 })).is_equal_to(101),
+        assert_that(add_to_proxied_long(proxied_long! { 6L })).is_equal_to(102L),
+        assert_that(add_to_proxied_float(proxied_float! { 6.0f })).is_equal_to(103.0f),
+        assert_that(add_to_proxied_double(proxied_double! { 6.0 })).is_equal_to(104.0),
+    ])
+
+private fun result_returning_constructor_rejects_invalid_values(): Assert =
+    assert_that(new_user_id(0)).fails("bad user id")
+
+// Backend-specific erased-signature and generated metadata assertions are
+// still covered by the existing Java, JavaScript, and Python host tests until
+// a portable Capybara reflection API exposes primitive-backed type metadata.
+// The `string_at` and `string_get` erased-index calls remain there too because
+// portable construction of `/capy/collection/CollectionTypes.index` currently
+// depends on a linked stdlib module that is not emitted for JS/Python e2e.

@@ -1,0 +1,11 @@
+from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+import AnnotationReflectionDefinitions
+
+@AnnotationReflectionDefinitions.ImportedDataLabel(label: "qualified-import", order: 11)
+data QualifiedImportCustomer {
+    @AnnotationReflectionDefinitions.ImportedFieldName(value: "qualified_id")
+    id: String
+}
+
+fun qualified_import_annotation_reflection_sample(): DataValueInfo =
+    reflection(QualifiedImportCustomer { id: "Q-1" })

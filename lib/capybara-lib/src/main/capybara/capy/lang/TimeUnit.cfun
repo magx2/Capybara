@@ -1,0 +1,184 @@
+/// Time duration measured in nanoseconds.
+///
+/// Example:
+/// ```cfun
+/// second { 2L }.to_milli_seconds() == milli_second { 2000L }
+/// milli_second { 1500L }.to_seconds() == second { 1L }
+/// ```
+///
+/// Conversions to a coarser unit use integer division and discard the remainder.
+type nano_second -> long
+
+/// Time duration measured in microseconds.
+type micro_second -> long
+
+/// Time duration measured in milliseconds.
+type milli_second -> long
+
+/// Time duration measured in seconds.
+type second -> long
+
+/// Time duration measured in minutes.
+type minute -> long
+
+/// Time duration measured in hours.
+type hour -> long
+
+/// Time duration measured in days.
+type day -> long
+
+/// Time duration measured in weeks.
+type week -> long
+
+private const NANO_SECONDS_PER_MICRO_SECOND: long = 1_000L
+private const NANO_SECONDS_PER_MILLI_SECOND: long = 1_000_000L
+private const NANO_SECONDS_PER_SECOND: long = 1_000_000_000L
+private const MICRO_SECONDS_PER_MILLI_SECOND: long = 1_000L
+private const MICRO_SECONDS_PER_SECOND: long = 1_000_000L
+private const MILLI_SECONDS_PER_SECOND: long = 1_000L
+private const SECONDS_PER_MINUTE: long = 60L
+private const MINUTES_PER_HOUR: long = 60L
+private const HOURS_PER_DAY: long = 24L
+private const DAYS_PER_WEEK: long = 7L
+private const SECONDS_PER_HOUR: long = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+private const SECONDS_PER_DAY: long = SECONDS_PER_HOUR * HOURS_PER_DAY
+private const SECONDS_PER_WEEK: long = SECONDS_PER_DAY * DAYS_PER_WEEK
+private const MINUTES_PER_DAY: long = MINUTES_PER_HOUR * HOURS_PER_DAY
+private const MINUTES_PER_WEEK: long = MINUTES_PER_DAY * DAYS_PER_WEEK
+private const HOURS_PER_WEEK: long = HOURS_PER_DAY * DAYS_PER_WEEK
+
+/// Returns this nanosecond value unchanged.
+fun nano_second.to_nano_seconds(): nano_second = this
+/// Converts this microsecond value to nanoseconds.
+fun micro_second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_MICRO_SECOND }
+/// Converts this millisecond value to nanoseconds.
+fun milli_second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_MILLI_SECOND }
+/// Converts this second value to nanoseconds.
+fun second.to_nano_seconds(): nano_second = nano_second { this.value * NANO_SECONDS_PER_SECOND }
+/// Converts this minute value to nanoseconds.
+fun minute.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND }
+/// Converts this hour value to nanoseconds.
+fun hour.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND }
+/// Converts this day value to nanoseconds.
+fun day.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND }
+/// Converts this week value to nanoseconds.
+fun week.to_nano_seconds(): nano_second = nano_second { this.value * SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND }
+
+/// Converts this nanosecond value to microseconds, discarding any remainder.
+fun nano_second.to_micro_seconds(): micro_second = micro_second { this.value / NANO_SECONDS_PER_MICRO_SECOND }
+/// Returns this microsecond value unchanged.
+fun micro_second.to_micro_seconds(): micro_second = this
+/// Converts this millisecond value to microseconds.
+fun milli_second.to_micro_seconds(): micro_second = micro_second { this.value * MICRO_SECONDS_PER_MILLI_SECOND }
+/// Converts this second value to microseconds.
+fun second.to_micro_seconds(): micro_second = micro_second { this.value * MICRO_SECONDS_PER_SECOND }
+/// Converts this minute value to microseconds.
+fun minute.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND }
+/// Converts this hour value to microseconds.
+fun hour.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND }
+/// Converts this day value to microseconds.
+fun day.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND }
+/// Converts this week value to microseconds.
+fun week.to_micro_seconds(): micro_second = micro_second { this.value * SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND }
+
+/// Converts this nanosecond value to milliseconds, discarding any remainder.
+fun nano_second.to_milli_seconds(): milli_second = milli_second { this.value / NANO_SECONDS_PER_MILLI_SECOND }
+/// Converts this microsecond value to milliseconds, discarding any remainder.
+fun micro_second.to_milli_seconds(): milli_second = milli_second { this.value / MICRO_SECONDS_PER_MILLI_SECOND }
+/// Returns this millisecond value unchanged.
+fun milli_second.to_milli_seconds(): milli_second = this
+/// Converts this second value to milliseconds.
+fun second.to_milli_seconds(): milli_second = milli_second { this.value * MILLI_SECONDS_PER_SECOND }
+/// Converts this minute value to milliseconds.
+fun minute.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND }
+/// Converts this hour value to milliseconds.
+fun hour.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND }
+/// Converts this day value to milliseconds.
+fun day.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND }
+/// Converts this week value to milliseconds.
+fun week.to_milli_seconds(): milli_second = milli_second { this.value * SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND }
+
+/// Converts this nanosecond value to seconds, discarding any remainder.
+fun nano_second.to_seconds(): second = second { this.value / NANO_SECONDS_PER_SECOND }
+/// Converts this microsecond value to seconds, discarding any remainder.
+fun micro_second.to_seconds(): second = second { this.value / MICRO_SECONDS_PER_SECOND }
+/// Converts this millisecond value to seconds, discarding any remainder.
+fun milli_second.to_seconds(): second = second { this.value / MILLI_SECONDS_PER_SECOND }
+/// Returns this second value unchanged.
+fun second.to_seconds(): second = this
+/// Converts this minute value to seconds.
+fun minute.to_seconds(): second = second { this.value * SECONDS_PER_MINUTE }
+/// Converts this hour value to seconds.
+fun hour.to_seconds(): second = second { this.value * SECONDS_PER_HOUR }
+/// Converts this day value to seconds.
+fun day.to_seconds(): second = second { this.value * SECONDS_PER_DAY }
+/// Converts this week value to seconds.
+fun week.to_seconds(): second = second { this.value * SECONDS_PER_WEEK }
+
+/// Converts this nanosecond value to minutes, discarding any remainder.
+fun nano_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * NANO_SECONDS_PER_SECOND) }
+/// Converts this microsecond value to minutes, discarding any remainder.
+fun micro_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * MICRO_SECONDS_PER_SECOND) }
+/// Converts this millisecond value to minutes, discarding any remainder.
+fun milli_second.to_minutes(): minute = minute { this.value / (SECONDS_PER_MINUTE * MILLI_SECONDS_PER_SECOND) }
+/// Converts this second value to minutes, discarding any remainder.
+fun second.to_minutes(): minute = minute { this.value / SECONDS_PER_MINUTE }
+/// Returns this minute value unchanged.
+fun minute.to_minutes(): minute = this
+/// Converts this hour value to minutes.
+fun hour.to_minutes(): minute = minute { this.value * MINUTES_PER_HOUR }
+/// Converts this day value to minutes.
+fun day.to_minutes(): minute = minute { this.value * MINUTES_PER_DAY }
+/// Converts this week value to minutes.
+fun week.to_minutes(): minute = minute { this.value * MINUTES_PER_WEEK }
+
+/// Converts this nanosecond value to hours, discarding any remainder.
+fun nano_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * NANO_SECONDS_PER_SECOND) }
+/// Converts this microsecond value to hours, discarding any remainder.
+fun micro_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * MICRO_SECONDS_PER_SECOND) }
+/// Converts this millisecond value to hours, discarding any remainder.
+fun milli_second.to_hours(): hour = hour { this.value / (SECONDS_PER_HOUR * MILLI_SECONDS_PER_SECOND) }
+/// Converts this second value to hours, discarding any remainder.
+fun second.to_hours(): hour = hour { this.value / SECONDS_PER_HOUR }
+/// Converts this minute value to hours, discarding any remainder.
+fun minute.to_hours(): hour = hour { this.value / MINUTES_PER_HOUR }
+/// Returns this hour value unchanged.
+fun hour.to_hours(): hour = this
+/// Converts this day value to hours.
+fun day.to_hours(): hour = hour { this.value * HOURS_PER_DAY }
+/// Converts this week value to hours.
+fun week.to_hours(): hour = hour { this.value * HOURS_PER_WEEK }
+
+/// Converts this nanosecond value to days, discarding any remainder.
+fun nano_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * NANO_SECONDS_PER_SECOND) }
+/// Converts this microsecond value to days, discarding any remainder.
+fun micro_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * MICRO_SECONDS_PER_SECOND) }
+/// Converts this millisecond value to days, discarding any remainder.
+fun milli_second.to_days(): day = day { this.value / (SECONDS_PER_DAY * MILLI_SECONDS_PER_SECOND) }
+/// Converts this second value to days, discarding any remainder.
+fun second.to_days(): day = day { this.value / SECONDS_PER_DAY }
+/// Converts this minute value to days, discarding any remainder.
+fun minute.to_days(): day = day { this.value / MINUTES_PER_DAY }
+/// Converts this hour value to days, discarding any remainder.
+fun hour.to_days(): day = day { this.value / HOURS_PER_DAY }
+/// Returns this day value unchanged.
+fun day.to_days(): day = this
+/// Converts this week value to days.
+fun week.to_days(): day = day { this.value * DAYS_PER_WEEK }
+
+/// Converts this nanosecond value to weeks, discarding any remainder.
+fun nano_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * NANO_SECONDS_PER_SECOND) }
+/// Converts this microsecond value to weeks, discarding any remainder.
+fun micro_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * MICRO_SECONDS_PER_SECOND) }
+/// Converts this millisecond value to weeks, discarding any remainder.
+fun milli_second.to_weeks(): week = week { this.value / (SECONDS_PER_WEEK * MILLI_SECONDS_PER_SECOND) }
+/// Converts this second value to weeks, discarding any remainder.
+fun second.to_weeks(): week = week { this.value / SECONDS_PER_WEEK }
+/// Converts this minute value to weeks, discarding any remainder.
+fun minute.to_weeks(): week = week { this.value / MINUTES_PER_WEEK }
+/// Converts this hour value to weeks, discarding any remainder.
+fun hour.to_weeks(): week = week { this.value / HOURS_PER_WEEK }
+/// Converts this day value to weeks, discarding any remainder.
+fun day.to_weeks(): week = week { this.value / DAYS_PER_WEEK }
+/// Returns this week value unchanged.
+fun week.to_weeks(): week = this

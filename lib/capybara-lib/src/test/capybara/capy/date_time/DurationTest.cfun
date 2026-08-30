@@ -1,0 +1,70 @@
+from /capy/date_time/Duration import { * }
+from /capy/test/Assert import { * }
+from /capy/lang/Effect import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from /capy/collection/Seq import { * }
+from /capy/test/CapyTest import { * }
+
+fun tests(): Effect[TestFile] =
+    let round_trip_source: Dict[Duration] = {
+        "PT0S" : ZERO,
+        "P3Y6M4DT12H30M5S" : DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 },
+        "P123Y4M5DT6H7M8S" : DateDuration { years: 123, months: 4, days: 5, hours: 6, minutes: 7, seconds: 8 },
+        "P4Y" : DateDuration { years: 4, months: 0, days: 0, hours: 0, minutes: 0, seconds: 0 },
+        "P23DT23H" : DateDuration { years: 0, months: 0, days: 23, hours: 23, minutes: 0, seconds: 0 },
+        "P2W" : WeekDuration { weeks: 2 },
+    }
+    let round_trip_test_cases = (round_trip_source.entries() | (iso, expected) => test("should round-trip {iso}",
+        () => assert_all([
+            assert_that(/capy/date_time/Duration.from_iso_8601(iso)).succeeds(duration =>
+                assert_all([
+                    assert_that(duration).is_equal_to(expected),
+                    assert_that(duration).has_years(expected.years()),
+                    assert_that(duration).has_months(expected.months()),
+                    assert_that(duration).has_days(expected.days()),
+                    assert_that(duration).has_hours(expected.hours()),
+                    assert_that(duration).has_minutes(expected.minutes()),
+                    assert_that(duration).has_seconds(expected.seconds()),
+                ])),
+            assert_that(expected.to_iso_8601()).is_equal_to(iso),
+        ]))).as_list()
+    let parse_only_test_cases = ([
+        ("PT36H", DateDuration { years: 0, months: 0, days: 0, hours: 36, minutes: 0, seconds: 0 }),
+        ("P00030604T123005", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
+        ("P0003-06-04T12:30:05", DateDuration { years: 3, months: 6, days: 4, hours: 12, minutes: 30, seconds: 5 }),
+    ] | (iso, expected) => test("should parse {iso}",
+        () => assert_that(/capy/date_time/Duration.from_iso_8601(iso)).succeeds(duration =>
+            assert_all([
+                assert_that(duration).is_equal_to(expected),
+                assert_that(duration).has_years(expected.years()),
+                assert_that(duration).has_months(expected.months()),
+                assert_that(duration).has_days(expected.days()),
+                assert_that(duration).has_hours(expected.hours()),
+                assert_that(duration).has_minutes(expected.minutes()),
+                assert_that(duration).has_seconds(expected.seconds()),
+            ])))).as_list()
+    let week_component_test_cases = [
+        test("should expose week-only duration components",
+            () => assert_that(WeekDuration { weeks: 2 })
+                .has_weeks(2)
+                .has_years(0)
+                .has_months(0)
+                .has_days(14)
+                .has_hours(0)
+                .has_minutes(0)
+                .has_seconds(0)),
+    ]
+    let failed_test_cases = ([
+        "P",
+        "PT",
+        "1DT2H",
+        "P1H",
+        "P1S",
+        "P1W2D",
+        "P1WT2H",
+        "P1D2Y",
+        "P0003-13-04T12:30:05",
+    ] | iso => test("should fail parsing {iso}", () => assert_that(/capy/date_time/Duration.from_iso_8601(iso)).fails())).as_list()
+    test_file("/capy/date_time/Duration.cfun", round_trip_test_cases + parse_only_test_cases + week_component_test_cases + failed_test_cases)

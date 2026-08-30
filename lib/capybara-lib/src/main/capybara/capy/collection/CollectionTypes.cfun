@@ -1,0 +1,127 @@
+from /capy/lang/Primitives import { * }
+from /capy/lang/Result import { * }
+
+/// Zero-based collection position.
+///
+/// Example:
+/// ```cfun
+/// let first = FIRST_ELEMENT
+/// let second <- first.next()
+/// second == 1
+/// ```
+type index -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { kind: "capy.lang.index.out_of_bounds", message: "index must be greater than or equal to 0" }
+}
+
+/// Collection size value.
+type size -> int with constructor {
+    if value >= 0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "size must be greater than or equal to 0" }
+}
+
+/// Index of the first element in a collection.
+const FIRST_ELEMENT: index = index! { 0 }
+
+/// Size of an empty collection.
+const EMPTY: size = size! { 0 }
+
+/// Converts this index to a collection size with the same numeric value.
+fun index.to_size(): size = size! { this.value }
+
+/// Converts this size to an index with the same numeric value.
+fun size.to_index(): index = index! { this.value }
+
+/// Returns the next index, or an error when incrementing would overflow.
+fun index.next(): Result[index] =
+    if this.value == MAX_INT_VALUE
+    then Error { kind: "capy.lang.index.out_of_bounds", message: "index increment overflow" }
+    else Success { index! { this.value + 1 } }
+
+/// Adds a non-negative size to this index, returning an error on overflow.
+fun index.plus(offset: size): Result[index] =
+    if this.value > MAX_INT_VALUE - offset.value
+    then Error { kind: "capy.lang.index.out_of_bounds", message: "index addition overflow" }
+    else Success { index! { this.value + offset.value } }
+
+/// Adds a non-negative integer to this index, returning an error for negative values or overflow.
+fun index.plus(offset: int): Result[index] =
+    let parsed_offset <- size { offset }
+    this.plus(parsed_offset)
+
+/// Operator form of `index.plus(offset)` for a size offset.
+fun index.`+`(offset: size): Result[index] = this.plus(offset)
+/// Operator form of `index.plus(offset)` for an integer offset.
+fun index.`+`(offset: int): Result[index] = this.plus(offset)
+
+/// Returns whether this index is greater than `other`.
+fun index.`>`(other: index): bool = this.value > other.value
+/// Returns whether this index is greater than the integer `other`.
+fun index.`>`(other: int): bool = this.value > other
+/// Returns whether this index is greater than or equal to `other`.
+fun index.`>=`(other: index): bool = this.value >= other.value
+/// Returns whether this index is greater than or equal to the integer `other`.
+fun index.`>=`(other: int): bool = this.value >= other
+/// Returns whether this index is less than `other`.
+fun index.`<`(other: index): bool = this.value < other.value
+/// Returns whether this index is less than the integer `other`.
+fun index.`<`(other: int): bool = this.value < other
+/// Returns whether this index is less than or equal to `other`.
+fun index.`<=`(other: index): bool = this.value <= other.value
+/// Returns whether this index is less than or equal to the integer `other`.
+fun index.`<=`(other: int): bool = this.value <= other
+/// Returns whether this index has the same value as `other`.
+fun index.`==`(other: index): bool = this.value == other.value
+/// Returns whether this index has the same value as the integer `other`.
+fun index.`==`(other: int): bool = this.value == other
+
+/// Adds two sizes, returning an error on overflow.
+fun size.plus(other: size): Result[size] =
+    if this.value > MAX_INT_VALUE - other.value
+    then Error { kind: "capy.lang.number.out_of_range", message: "size addition overflow" }
+    else Success { size! { this.value + other.value } }
+
+/// Adds a non-negative integer to this size, returning an error for negative values or overflow.
+fun size.plus(other: int): Result[size] =
+    let parsed_other <- size { other }
+    this.plus(parsed_other)
+
+/// Operator form of `size.plus(other)` for another size.
+fun size.`+`(other: size): Result[size] = this.plus(other)
+/// Operator form of `size.plus(other)` for an integer.
+fun size.`+`(other: int): Result[size] = this.plus(other)
+
+/// Subtracts another size, returning an error when the result would be negative.
+fun size.minus(other: size): Result[size] =
+    size { this.value - other.value }
+
+/// Subtracts an integer, returning an error when the result would be negative.
+fun size.minus(other: int): Result[size] =
+    size { this.value - other }
+
+/// Operator form of `size.minus(other)` for another size.
+fun size.`-`(other: size): Result[size] = this.minus(other)
+/// Operator form of `size.minus(other)` for an integer.
+fun size.`-`(other: int): Result[size] = this.minus(other)
+/// Returns whether this size is greater than `other`.
+fun size.`>`(other: size): bool = this.value > other.value
+/// Returns whether this size is greater than the integer `other`.
+fun size.`>`(other: int): bool = this.value > other
+/// Returns whether this size is greater than or equal to `other`.
+fun size.`>=`(other: size): bool = this.value >= other.value
+/// Returns whether this size is greater than or equal to the integer `other`.
+fun size.`>=`(other: int): bool = this.value >= other
+/// Returns whether this size is less than `other`.
+fun size.`<`(other: size): bool = this.value < other.value
+/// Returns whether this size is less than the integer `other`.
+fun size.`<`(other: int): bool = this.value < other
+/// Returns whether this size is less than or equal to `other`.
+fun size.`<=`(other: size): bool = this.value <= other.value
+/// Returns whether this size is less than or equal to the integer `other`.
+fun size.`<=`(other: int): bool = this.value <= other
+/// Returns whether this size has the same value as `other`.
+fun size.`==`(other: size): bool = this.value == other.value
+/// Returns whether this size has the same value as the integer `other`.
+fun size.`==`(other: int): bool = this.value == other

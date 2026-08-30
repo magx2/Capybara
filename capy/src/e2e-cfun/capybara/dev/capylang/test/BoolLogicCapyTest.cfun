@@ -1,0 +1,124 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from BoolLogic import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/BoolLogic.cfun", [
+        test("and_logic follows boolean truth table", () => and_logic_follows_boolean_truth_table()),
+        test("or_logic follows boolean truth table", () => or_logic_follows_boolean_truth_table()),
+        test("equal_logic compares booleans", () => equal_logic_compares_booleans()),
+        test("not_equal_logic compares booleans", () => not_equal_logic_compares_booleans()),
+        test("not_logic negates booleans", () => not_logic_negates_booleans()),
+        test("not_field_access negates data fields", () => not_field_access_negates_data_fields()),
+        test("not_method_call negates method results", () => not_method_call_negates_method_results()),
+        test("complex_logic combines boolean operators", () => complex_logic_combines_boolean_operators()),
+        test("numbers coerce to booleans", () => numbers_coerce_to_booleans()),
+        test("strings and collections coerce to booleans", () => strings_and_collections_coerce_to_booleans()),
+        test("logical operators coerce operands to booleans", () => logical_operators_coerce_operands_to_booleans()),
+        test("not operator coerces operands to booleans", () => not_operator_coerces_operands_to_booleans()),
+    ])
+
+fun and_logic_follows_boolean_truth_table(): Assert =
+    assert_all([
+        assert_that(and_logic(true, true)).is_true(),
+        assert_that(and_logic(true, false)).is_false(),
+        assert_that(and_logic(false, true)).is_false(),
+        assert_that(and_logic(false, false)).is_false(),
+    ])
+
+fun or_logic_follows_boolean_truth_table(): Assert =
+    assert_all([
+        assert_that(or_logic(true, true)).is_true(),
+        assert_that(or_logic(true, false)).is_true(),
+        assert_that(or_logic(false, true)).is_true(),
+        assert_that(or_logic(false, false)).is_false(),
+    ])
+
+fun equal_logic_compares_booleans(): Assert =
+    assert_all([
+        assert_that(equal_logic(true, true)).is_true(),
+        assert_that(equal_logic(false, false)).is_true(),
+        assert_that(equal_logic(true, false)).is_false(),
+        assert_that(equal_logic(false, true)).is_false(),
+    ])
+
+fun not_equal_logic_compares_booleans(): Assert =
+    assert_all([
+        assert_that(not_equal_logic(true, true)).is_false(),
+        assert_that(not_equal_logic(false, false)).is_false(),
+        assert_that(not_equal_logic(true, false)).is_true(),
+        assert_that(not_equal_logic(false, true)).is_true(),
+    ])
+
+fun not_logic_negates_booleans(): Assert =
+    assert_all([
+        assert_that(not_logic(true)).is_false(),
+        assert_that(not_logic(false)).is_true(),
+    ])
+
+fun not_field_access_negates_data_fields(): Assert =
+    assert_all([
+        assert_that(not_field_access(BoolBox { failed: true })).is_false(),
+        assert_that(not_field_access(BoolBox { failed: false })).is_true(),
+    ])
+
+fun not_method_call_negates_method_results(): Assert =
+    assert_all([
+        assert_that(not_method_call(BoolBox { failed: true })).is_false(),
+        assert_that(not_method_call(BoolBox { failed: false })).is_true(),
+    ])
+
+fun complex_logic_combines_boolean_operators(): Assert =
+    assert_all([
+        assert_that(complex_logic(true, true)).is_true(),
+        assert_that(complex_logic(true, false)).is_false(),
+        assert_that(complex_logic(false, true)).is_true(),
+        assert_that(complex_logic(false, false)).is_true(),
+    ])
+
+fun numbers_coerce_to_booleans(): Assert =
+    assert_all([
+        assert_that(byte_to_bool(0x00)).is_false(),
+        assert_that(byte_to_bool(0x01)).is_true(),
+        assert_that(int_to_bool(0)).is_false(),
+        assert_that(int_to_bool(2)).is_true(),
+        assert_that(long_to_bool(0L)).is_false(),
+        assert_that(long_to_bool(2L)).is_true(),
+        assert_that(float_to_bool(0.0f)).is_false(),
+        assert_that(float_to_bool(0.5f)).is_true(),
+        assert_that(double_to_bool(0.0)).is_false(),
+        assert_that(double_to_bool(0.5)).is_true(),
+    ])
+
+fun strings_and_collections_coerce_to_booleans(): Assert =
+    let empty_list: List[int] = []
+    let empty_set: Set[int] = {}
+    let empty_dict: Dict[int] = {:}
+    assert_all([
+        assert_that(string_to_bool("")).is_false(),
+        assert_that(string_to_bool("x")).is_true(),
+        assert_that(list_to_bool(empty_list)).is_false(),
+        assert_that(list_to_bool([1])).is_true(),
+        assert_that(set_to_bool(empty_set)).is_false(),
+        assert_that(set_to_bool({1, 2})).is_true(),
+        assert_that(dict_to_bool(empty_dict)).is_false(),
+        assert_that(dict_to_bool({"a": 1})).is_true(),
+    ])
+
+fun logical_operators_coerce_operands_to_booleans(): Assert =
+    assert_all([
+        assert_that(and_int(0, 1)).is_false(),
+        assert_that(and_int(2, 1)).is_true(),
+        assert_that(or_string("", "")).is_false(),
+        assert_that(or_string("x", "")).is_true(),
+    ])
+
+fun not_operator_coerces_operands_to_booleans(): Assert =
+    let empty_list: List[int] = []
+    assert_all([
+        assert_that(not_int(0)).is_true(),
+        assert_that(not_int(3)).is_false(),
+        assert_that(not_list(empty_list)).is_true(),
+        assert_that(not_list([1])).is_false(),
+    ])

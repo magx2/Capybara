@@ -1,0 +1,15 @@
+data Foo { name: String }
+
+fun simple(name: String): String = "Hello {name}"
+
+fun expression(name: String, x: int): String = "Hello {name + x}"
+
+fun escaped(name: String): String = "Hello \{}"
+
+fun escaped_with_interpolation_value(foo: String): String = "xyz \{{foo}}"
+
+fun data_field(foo: Foo): String = "Hello {foo.name}"
+
+fun quote_escape(foo: Foo): String = "Hello \"{foo.name}\""
+
+fun single_quoted(name: String): String = 'Hello {name}'

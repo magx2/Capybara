@@ -1,0 +1,9 @@
+from /performance/sample/domain/Order import { Order }
+from /performance/sample/meta/BenchmarkAnnotations import { BenchmarkMethod, BenchmarkType }
+
+@BenchmarkType(label: "interop-facade")
+class InteropFacade {
+    @BenchmarkMethod(value: "functional summary")
+    def describe(order: Order): String =
+        "O-243:Ada Buyer:9394:3"
+}

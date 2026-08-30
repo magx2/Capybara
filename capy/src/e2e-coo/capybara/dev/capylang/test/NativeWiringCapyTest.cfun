@@ -1,0 +1,22 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from NativeWiring import { * }
+from NativeWiringProvider import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/NativeWiring.coo", [
+        native_provider_effect_resolves_host_provider().map(assertion => test("native provider effect resolves host provider", () => assertion)),
+        native_provider_can_be_passed_to_domain_code().map(assertion => test("native provider can be passed to domain code", () => assertion)),
+    ])
+
+fun native_provider_effect_resolves_host_provider(): Effect[Assert] =
+    let clock <- system_native_clock()
+    let millis <- clock.now_millis()
+    assert_that(millis).is_equal_to(12345L)
+
+fun native_provider_can_be_passed_to_domain_code(): Effect[Assert] =
+    let clock <- system_native_clock()
+    let consumer <- NativeClockConsumer(clock)
+    let millis <- consumer.read()
+    assert_that(millis).is_equal_to(12345L)
