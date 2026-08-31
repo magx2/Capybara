@@ -92,8 +92,6 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getTestInputDir().set(capybaraTestSourceDir);
                         task.getGeneratedTestOutputDir().set(generatedCheckJavaDir);
                     }
-                    task.onlyIf(ignored -> hasCapybaraMainSourceDirectory
-                            || (singleJavaVerificationBuild && hasCapybaraTestSources));
                 }
         );
 
@@ -115,7 +113,6 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getWriteLinkedOutput().set(true);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.getLogLevel().set(capybaraCompileLogLevel);
-                    task.onlyIf(ignored -> hasCapybaraMainSourceDirectory);
                 }
         );
 
@@ -153,7 +150,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.getWriteLinkedOutput().set(false);
                     task.getIncludeJavaLibResourcesInTestOutput().set(false);
                     task.getLogLevel().set(capybaraCompileLogLevel);
-                    task.onlyIf(ignored -> hasCapybaraTestSources && !singleJavaVerificationBuild);
+                    task.onlyIf(ignored -> !singleJavaVerificationBuild);
                 }
         );
 
