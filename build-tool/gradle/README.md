@@ -40,13 +40,28 @@ Because the plugin is published to GitHub Packages instead of the Gradle Plugin 
 
 ```groovy
 pluginManagement {
+    def githubPackagesUser = providers.environmentVariable("GITHUB_ACTOR")
+            .orElse(providers.gradleProperty("gpr.user"))
+    def githubPackagesKey = providers.environmentVariable("GITHUB_TOKEN")
+            .orElse(providers.gradleProperty("gpr.key"))
+
     repositories {
         gradlePluginPortal()
         maven {
             url = uri("https://maven.pkg.github.com/magx2/Capybara")
             credentials {
-                username = providers.gradleProperty("gpr.user").get()
-                password = providers.gradleProperty("gpr.key").get()
+                username = githubPackagesUser.orNull
+                password = githubPackagesKey.orNull
+            }
+        }
+        ivy {
+            name = "CapybaraRelease"
+            url = uri("https://github.com/magx2/Capybara/releases/download")
+            patternLayout {
+                artifact("release/[revision]/[artifact]-[revision].[ext]")
+            }
+            metadataSources {
+                artifact()
             }
         }
     }
@@ -57,11 +72,12 @@ pluginManagement {
 
 ```groovy
 plugins {
-    id 'dev.capylang' version '0.2.0'
+    id 'java'
+    id 'dev.capylang' version '0.12.0'
 }
 ```
 
-Consumer credentials can be stored in `~/.gradle/gradle.properties`:
+Provide consumer credentials through `GITHUB_ACTOR` and `GITHUB_TOKEN`, or store them in `~/.gradle/gradle.properties`:
 
 ```properties
 gpr.user=<github-user>
