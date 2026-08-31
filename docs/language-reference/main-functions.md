@@ -12,8 +12,8 @@ fun main(args: List[String]): Effect[Program] = ...
 
 The function must meet all of these requirements:
 
-- Its name is `main` and its visibility is public. Top-level functions are
-  public by default, so the `public` keyword is normally unnecessary.
+- Its name is `main` and it has no `local` or `private` visibility modifier.
+  Top-level functions without a visibility modifier are public.
 - It has exactly one parameter whose type is `List[String]` or `Seq[String]`.
 - It returns `Effect[Program]`, using the standard `/capy/lang/Effect` and
   `/capy/lang/Program` types.
@@ -46,11 +46,11 @@ This program prints a greeting when given a name and otherwise returns the
 default failure code:
 
 ```cfun
+from /capy/collection/List import { * }
 from /capy/io/Console import { println }
-from /capy/lang/Effect import { Effect, pure }
-from /capy/lang/Program import {
-    Program, Success, Failed, DEFAULT_FAILED_EXIT_CODE
-}
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Program import { * }
 
 fun main(args: List[String]): Effect[Program] =
     match args[0] with
