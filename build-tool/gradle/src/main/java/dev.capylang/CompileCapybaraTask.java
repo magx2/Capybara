@@ -128,7 +128,12 @@ public abstract class CompileCapybaraTask extends DefaultTask {
 
     private Path emptyInputDirectory() throws IOException {
         var directory = getTemporaryDir().toPath().resolve("empty-capybara-source");
-        Files.createDirectories(directory);
+        var placeholderDirectory = directory.resolve("capybara/plugin/internal");
+        Files.createDirectories(placeholderDirectory);
+        Files.writeString(
+                placeholderDirectory.resolve("Placeholder.cfun"),
+                "private fun _placeholder(): int = 0\n"
+        );
         return directory;
     }
 
