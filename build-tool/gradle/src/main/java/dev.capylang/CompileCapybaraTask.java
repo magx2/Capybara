@@ -86,16 +86,9 @@ public abstract class CompileCapybaraTask extends DefaultTask {
                 ? getTestInputDir().get().getAsFile().toPath()
                 : null;
         var testInput = isDirectory(configuredTestInput) ? configuredTestInput : null;
-        if (!isDirectory(configuredInput) && testInput == null) {
-            return;
-        }
-        var input = isDirectory(configuredInput) ? configuredInput : emptyInputDirectory();
         var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
                 ? getGeneratedTestOutputDir().get().getAsFile().toPath()
                 : null;
-        var libraryProgramFiles = getLibraryProgramFiles().getFiles().stream()
-                .map(java.io.File::toPath)
-                .toList();
 
         if (output != null) {
             clearDirectory(output);
@@ -106,6 +99,14 @@ public abstract class CompileCapybaraTask extends DefaultTask {
         if (generatedTestOutput != null) {
             clearDirectory(generatedTestOutput);
         }
+        var hasSources = generatedTestOutput != null ? testInput != null : isDirectory(configuredInput);
+        if (!hasSources) {
+            return;
+        }
+        var input = isDirectory(configuredInput) ? configuredInput : emptyInputDirectory();
+        var libraryProgramFiles = getLibraryProgramFiles().getFiles().stream()
+                .map(java.io.File::toPath)
+                .toList();
         var errors = new ByteArrayOutputStream();
         var exitCode = withJulLogLevel(
                 Level.parse(getLogLevel().getOrElse("WARNING")),
