@@ -10,15 +10,30 @@ This repository is a Gradle multi-project build (`settings.gradle`) with these m
 Do not edit generated outputs under `build/generated/...`; change source `.cfun`/`.java`/grammar files instead.
 
 ## Build, Test, and Development Commands
-Use the wrapper from repository root:
-- `./gradlew clean test`: full build and test for all modules.
-- `./gradlew :capy:test`: run CLI and compiler unit tests.
-- `./gradlew :capy:e2e-cfun`: run functional integration suite.
-- `./gradlew :capy:e2e-coo`: run object-oriented integration suite.
-- `./gradlew :capy:e2eTests`: run both integration suites.
-- `./gradlew :lib:capybara-lib:compileCapybara`: compile library Capybara sources to Java.
-- `./gradlew :lib:capybara-lib:testCapybara`: compile test Capybara sources and run generated `JsonTest` main.
-- If Gradle has sandbox or cache permission issues, run it with a temporary Gradle home, for example: `env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew clean check`.
+Use the wrapper from the repository root. Gradle parallelism and the configuration cache are already enabled in `gradle.properties`.
+
+### Fast feedback first
+- Do not run `clean` by default. It discards incremental outputs and makes the next build substantially slower. Use it only to diagnose stale/corrupt outputs or when explicitly requested.
+- Start with the narrowest task that covers the changed code, then broaden verification only when the change crosses layers or before final handoff.
+- For one JUnit test, use Gradle filtering: `./gradlew :capy:test --tests 'fully.qualified.TestClass.testMethod'`.
+- For compiler integration tests, use `./gradlew :capy:integrationTest`, optionally with the same `--tests` filter.
+- Reuse the Gradle daemon and the repository's normal Gradle user home. Do not add `--no-daemon`, `--rerun-tasks`, `--refresh-dependencies`, or a temporary `GRADLE_USER_HOME` unless troubleshooting requires it; these options defeat useful caches.
+- Combine independent required tasks in one invocation when practical so Gradle configures the build once, for example: `./gradlew :capy:test :capy:e2e-javascript-cfun`.
+
+### Task selection
+- Java/compiler-only change: `./gradlew :capy:test`.
+- Functional language behavior: `./gradlew :capy:e2e-javascript-cfun` and/or `./gradlew :capy:e2e-python-cfun`.
+- Object-oriented language behavior: `./gradlew :capy:e2e-javascript-coo` and/or `./gradlew :capy:e2e-python-coo`.
+- A single e2e case: append `--tests '<test-name-or-pattern>'` to the specific backend/suite task. Use `--available-tests` on that task when the exact name is unknown.
+- All JavaScript e2e tests: `./gradlew :capy:e2e-javascript`.
+- All Python e2e tests: `./gradlew :capy:e2e-python`.
+- Compile standard-library Capybara sources: `./gradlew :lib:capybara-lib:compileCapybara`.
+- Test the standard library on one backend: `./gradlew :lib:capybara-lib:testCapybaraJava`, `:lib:capybara-lib:testCapybaraJavaScript`, or `:lib:capybara-lib:testCapybaraPython`.
+- Test the standard library on all configured backends: `./gradlew :lib:capybara-lib:testCapybara`.
+- Broad project verification without deleting caches: `./gradlew test` or `./gradlew check`, choosing `check` when integration checks are relevant.
+- Full clean verification, only when justified or requested: `./gradlew clean test`.
+
+If Gradle has sandbox or cache permission issues, use a temporary Gradle home only as a fallback. On PowerShell: `$env:GRADLE_USER_HOME = Join-Path $env:TEMP 'capybara-gradle'; ./gradlew <task>`.
 
 ## Coding Style & Naming Conventions
 - Java toolchain is 21 (configured in `buildSrc` conventions).
