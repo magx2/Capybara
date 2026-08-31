@@ -105,8 +105,10 @@ const FIRST_ELEMENT: index = index! { 0 }
 ```
 
 The bypass form returns `index` directly rather than `Result[index]`. It is
-available only inside the module that declares the type. Reserve it for values
-that are already known to satisfy the type's invariant.
+available anywhere the type itself is visible, including modules that import a
+public primitive-backed type. Reserve it for values that are already known to
+satisfy the type's invariant, because the compiler does not enforce the custom
+constructor's validation when `!` is used.
 
 ## Visibility and Documentation
 
