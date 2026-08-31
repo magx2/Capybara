@@ -48,10 +48,14 @@ public class CapybaraPlugin implements Plugin<Project> {
         var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
         var generatedTestMainJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/main-java");
         var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
-        var capybaraMainSourceDir = project.file("src/main/capybara");
-        var capybaraTestSourceDir = project.file("src/test/capybara");
-        var hasCapybaraMainSourceDirectory = capybaraMainSourceDir.isDirectory();
-        var hasCapybaraTestSourceDirectory = capybaraTestSourceDir.isDirectory();
+        var capybaraMainSourceDirectory = layout.getProjectDirectory().dir("src/main/capybara");
+        var capybaraTestSourceDirectory = layout.getProjectDirectory().dir("src/test/capybara");
+        var capybaraMainSourceDir = capybaraMainSourceDirectory.getAsFile();
+        var capybaraTestSourceDir = capybaraTestSourceDirectory.getAsFile();
+        var capybaraMainSourceDirectoryProvider = project.getProviders().provider(() ->
+                capybaraMainSourceDir.isDirectory() ? capybaraMainSourceDirectory : null);
+        var capybaraTestSourceDirectoryProvider = project.getProviders().provider(() ->
+                capybaraTestSourceDir.isDirectory() ? capybaraTestSourceDirectory : null);
         var hasCapybaraTestSources = hasMatchingFile(capybaraTestSourceDir.toPath(), relativePath -> true);
         var hasJvmMainSources = hasJvmSources(project.file("src/main").toPath());
         var hasMainResources = hasMatchingFile(project.file("src/main/resources").toPath(), relativePath -> true);
@@ -73,9 +77,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("build");
                     task.setDescription("Compiles Capybara files from src/main/capybara.");
-                    if (hasCapybaraMainSourceDirectory) {
-                        task.getInputDir().set(capybaraMainSourceDir);
-                    }
+                    task.getInputDir().set(capybaraMainSourceDirectoryProvider);
                     task.getGeneratedOutputDir().set(singleJavaVerificationBuild ? generatedCheckJavaDir : generatedMainJavaDir);
                     task.getLibraryProgramFiles().from();
                     task.getCompilerVersion().set(compilerVersion);
@@ -89,7 +91,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                         task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     }
                     if (singleJavaVerificationBuild && hasCapybaraTestSources) {
-                        task.getTestInputDir().set(capybaraTestSourceDir);
+                        task.getTestInputDir().set(capybaraTestSourceDirectoryProvider);
                         task.getGeneratedTestOutputDir().set(generatedCheckJavaDir);
                     }
                 }
@@ -101,9 +103,7 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("build");
                     task.setDescription("Compiles Capybara files from src/main/capybara to linked JSON without generating Java.");
-                    if (hasCapybaraMainSourceDirectory) {
-                        task.getInputDir().set(capybaraMainSourceDir);
-                    }
+                    task.getInputDir().set(capybaraMainSourceDirectoryProvider);
                     task.getOutputDir().set(layout.getBuildDirectory().dir("classes/capybara"));
                     task.getLibraryProgramFiles().from();
                     task.getCompilerVersion().set(compilerVersion);
@@ -134,13 +134,9 @@ public class CapybaraPlugin implements Plugin<Project> {
                 task -> {
                     task.setGroup("verification");
                     task.setDescription("Compiles Capybara files from src/test/capybara.");
-                    if (hasCapybaraMainSourceDirectory) {
-                        task.getInputDir().set(capybaraMainSourceDir);
-                    }
+                    task.getInputDir().set(capybaraMainSourceDirectoryProvider);
                     task.getGeneratedOutputDir().set(generatedTestMainJavaDir);
-                    if (hasCapybaraTestSourceDirectory) {
-                        task.getTestInputDir().set(capybaraTestSourceDir);
-                    }
+                    task.getTestInputDir().set(capybaraTestSourceDirectoryProvider);
                     task.getGeneratedTestOutputDir().set(generatedTestJavaDir);
                     task.getLibraryProgramFiles().from();
                     task.getCompilerVersion().set(compilerVersion);
