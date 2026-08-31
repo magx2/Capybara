@@ -221,13 +221,53 @@ class CapybaraPluginTest {
         assertFalse(linkCapybaraLinked.getInputDir().isPresent());
         assertFalse(compileTestCapybara.getInputDir().isPresent());
         assertFalse(compileTestCapybara.getTestInputDir().isPresent());
-        assertFalse(compileCapybara.getOnlyIf().isSatisfiedBy(compileCapybara));
-        assertFalse(linkCapybaraLinked.getOnlyIf().isSatisfiedBy(linkCapybaraLinked));
-        assertFalse(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
+        assertTrue(compileCapybara.getOnlyIf().isSatisfiedBy(compileCapybara));
+        assertTrue(linkCapybaraLinked.getOnlyIf().isSatisfiedBy(linkCapybaraLinked));
+        assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
 
         compileCapybara.compile();
         linkCapybaraLinked.compile();
         compileTestCapybara.compile();
+    }
+
+    @Test
+    void shouldClearStaleMainOutputsWhenSourceDirectoryIsRemoved() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("src/main/capybara/foo"));
+        var sourceFile = sourceDir.resolve("Main.cfun");
+        Files.writeString(sourceFile, "fun main(): int = 42\n");
+        var staleLinkedFile = Files.createDirectories(tempDir.resolve("build/classes/capybara/stale")).resolve("Old.json");
+        var staleGeneratedFile = Files.createDirectories(tempDir.resolve("build/generated/sources/capybara/java/stale")).resolve("Old.java");
+        Files.writeString(staleLinkedFile, "{}");
+        Files.writeString(staleGeneratedFile, "class Old {}");
+        Files.delete(sourceFile);
+        Files.delete(sourceDir);
+        Files.delete(sourceDir.getParent());
+        var project = newProject();
+
+        project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertFalse(Files.exists(staleLinkedFile));
+        assertFalse(Files.exists(staleGeneratedFile));
+    }
+
+    @Test
+    void shouldClearStaleTestOutputsWhenSourceDirectoryIsRemoved() throws IOException {
+        var sourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/foo"));
+        var sourceFile = sourceDir.resolve("MainCapyTest.cfun");
+        Files.writeString(sourceFile, "fun answer(): int = 42\n");
+        var staleMainFile = Files.createDirectories(tempDir.resolve("build/generated/sources/test-capybara/main-java/stale")).resolve("OldMain.java");
+        var staleTestFile = Files.createDirectories(tempDir.resolve("build/generated/sources/test-capybara/java/stale")).resolve("OldTest.java");
+        Files.writeString(staleMainFile, "class OldMain {}");
+        Files.writeString(staleTestFile, "class OldTest {}");
+        Files.delete(sourceFile);
+        Files.delete(sourceDir);
+        Files.delete(sourceDir.getParent());
+        var project = newProject();
+
+        project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get().compile();
+
+        assertFalse(Files.exists(staleMainFile));
+        assertFalse(Files.exists(staleTestFile));
     }
 
     @Test
