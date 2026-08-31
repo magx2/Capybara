@@ -147,7 +147,7 @@ class CapybaraPluginTest {
         assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
         assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
-        assertEquals(project.file("src/main/capybara"), compileTestCapybara.getInputDir().get().getAsFile());
+        assertFalse(compileTestCapybara.getInputDir().isPresent());
         assertEquals(project.file("build/generated/sources/test-capybara/main-java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
         assertEquals(project.file("src/test/capybara"), compileTestCapybara.getTestInputDir().get().getAsFile());
         assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedTestOutputDir().get().getAsFile());
@@ -182,7 +182,7 @@ class CapybaraPluginTest {
         assertTrue(linkCapybaraLinked.getOutputDir().isPresent());
         assertFalse(linkCapybaraLinked.getGeneratedOutputDir().isPresent());
         assertTrue(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
-        assertEquals(project.file("src/main/capybara"), compileTestCapybara.getInputDir().get().getAsFile());
+        assertFalse(compileTestCapybara.getInputDir().isPresent());
         assertEquals(project.file("build/generated/sources/test-capybara/main-java"), compileTestCapybara.getGeneratedOutputDir().get().getAsFile());
         assertEquals(project.file("src/test/capybara"), compileTestCapybara.getTestInputDir().get().getAsFile());
         assertEquals(project.file("build/generated/sources/test-capybara/java"), compileTestCapybara.getGeneratedTestOutputDir().get().getAsFile());
@@ -208,6 +208,42 @@ class CapybaraPluginTest {
         var libraryProgramFiles = task.getLibraryProgramFiles().getFiles();
 
         assertTrue(libraryProgramFiles.isEmpty());
+    }
+
+    @Test
+    void shouldIgnoreMissingCapybaraSourceDirectories() throws IOException {
+        var project = newProject();
+        var compileCapybara = project.getTasks().named("compileCapybara", CompileCapybaraTask.class).get();
+        var linkCapybaraLinked = project.getTasks().named("linkCapybaraLinked", CompileCapybaraTask.class).get();
+        var compileTestCapybara = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+
+        assertFalse(compileCapybara.getInputDir().isPresent());
+        assertFalse(linkCapybaraLinked.getInputDir().isPresent());
+        assertFalse(compileTestCapybara.getInputDir().isPresent());
+        assertFalse(compileTestCapybara.getTestInputDir().isPresent());
+        assertFalse(compileCapybara.getOnlyIf().isSatisfiedBy(compileCapybara));
+        assertFalse(linkCapybaraLinked.getOnlyIf().isSatisfiedBy(linkCapybaraLinked));
+        assertFalse(compileTestCapybara.getOnlyIf().isSatisfiedBy(compileTestCapybara));
+
+        compileCapybara.compile();
+        linkCapybaraLinked.compile();
+        compileTestCapybara.compile();
+    }
+
+    @Test
+    void shouldCompileTestSourcesWithoutMainSourceDirectory() throws IOException {
+        var testSourceDir = Files.createDirectories(tempDir.resolve("src/test/capybara/bar"));
+        Files.writeString(testSourceDir.resolve("TestModule.cfun"), "fun answer(): int = 42\n");
+        var project = newProject();
+        var task = project.getTasks().named("compileTestCapybara", CompileCapybaraTask.class).get();
+
+        assertFalse(task.getInputDir().isPresent());
+        assertTrue(task.getTestInputDir().isPresent());
+        assertTrue(task.getOnlyIf().isSatisfiedBy(task));
+
+        task.compile();
+
+        assertTrue(containsFileNamed(project.file("build/generated/sources/test-capybara/java").toPath(), "TestModule.java"));
     }
 
     @Test

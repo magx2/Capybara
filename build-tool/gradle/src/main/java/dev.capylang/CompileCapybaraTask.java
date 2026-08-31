@@ -25,6 +25,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public abstract class CompileCapybaraTask extends DefaultTask {
+    @Optional
     @InputDirectory
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getInputDir();
@@ -72,16 +73,23 @@ public abstract class CompileCapybaraTask extends DefaultTask {
 
     @TaskAction
     public void compile() throws IOException {
-        var input = getInputDir().get().getAsFile().toPath();
+        var configuredInput = getInputDir().isPresent()
+                ? getInputDir().get().getAsFile().toPath()
+                : null;
         var writeLinkedOutput = getWriteLinkedOutput().getOrElse(true);
         var output = writeLinkedOutput && getOutputDir().isPresent()
                 ? getOutputDir().get().getAsFile().toPath()
                 : null;
         var generatedOutput = getGeneratedOutputDir().isPresent() ? getGeneratedOutputDir().get().getAsFile().toPath() : null;
         var compileTestSourcesWithMainCompilation = getCompileTestSourcesWithMainCompilation().getOrElse(false);
-        var testInput = compileTestSourcesWithMainCompilation && getTestInputDir().isPresent()
+        var configuredTestInput = compileTestSourcesWithMainCompilation && getTestInputDir().isPresent()
                 ? getTestInputDir().get().getAsFile().toPath()
                 : null;
+        var testInput = isDirectory(configuredTestInput) ? configuredTestInput : null;
+        if (!isDirectory(configuredInput) && testInput == null) {
+            return;
+        }
+        var input = isDirectory(configuredInput) ? configuredInput : emptyInputDirectory();
         var generatedTestOutput = compileTestSourcesWithMainCompilation && getGeneratedTestOutputDir().isPresent()
                 ? getGeneratedTestOutputDir().get().getAsFile().toPath()
                 : null;
@@ -115,6 +123,16 @@ public abstract class CompileCapybaraTask extends DefaultTask {
             var message = errors.toString().trim();
             throw new GradleException(message.isEmpty() ? "Capybara compile failed with exit code " + exitCode : message);
         }
+    }
+
+    private Path emptyInputDirectory() throws IOException {
+        var directory = getTemporaryDir().toPath().resolve("empty-capybara-source");
+        Files.createDirectories(directory);
+        return directory;
+    }
+
+    private static boolean isDirectory(Path path) {
+        return path != null && Files.isDirectory(path);
     }
 
     private static int withJulLogLevel(Level level, IntIoSupplier action) throws IOException {
