@@ -423,4 +423,5 @@ jobs:
             PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
           fi
 
+          gh workflow run check.yml --ref "${BUMP_BRANCH}"
           echo "Patch version bump PR #${PR_NUMBER} is ready for manual merge."
