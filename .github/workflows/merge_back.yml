@@ -143,6 +143,35 @@ jobs:
             fi
           }
 
+          bootstrap_state_branch() {
+            local release_snapshot
+            release_snapshot="$(git rev-list --first-parent --reverse "origin/${RELEASE_BRANCH}" | sed -n '2p')"
+            if [[ -z "${release_snapshot}" ]]; then
+              echo "::error::Could not find the prepared snapshot commit for ${RELEASE_BRANCH}."
+              exit 1
+            fi
+
+            local source_commit
+            source_commit="$(git show -s --format='%(trailers:key=Source-Commit,valueonly)' "${release_snapshot}" | tr -d '[:space:]')"
+            if [[ ! "${source_commit}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Prepared snapshot ${release_snapshot} has no valid Source-Commit trailer."
+              exit 1
+            fi
+
+            if [[ "$(git rev-parse "${release_snapshot}^{tree}")" != "$(git rev-parse "${source_commit}^{tree}")" ]]; then
+              echo "::error::Prepared snapshot ${release_snapshot} does not match Source-Commit ${source_commit}."
+              exit 1
+            fi
+
+            if ! git merge-base --is-ancestor "${source_commit}" "origin/${DEFAULT_BRANCH}"; then
+              echo "::error::Source-Commit ${source_commit} is not contained in ${DEFAULT_BRANCH}."
+              exit 1
+            fi
+
+            git merge --no-ff -s ours "${release_snapshot}" \
+              -m "record ${RELEASE_BRANCH} snapshot ancestry"
+          }
+
           push_state_branch() {
             local state_head="$1"
             local remote_state_sha
@@ -165,6 +194,7 @@ jobs:
             merge_ref "origin/${DEFAULT_BRANCH}" "--theirs" "merge ${DEFAULT_BRANCH} into ${STATE_BRANCH}"
           else
             git checkout -B "${STATE_BRANCH}" "origin/${DEFAULT_BRANCH}"
+            bootstrap_state_branch
           fi
 
           merge_ref "origin/${RELEASE_BRANCH}" "--ours" "merge ${RELEASE_BRANCH} into ${DEFAULT_BRANCH}"
