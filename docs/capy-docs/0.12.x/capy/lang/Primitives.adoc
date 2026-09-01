@@ -1,0 +1,157 @@
+= Module Primitives
+
+== Functions
+
+=== fun clamp_long_to_int(value: long): int
+
+Clamps a long to the inclusive int range.
+
+
+=== fun safe_long_to_int(value: long): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
+
+Converts a long to int, returning an error when it is outside the int range.
+
+
+=== fun to_bool(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;bool&#93;
+
+Parses this String as a bool.
+
+
+=== fun to_double(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;double&#93;
+
+Parses this String as a double.
+
+
+=== fun to_float(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;float&#93;
+
+Parses this String as a float.
+
+
+=== fun to_int(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;int&#93;
+
+Parses this String as an int.
+
+Example: `to_int("42")` returns `Success { value: 42 }`.
+
+
+=== fun to_long(s: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;long&#93;
+
+Parses this String as a long.
+
+
+
+
+== Constants
+
+=== const DOUBLE_BOUND: long
+
+Number of distinct mantissa steps used to map random long values into `double`.
+
+
+=== const DOUBLE_BOUND_AS_DOUBLE: double
+
+Floating-point representation of `DOUBLE_BOUND`.
+
+
+=== const EIGHT_DIGIT: xref:#type-digit[digit]
+
+Decimal digit eight.
+
+
+=== const FIVE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit five.
+
+
+=== const FLOAT_BOUND: long
+
+Number of distinct mantissa steps used to map random long values into `float`.
+
+
+=== const FLOAT_BOUND_AS_FLOAT: float
+
+Floating-point representation of `FLOAT_BOUND`.
+
+
+=== const FOUR_DIGIT: xref:#type-digit[digit]
+
+Decimal digit four.
+
+
+=== const MAX_INT_VALUE: int
+
+Largest value representable by `int`.
+
+
+=== const MAX_LONG_VALUE: long
+
+Largest value representable by `long`.
+
+
+=== const MIN_INT_VALUE: int
+
+Smallest value representable by `int`.
+
+
+=== const MIN_LONG_VALUE: long
+
+Smallest value representable by `long`.
+
+
+=== const NINE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit nine.
+
+
+=== const ONE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit one.
+
+
+=== const SEVEN_DIGIT: xref:#type-digit[digit]
+
+Decimal digit seven.
+
+
+=== const SIX_DIGIT: xref:#type-digit[digit]
+
+Decimal digit six.
+
+
+=== const THREE_DIGIT: xref:#type-digit[digit]
+
+Decimal digit three.
+
+
+=== const TWO_DIGIT: xref:#type-digit[digit]
+
+Decimal digit two.
+
+
+=== const ZERO_DIGIT: xref:#type-digit[digit]
+
+Decimal digit zero.
+
+
+
+
+== Types
+
+[[type-digit]]
+=== type digit: int
+
+Decimal digit between zero and nine.
+
+==== Functions
+
+===== fun digit.next(): xref:#type-digit[digit]
+
+Returns the following digit, wrapping nine to zero.
+
+
+===== fun digit.previous(): xref:#type-digit[digit]
+
+Returns the preceding digit, wrapping zero to nine.
+
+
+
