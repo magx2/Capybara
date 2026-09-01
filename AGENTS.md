@@ -24,12 +24,12 @@ Use the wrapper from the repository root. Gradle parallelism and the configurati
 - Java/compiler-only change: `./gradlew :capy:test`.
 - Functional language behavior: `./gradlew :capy:e2e-javascript-cfun` and/or `./gradlew :capy:e2e-python-cfun`.
 - Object-oriented language behavior: `./gradlew :capy:e2e-javascript-coo` and/or `./gradlew :capy:e2e-python-coo`.
-- A single e2e case: append `--tests '<test-name-or-pattern>'` to the specific backend/suite task. Use `--available-tests` on that task when the exact name is unknown.
+- A single e2e case: use `--available-tests` on the specific backend/suite task, then append `--tests '<exact-selector>'`. E2e selectors require an exact file or test name; they do not support wildcard patterns.
 - All JavaScript e2e tests: `./gradlew :capy:e2e-javascript`.
 - All Python e2e tests: `./gradlew :capy:e2e-python`.
 - Compile standard-library Capybara sources: `./gradlew :lib:capybara-lib:compileCapybara`.
-- Test the standard library on one backend: `./gradlew :lib:capybara-lib:testCapybaraJava`, `:lib:capybara-lib:testCapybaraJavaScript`, or `:lib:capybara-lib:testCapybaraPython`.
-- Test the standard library on all configured backends: `./gradlew :lib:capybara-lib:testCapybara`.
+- Test the standard library on one enabled backend: `./gradlew :lib:capybara-lib:testCapybaraJavaScript` or `./gradlew :lib:capybara-lib:testCapybaraPython`. The Java runtime test path is currently disabled and should not be invoked.
+- Test the standard library on all enabled backends (JavaScript and Python): `./gradlew :lib:capybara-lib:testCapybara`.
 - Broad project verification without deleting caches: `./gradlew test` or `./gradlew check`, choosing `check` when integration checks are relevant.
 - Full clean verification, only when justified or requested: `./gradlew clean test`.
 
