@@ -253,6 +253,20 @@ class CompilationTest {
     }
 
     @Test
+    void shouldSanitizeJavaPackageSegments() {
+        var program = compileProgram(List.of(rawModule("Field", "/paper-soccer", """
+                fun width(): int = 8
+                """)));
+
+        var generated = JavaGenerator.javaGenerator(program).modules().getFirst();
+
+        assertThat(generated.relativePath()).isEqualTo("paper-soccer/Field.java");
+        assertThat(generated.code())
+                .startsWith("package paper_soccer;")
+                .doesNotContain("package paper-soccer;");
+    }
+
+    @Test
     void shouldUseBundledModulesForLookupWithoutGeneratingThem() {
         var program = compileProgram(List.of(rawModule("BundledLookup", "/sample/app", """
                 from /capy/collection/List import { * }
