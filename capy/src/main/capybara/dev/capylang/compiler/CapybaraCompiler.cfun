@@ -1198,13 +1198,22 @@ private fun compiled_module_path(module: CompiledModule): String =
 
 /// Computes the generated Java class name for a compiled module.
 private fun compiled_module_class_name(module: CompiledModule): String =
-    compiled_module_path(module).replace("/", ".")
+    if module.path.is_empty()
+    then compiler_java_identifier(module.name)
+    else compiler_java_package_name(module.path) + "." + compiler_java_identifier(module.name)
 
 /// Computes the generated Java class name for an origin-preserving function binding.
 private fun compiled_function_binding_class_name(binding: CompiledFunctionBinding): String =
     if binding.modulePath.is_empty()
-    then binding.moduleName
-    else binding.modulePath.replace("/", ".") + "." + binding.moduleName
+    then compiler_java_identifier(binding.moduleName)
+    else compiler_java_package_name(binding.modulePath) + "." + compiler_java_identifier(binding.moduleName)
+
+/// Sanitizes every slash-separated module path segment into a Java package component.
+private fun compiler_java_package_name(path: String): String =
+    let separator = compiler_first_index_of(path, "/", 0)
+    if separator < 0
+    then compiler_java_identifier(path)
+    else compiler_java_identifier(path[0, separator]) + "." + compiler_java_package_name(path[separator + 1, path.size().value])
 
 /// Checks whether an import path targets the Capybara standard library.
 private fun compiler_stdlib_import(modulePath: String): bool =
