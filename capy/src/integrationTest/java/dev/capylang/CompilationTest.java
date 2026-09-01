@@ -254,16 +254,60 @@ class CompilationTest {
 
     @Test
     void shouldSanitizeJavaPackageSegments() {
-        var program = compileProgram(List.of(rawModule("Field", "/paper-soccer", """
-                fun width(): int = 8
-                """)));
+        var program = compileProgram(List.of(
+                rawModule("Field", "/paper-soccer", """
+                        fun width(): int = 8
+                        """),
+                rawModule("Main", "/paper-soccer", """
+                        from Field import { width }
 
-        var generated = JavaGenerator.javaGenerator(program).modules().getFirst();
+                        fun field_width(): int = width()
+                        """)
+        ));
 
-        assertThat(generated.relativePath()).isEqualTo("paper-soccer/Field.java");
-        assertThat(generated.code())
+        var generatedModules = JavaGenerator.javaGenerator(program).modules();
+        var field = generatedModules.stream()
+                .filter(module -> module.relativePath().equals("paper-soccer/Field.java"))
+                .findFirst()
+                .orElseThrow();
+        var main = generatedModules.stream()
+                .filter(module -> module.relativePath().equals("paper-soccer/Main.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(field.code())
                 .startsWith("package paper_soccer;")
                 .doesNotContain("package paper-soccer;");
+        assertThat(main.code())
+                .contains("import static paper_soccer.Field.width__")
+                .contains("width__");
+    }
+
+    @Test
+    void shouldSanitizeLinkedLibraryStaticImportOwners() {
+        var libraries = compileProgram(List.of(rawModule("Field", "/paper-soccer", """
+                fun width(): int = 8
+                """)));
+        var compilation = CapybaraCompiler.compile(
+                List.of(rawModule("Main", "/paper-soccer", """
+                        from Field import { width }
+
+                        fun field_width(): int = width()
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+        assertThat(compilation).isInstanceOf(Either.Left.class);
+        var program = (CompiledProgram) ((Either.Left<?, ?>) compilation).value();
+        var main = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("paper-soccer/Main.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(main.code())
+                .contains("import static paper_soccer.Field.width__")
+                .doesNotContain("paper-soccer.Field");
     }
 
     @Test
