@@ -1464,9 +1464,10 @@ private fun compiled_static_imports(imports: List[StaticImport]): String =
     match imports[0] with
     case None -> ""
     case Some { staticImport } ->
-        if java_default_package_class(staticImport.className)
+        let className = java_dotted_class_name(staticImport.className)
+        if java_default_package_class(className)
         then compiled_static_imports(imports[1:])
-        else "import static " + staticImport.className + "." + staticImport.memberName + ";" + newline()
+        else "import static " + className + "." + staticImport.memberName + ";" + newline()
             + compiled_static_imports(imports[1:])
 
 /// Emits import statements for static.
@@ -1553,8 +1554,8 @@ private fun imported_module_class(module: CompiledModule, modulePath: String): S
     else if modulePath ? "/"
     then path_to_class(java_generator_normalize_import_module_path(modulePath))
     else if module.path.is_empty()
-    then modulePath
-    else module.path.replace("/", ".") + "." + modulePath
+    then java_identifier(modulePath)
+    else path_to_class(module.path) + "." + java_identifier(modulePath)
 
 /// Normalizes import module path into the path or name form expected by later compiler stages.
 private fun java_generator_normalize_import_module_path(path: String): String =
@@ -1573,7 +1574,17 @@ private fun java_generator_normalize_capybara_import_suffix(suffix: String, pref
 
 /// Computes the path for path to class.
 private fun path_to_class(path: String): String =
-    path.replace("/", ".")
+    let separator = first_index_of(path, "/", 0)
+    if separator < 0
+    then java_identifier(path)
+    else java_identifier(path[0, separator]) + "." + path_to_class(path[separator + 1, path.size().value])
+
+/// Sanitizes each component of a dot-separated class name retained in linked metadata.
+private fun java_dotted_class_name(name: String): String =
+    let separator = first_index_of(name, ".", 0)
+    if separator < 0
+    then java_identifier(name)
+    else java_identifier(name[0, separator]) + "." + java_dotted_class_name(name[separator + 1, name.size().value])
 
 /// Checks whether a string starts with the requested prefix.
 private fun java_generator_string_has_prefix(value: String, prefix: String): bool =
@@ -6649,8 +6660,8 @@ private fun find_function_origin_binding(function: CompiledFunction, bindings: L
 /// Computes the generated Java class name for a linked function binding.
 private fun java_function_binding_class_name(binding: CompiledFunctionBinding): String =
     if binding.modulePath.is_empty()
-    then binding.moduleName
-    else binding.modulePath.replace("/", ".") + "." + binding.moduleName
+    then java_identifier(binding.moduleName)
+    else path_to_class(binding.modulePath) + "." + java_identifier(binding.moduleName)
 
 /// Resolves a proxied extension method's receiver to its primitive backing type.
 private fun extension_method_receiver_type(function: CompiledFunction, receiverType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -11195,37 +11206,9 @@ private fun find_module_by_class_at(className: String, modules: List[CompiledMod
         then /capy/lang/Option.Some { module }
         else find_module_by_class_at(className, modules, idx + 1)
 
-/// Checks whether a compiled module matches a generated class name without building the full class name.
+/// Checks whether a compiled module matches its sanitized generated class name.
 private fun module_matches_class(module: CompiledModule, className: String): bool =
-    let nameSize = module.name.size().value
-    if className.size().value < nameSize
-    then false
-    else if className[className.size().value - nameSize, className.size().value] != module.name
-    then false
-    else if module.path.is_empty()
-    then module.name == className
-    else
-        let pathSize = module.path.size().value
-        if className.size().value != pathSize + 1 + nameSize
-        then false
-        else if !java_generator_module_path_matches_class_prefix(module.path, className, 0)
-        then false
-        else className[pathSize, pathSize + 1] == "."
-
-/// Checks whether a slash-separated module path matches a dot-separated generated class prefix.
-private fun java_generator_module_path_matches_class_prefix(path: String, className: String, idx: int): bool =
-    if idx >= path.size().value
-    then true
-    else match path[idx] with
-        case None -> true
-        case Some { char } ->
-            match className[idx] with
-            case None -> false
-            case Some { actual } ->
-                let expected = if char == "/" then "." else char
-                if actual == expected
-                then java_generator_module_path_matches_class_prefix(path, className, idx + 1)
-                else false
+    module_fqcn(module) == className
 
 /// Finds a data type in available declarations, imports, or modules.
 private fun find_data_type(name: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
@@ -13647,7 +13630,7 @@ private fun top_level_owned_data_type_java_name(name: String, current: CompiledM
 
 /// Formats source text for module package fully qualified class name.
 private fun module_package_fqcn(module: CompiledModule): String =
-    if module.path.is_empty() then "" else module.path.replace("/", ".")
+    if module.path.is_empty() then "" else path_to_class(module.path)
 
 /// Checks whether a type reference matches the function type rule.
 private fun function_type(type: CompiledTypeReference): bool =
@@ -14261,7 +14244,7 @@ private fun join_non_empty(first: String, second: String): String =
 private fun module_fqcn(module: CompiledModule): String =
     if module.path.is_empty()
     then java_module_class_name(module)
-    else module.path.replace("/", ".") + "." + java_module_class_name(module)
+    else path_to_class(module.path) + "." + java_module_class_name(module)
 
 /// Formats a module name as a legal Java class identifier.
 private fun java_module_class_name(module: CompiledModule): String =
@@ -14409,7 +14392,7 @@ private fun java_truthy_helper(): String =
 private fun java_package(module: CompiledModule): String =
     if module.path.is_empty()
     then ""
-    else "package " + module.path.replace("/", ".") + ";" + newline() + newline()
+    else "package " + path_to_class(module.path) + ";" + newline() + newline()
 
 /// Computes the output or module path for module.
 private fun java_module_relative_path(module: CompiledModule, extension: String): String =
