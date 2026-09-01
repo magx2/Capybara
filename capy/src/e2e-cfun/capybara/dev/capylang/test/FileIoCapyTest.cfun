@@ -1,0 +1,197 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/io/Path import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * }
+from /capy/lang/System import { current_millis, nano_time }
+from FileIo import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/FileIo.cfun", [
+        file_effects_read_and_write_text_lines_and_bytes().map(assertion => test("file effects read and write text lines and bytes", () => assertion)),
+        file_effects_manage_directories_and_delete_files().map(assertion => test("file effects manage directories and delete files", () => assertion)),
+        file_effects_copy_and_move_files().map(assertion => test("file effects copy and move files", () => assertion)),
+        file_effects_replace_existing_copy_and_move_targets().map(assertion => test("file effects replace existing copy and move targets", () => assertion)),
+        file_effects_return_errors_for_write_failures().map(assertion => test("file effects return errors for write failures", () => assertion)),
+        file_effects_return_errors_for_failed_operations().map(assertion => test("file effects return errors for failed operations", () => assertion)),
+    ])
+
+fun file_effects_read_and_write_text_lines_and_bytes(): Effect[Assert] =
+    file_effects_read_and_write_text_lines_and_bytes_effect()
+
+private fun file_effects_read_and_write_text_lines_and_bytes_effect(): Effect[Assert] =
+    let base <- unique_base_path("read-write")
+    let text_file = base / "text.txt"
+    let lines_file = base / "lines.txt"
+    let bytes_file = base / "bytes.bin"
+    let created <- create_directories_at(base)
+    let text_written <- write_text_file(text_file, "hello")
+    let text_appended <- append_text_file(text_file, " world")
+    let text_read <- read_text_file(text_file)
+    let lines_written <- write_lines_file(lines_file, ["alpha"])
+    let lines_appended <- append_lines_file(lines_file, ["beta"])
+    let lines_read <- read_lines_file(lines_file)
+    let bytes_written <- write_bytes_file(bytes_file, [0x41, 0x42])
+    let bytes_appended <- append_bytes_file(bytes_file, [0x43])
+    let bytes_read <- read_bytes_file(bytes_file)
+    let bytes_size <- file_size(bytes_file)
+    let bytes_exists <- exists_path(bytes_file)
+    let bytes_is_file <- is_file_path(bytes_file)
+    let bytes_is_directory <- is_directory_path(bytes_file)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_that(text_written).succeeds("hello"),
+        assert_that(text_appended).succeeds(" world"),
+        assert_that(text_read).succeeds("hello world"),
+        assert_that(lines_written).succeeds(["alpha"]),
+        assert_that(lines_appended).succeeds(["beta"]),
+        assert_that(lines_read).succeeds(["alpha", "beta"]),
+        assert_that(bytes_written).succeeds([0x41, 0x42]),
+        assert_that(bytes_appended).succeeds([0x43]),
+        assert_that(bytes_read).succeeds([0x41, 0x42, 0x43]),
+        assert_that(bytes_size).succeeds(byte_size => assert_that(byte_size.value).is_equal_to(3L)),
+        assert_that(bytes_exists).is_true(),
+        assert_that(bytes_is_file).is_true(),
+        assert_that(bytes_is_directory).is_false(),
+    ])
+
+fun file_effects_manage_directories_and_delete_files(): Effect[Assert] =
+    file_effects_manage_directories_and_delete_files_effect()
+
+private fun file_effects_manage_directories_and_delete_files_effect(): Effect[Assert] =
+    let base <- unique_base_path("directories")
+    let single_dir = base / "single"
+    let dir = base / "nested" / "dir"
+    let child = dir / "child.txt"
+    let delete_target = base / "delete-me.txt"
+    let base_created <- create_directories_at(base)
+    let single_created <- create_directory_at(single_dir)
+    let single_is_directory <- is_directory_path(single_dir)
+    let dir_created <- create_directories_at(dir)
+    let dir_is_directory <- is_directory_path(dir)
+    let child_written <- write_text_file(child, "x")
+    let entries: Result[List[Path]] <- list_directory(dir)
+    let delete_target_created <- create_file_at(delete_target)
+    let delete_target_is_file <- is_file_path(delete_target)
+    let deleted <- delete_path(delete_target)
+    let delete_target_exists <- exists_path(delete_target)
+    assert_all([
+        assert_that(base_created).succeeds(),
+        assert_that(single_created).succeeds(),
+        assert_that(single_is_directory).is_true(),
+        assert_that(dir_created).succeeds(),
+        assert_that(dir_is_directory).is_true(),
+        assert_that(child_written).succeeds("x"),
+        assert_successful_path_list_has_size(entries, 1),
+        assert_that(delete_target_created).succeeds(),
+        assert_that(delete_target_is_file).is_true(),
+        assert_that(deleted).succeeds(true),
+        assert_that(delete_target_exists).is_false(),
+    ])
+
+fun file_effects_copy_and_move_files(): Effect[Assert] =
+    file_effects_copy_and_move_files_effect()
+
+private fun file_effects_copy_and_move_files_effect(): Effect[Assert] =
+    let base <- unique_base_path("copy-move")
+    let source = base / "source.txt"
+    let copied = base / "copied.txt"
+    let moved = base / "moved.txt"
+    let created <- create_directories_at(base)
+    let source_written <- write_text_file(source, "payload")
+    let copied_result <- copy_path(source, copied)
+    let copied_text <- read_text_file(copied)
+    let moved_result <- move_path(copied, moved)
+    let copied_exists <- exists_path(copied)
+    let moved_text <- read_text_file(moved)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_that(source_written).succeeds("payload"),
+        assert_that(copied_result).succeeds(),
+        assert_that(copied_text).succeeds("payload"),
+        assert_that(moved_result).succeeds(),
+        assert_that(copied_exists).is_false(),
+        assert_that(moved_text).succeeds("payload"),
+    ])
+
+fun file_effects_replace_existing_copy_and_move_targets(): Effect[Assert] =
+    file_effects_replace_existing_copy_and_move_targets_effect()
+
+private fun file_effects_replace_existing_copy_and_move_targets_effect(): Effect[Assert] =
+    let base <- unique_base_path("replace")
+    let source = base / "replace-source.txt"
+    let copied = base / "replace-copied.txt"
+    let moved = base / "replace-moved.txt"
+    let created <- create_directories_at(base)
+    let source_written <- write_text_file(source, "new")
+    let copied_written <- write_text_file(copied, "old")
+    let copied_replaced <- copy_replace_path(source, copied)
+    let moved_written <- write_text_file(moved, "old")
+    let moved_replaced <- move_replace_path(copied, moved)
+    let moved_text <- read_text_file(moved)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_that(source_written).succeeds("new"),
+        assert_that(copied_written).succeeds("old"),
+        assert_that(copied_replaced).succeeds(),
+        assert_that(moved_written).succeeds("old"),
+        assert_that(moved_replaced).succeeds(),
+        assert_that(moved_text).succeeds("new"),
+    ])
+
+fun file_effects_return_errors_for_failed_operations(): Effect[Assert] =
+    file_effects_return_errors_for_failed_operations_effect()
+
+fun file_effects_return_errors_for_write_failures(): Effect[Assert] =
+    file_effects_return_errors_for_write_failures_effect()
+
+private fun file_effects_return_errors_for_write_failures_effect(): Effect[Assert] =
+    let base <- unique_base_path("write-errors")
+    let target = base / "missing-parent" / "payload.txt"
+    let created <- create_directories_at(base)
+    let write_text_result <- write_text_file(target, "payload")
+    let write_lines_result <- write_lines_file(target, ["payload"])
+    let write_bytes_result <- write_bytes_file(target, [0x41])
+    let append_text_result <- append_text_file(target, "payload")
+    let append_lines_result <- append_lines_file(target, ["payload"])
+    let append_bytes_result <- append_bytes_file(target, [0x41])
+    let target_exists <- exists_path(target)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_failed_message_contains(write_text_result, "write_text failed"),
+        assert_failed_message_contains(write_lines_result, "write_lines failed"),
+        assert_failed_message_contains(write_bytes_result, "write_bytes failed"),
+        assert_failed_message_contains(append_text_result, "append_text failed"),
+        assert_failed_message_contains(append_lines_result, "append_lines failed"),
+        assert_failed_message_contains(append_bytes_result, "append_bytes failed"),
+        assert_that(target_exists).is_false(),
+    ])
+
+private fun file_effects_return_errors_for_failed_operations_effect(): Effect[Assert] =
+    let base <- unique_base_path("errors")
+    let missing = base / "missing.txt"
+    let created <- create_directories_at(base)
+    let read_missing <- read_text_file(missing)
+    let size_missing <- file_size(missing)
+    let missing_exists <- exists_path(missing)
+    assert_all([
+        assert_that(created).succeeds(),
+        assert_failed_message_contains(read_missing, "read_text failed"),
+        assert_failed_message_contains(size_missing, "size failed"),
+        assert_that(missing_exists).is_false(),
+    ])
+
+private fun unique_base_path(name: String): Effect[Path] =
+    let millis <- current_millis()
+    let nanos <- nano_time()
+    from_string("/tmp/capybara-file-io-e2e/" + name + "-" + millis + "-" + nanos)
+
+private fun assert_failed_message_contains(result: Result[T], expected: String): Assert =
+    match result with
+    case Error e -> assert_that(e.message).contains(expected)
+    case Success _ -> assert_that(false).is_true()
+
+private fun assert_successful_path_list_has_size(result: Result[List[Path]], expected: int): Assert =
+    match result with
+    case Error _ -> assert_that(false).is_true()
+    case Success { paths } -> assert_that(paths).has_size(expected)

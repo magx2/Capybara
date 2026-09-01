@@ -1,0 +1,117 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/meta_prog/Reflection import { * }
+from ObjectOrientedReflection import { X, Y, Z }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ObjectOrientedReflection.coo", [
+        test("reflects object-oriented interface", () => reflects_object_oriented_interface()),
+        test("reflects object-oriented trait", () => reflects_object_oriented_trait()),
+        test("reflects object-oriented class with parents", () => reflects_object_oriented_class_with_parents()),
+    ])
+
+fun reflects_object_oriented_interface(): Assert =
+    let x = X.type()
+    assert_all([
+        assert_that(oor_type_name(x)).is_equal_to("X"),
+        assert_that(oor_annotation_names(x.annotations)).is_equal_to(["CooTypeMarker"]),
+        assert_that(oor_annotation_string(x.annotations[0], "label")).is_equal_to("contract"),
+        assert_that(oor_method_names(x.methods)).is_equal_to(["print"]),
+        assert_that(oor_method_annotation_names(x.methods, "print")).is_equal_to(["CooMethodMarker"]),
+        assert_that(x.parents).is_empty(),
+    ])
+
+fun reflects_object_oriented_trait(): Assert =
+    let y = Y.type()
+    assert_all([
+        assert_that(oor_type_name(y)).is_equal_to("Y"),
+        assert_that(oor_annotation_names(y.annotations)).is_equal_to(["CooTypeMarker"]),
+        assert_that(oor_annotation_string(y.annotations[0], "label")).is_equal_to("mixin"),
+        assert_that(oor_method_names(y.methods)).is_equal_to(["bracket"]),
+        assert_that(oor_method_annotation_names(y.methods, "bracket")).is_equal_to(["CooMethodMarker"]),
+        assert_that(y.parents).is_empty(),
+    ])
+
+fun reflects_object_oriented_class_with_parents(): Assert =
+    let z = Z.type()
+    let method_names = oor_method_names(z.methods)
+    let parent_names = oor_parent_names(z.parents)
+    assert_all([
+        assert_that(oor_type_name(z)).is_equal_to("Z"),
+        assert_that(z.open).is_false(),
+        assert_that(oor_annotation_names(z.annotations)).is_equal_to(["CooTypeMarker"]),
+        assert_that(oor_annotation_string(z.annotations[0], "label")).is_equal_to("entity"),
+        assert_that(oor_field_names(z.fields)).is_equal_to(["name"]),
+        assert_that(oor_field_annotation_names(z.fields, 0)).is_equal_to(["CooFieldMarker"]),
+        assert_that(oor_field_annotation_string(z.fields, 0, 0, "value")).is_equal_to("display_name"),
+        assert_that(method_names).has_size(2).contains("greet").contains("print"),
+        assert_that(oor_method_annotation_names(z.methods, "greet")).is_equal_to(["CooMethodMarker"]),
+        assert_that(oor_method_annotation_names(z.methods, "print")).is_equal_to(["CooMethodMarker"]),
+        assert_that(parent_names).has_size(2).contains("X").contains("Y"),
+    ])
+
+private fun oor_annotation_names(annotations: List[AnnotationInfo]): List[String] =
+    (annotations | annotation => annotation.name).as_list()
+
+private fun oor_type_name(info: AnyInfo): String =
+    info.name
+
+private fun oor_annotation_argument(annotation: Option[AnnotationInfo], name: String): Option[AnnotationArgumentInfo] =
+    match annotation with
+    case Some { value } -> oor_annotation_argument_at(value.arguments, name, 0)
+    case None -> None {}
+
+private fun oor_annotation_argument_at(args: List[AnnotationArgumentInfo], name: String, idx: int): Option[AnnotationArgumentInfo] =
+    match args[idx] with
+    case Some { argument } ->
+        if argument.name == name
+        then Some { argument }
+        else oor_annotation_argument_at(args, name, idx + 1)
+    case None -> None {}
+
+private fun oor_annotation_string(annotation: Option[AnnotationInfo], name: String): String =
+    match oor_annotation_argument(annotation, name) with
+    case Some { argument } ->
+        {
+            match argument.value with
+            case AnnotationString { value } -> value
+            case _ -> ""
+        }
+    case None -> ""
+
+private fun oor_method_names(methods: List[MethodInfo]): List[String] =
+    (methods | method => method.name).as_list()
+
+private fun oor_method_annotation_names(methods: List[MethodInfo], name: String): List[String] =
+    match oor_method(methods, name, 0) with
+    case Some { method } -> oor_annotation_names(method.annotations)
+    case None -> []
+
+private fun oor_method(methods: List[MethodInfo], name: String, idx: int): Option[MethodInfo] =
+    match methods[idx] with
+    case Some { method } ->
+        if method.name == name
+        then Some { method }
+        else oor_method(methods, name, idx + 1)
+    case None -> None {}
+
+private fun oor_field_names(fields: List[FieldInfo]): List[String] =
+    (fields | field => field.name).as_list()
+
+private fun oor_field_annotation_names(fields: List[FieldInfo], field_idx: int): List[String] =
+    match fields[field_idx] with
+    case Some { field } -> oor_annotation_names(field.annotations)
+    case None -> []
+
+private fun oor_field_annotation_string(fields: List[FieldInfo], field_idx: int, annotation_idx: int, name: String): String =
+    match fields[field_idx] with
+    case Some { field } -> oor_annotation_string(field.annotations[annotation_idx], name)
+    case None -> ""
+
+private fun oor_parent_names(parents: Set[AnyInfo]): List[String] =
+    (parents | parent => parent.name).as_list()

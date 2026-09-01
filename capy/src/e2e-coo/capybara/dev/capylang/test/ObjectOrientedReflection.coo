@@ -1,0 +1,25 @@
+from /dev/capylang/test/ObjectOrientedReflectionAnnotations import { CooTypeMarker, CooFieldMarker, CooMethodMarker }
+
+@CooTypeMarker(label: "contract")
+interface X {
+    @CooMethodMarker(value: "print")
+    def print(): String
+}
+
+@CooTypeMarker(label: "mixin")
+trait Y {
+    @CooMethodMarker(value: "bracket")
+    def bracket(name: String): String = "[" + name + "]"
+}
+
+@CooTypeMarker(label: "entity")
+class Z(name: String): X, Y {
+    @CooFieldMarker(value: "display_name")
+    field name: String = name
+
+    @CooMethodMarker(value: "greet")
+    def greet(): String = this.bracket(this.name)
+
+    @CooMethodMarker(value: "print")
+    override def print(): String = this.greet()
+}

@@ -1,0 +1,87 @@
+name: Build & Check
+
+on:
+  push:
+    branches:
+      - "master"
+      - "release/**"
+    paths:
+      - ".github/workflows/check.yml"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - "!**/*.md"
+  pull_request:
+    paths:
+      - ".github/workflows/check.yml"
+      - "build-tool/**"
+      - "buildSrc/**"
+      - "capy/**"
+      - "gradle/**"
+      - "lib/**"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - "!**/*.md"
+  workflow_dispatch:
+    inputs:
+      run_build:
+        description: Run the full Gradle build and checks
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        if: github.event_name != 'workflow_dispatch' || inputs.run_build
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        if: github.event_name != 'workflow_dispatch' || inputs.run_build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        if: github.event_name != 'workflow_dispatch' || inputs.run_build
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: false
+
+      - name: Make Gradle wrapper executable
+        if: github.event_name != 'workflow_dispatch' || inputs.run_build
+        run: chmod +x gradlew
+
+      - name: Run Gradle check
+        if: github.event_name != 'workflow_dispatch' || inputs.run_build
+        run: ./gradlew clean check --no-daemon
+
+      - name: Record non-code check
+        if: github.event_name == 'workflow_dispatch' && !inputs.run_build
+        run: echo "Full Build & Check skipped for a non-code-only change."
+
+      - name: Upload test reports
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.run_build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-check-test-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**/*.xml
+          if-no-files-found: ignore
+          retention-days: 5

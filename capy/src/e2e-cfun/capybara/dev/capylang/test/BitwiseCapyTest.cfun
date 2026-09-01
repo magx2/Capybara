@@ -1,0 +1,28 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from Bitwise import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/Bitwise.cfun", [
+        test("bit_and returns the bitwise and result", () => bit_and_returns_the_bitwise_and_result()),
+        test("bit_nand returns the negated bitwise and result", () => bit_nand_returns_the_negated_bitwise_and_result()),
+        test("bit_or returns the bitwise or result", () => bit_or_returns_the_bitwise_or_result()),
+        test("bit_xor returns the bitwise xor result", () => bit_xor_returns_the_bitwise_xor_result()),
+        test("bit_not returns the inverted bits", () => bit_not_returns_the_inverted_bits()),
+    ])
+
+private fun bit_and_returns_the_bitwise_and_result(): Assert =
+    assert_that(bit_and(12, 10)).is_equal_to(8)
+
+private fun bit_nand_returns_the_negated_bitwise_and_result(): Assert =
+    assert_that(bit_nand(12, 10)).is_equal_to(-9)
+
+private fun bit_or_returns_the_bitwise_or_result(): Assert =
+    assert_that(bit_or(12, 10)).is_equal_to(14)
+
+private fun bit_xor_returns_the_bitwise_xor_result(): Assert =
+    assert_that(bit_xor(12, 10)).is_equal_to(6)
+
+private fun bit_not_returns_the_inverted_bits(): Assert =
+    assert_that(bit_not(12)).is_equal_to(-13)

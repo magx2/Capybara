@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from ImplicitGenericResult import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/ImplicitGenericResult.cfun", [
+        test("error_or_else returns fallback when result type is inferred", () => error_or_else_returns_fallback_when_result_type_is_inferred()),
+        test("error_or returns fallback success when result type is inferred", () => error_or_returns_fallback_success_when_result_type_is_inferred()),
+    ])
+
+private fun error_or_else_returns_fallback_when_result_type_is_inferred(): Assert =
+    assert_that(error_or_else_without_explicit_result_type()).is_equal_to(0)
+
+private fun error_or_returns_fallback_success_when_result_type_is_inferred(): Assert =
+    assert_that(error_or_without_explicit_result_type()).is_equal_to(101)

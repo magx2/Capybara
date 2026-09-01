@@ -1,0 +1,6 @@
+from Program import { Program }
+from RawModule import { RawModule }
+
+interface CapybaraParser {
+    def parse(modules: List[RawModule]): Program
+}

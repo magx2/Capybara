@@ -1,0 +1,2 @@
+data GeneratedProgram { modules: List[GeneratedModule] }
+data GeneratedModule { relativePath: String, code: String }

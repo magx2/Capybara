@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/common"
+
+rm -rf \
+    "${PROJECT_BUILD_DIR}/generated" \
+    "${PROJECT_BUILD_DIR}/linked" \
+    "${PROJECT_BUILD_DIR}/test-generated" \
+    "${PROJECT_BUILD_DIR}/test-linked" \
+    "${PROJECT_BUILD_DIR}/test-main" \
+    "${PROJECT_BUILD_DIR}/test-results"
+
+mkdir -p "${PROJECT_BUILD_DIR}"

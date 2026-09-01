@@ -1,0 +1,32 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Result import { * } except { fail }
+
+fun tests(): Effect[TestFile] =
+    test_file("/capy/test/AssertTest.cfun", [
+        test("fail should always fail with given message", () => fail_should_always_fail_with_given_message()),
+        test("pass should always pass with given message", () => pass_should_always_pass_with_given_message()),
+    ])
+
+fun fail_should_always_fail_with_given_message(): Assert =
+    let result: Assert = fail("expected failure")
+    let assertion = first_assertion(result)
+    assert_all([
+        assert_that(assertion.result).is_false(),
+        assert_that(assertion.message).is_equal_to("expected failure"),
+    ])
+
+fun pass_should_always_pass_with_given_message(): Assert =
+    let result: Assert = pass("expected success")
+    let assertion = first_assertion(result)
+    assert_all([
+        assert_that(assertion.result).is_true(),
+        assert_that(assertion.message).is_equal_to("expected success"),
+    ])
+
+private fun first_assertion(assert: Assert): Assertion =
+    match assert.assertions.get(0) with
+    case Some { value } ->
+        (value)()
+    case None -> Assertion { result: false, message: "Missing assertion", type: 'AssertTest' }

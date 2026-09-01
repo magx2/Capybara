@@ -1,0 +1,64 @@
+from /capy/lang/Option import {*}
+from /capy/lang/String import { * }
+
+data Holder {
+    supplier: () => String,
+    suppliers: List[() => String]
+}
+
+fun make_supplier(): () => String = () => "hello"
+
+fun invoke_supplier(): String =
+    let supplier = () => "hello"
+    supplier()
+
+fun invoke_field_supplier(): String =
+    let holder = Holder { supplier: () => "hello", suppliers: [() => "x", () => "y"] }
+    let supplier = holder.supplier
+    supplier()
+
+fun add(a: int, b: int): int = a + b
+
+fun add_10(): int => int = add(10, _)
+
+fun invoke_partial_add(): int =
+    let f: int => int = add(10, _)
+    f(5)
+
+fun invoke_partial_add_with_generated_name_collision(): int =
+    let capybaraPartial1 = 10
+    let f: int => int = add(capybaraPartial1, _)
+    f(5)
+
+fun concat(a: String, b: String, c: String): String = a + b + c
+
+fun invoke_partial_concat(): String =
+    let f: (String, String) => String = concat(_, "-", _)
+    f("A", "B")
+
+fun combine(a: int, b: int, c: int): int =
+    a * 100 + b * 10 + c
+
+fun invoke_partial_combine(): int =
+    let f: (int, int) => int = combine(_, 5, _)
+    f(1, 9)
+
+fun pair(a: int, b: int): String =
+    a + ":" + b
+
+fun invoke_partial_pair(): String =
+    let f: (int, int) => String = pair(_, _)
+    f(1, 2)
+
+fun between(min: int, value: int, max: int): bool =
+    value >= min & value <= max
+
+fun is_age_valid(): int => bool = between(0, _, 150)
+
+fun invoke_partial_contains_method(): bool =
+    let f: String => bool = "capybara".contains(_)
+    f("pyb")
+
+fun invoke_partial_replace_method(): String =
+    let f: String => String = "banana".replace("a", _)
+    f("o")

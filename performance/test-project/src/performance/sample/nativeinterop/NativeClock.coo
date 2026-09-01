@@ -1,0 +1,8 @@
+interface NativeClock {
+}
+
+class FixedClock(clock: NativeClock) {
+    field clock: NativeClock = clock
+
+    def fixed_millis(): long = 4242L
+}

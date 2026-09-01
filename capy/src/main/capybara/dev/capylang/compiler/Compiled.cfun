@@ -1,0 +1,2 @@
+/// Marker type for values produced by the compiler layer.
+data Compiled {}

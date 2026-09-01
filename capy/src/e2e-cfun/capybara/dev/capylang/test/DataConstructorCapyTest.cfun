@@ -1,0 +1,52 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from DataConstructor import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/DataConstructor.cfun", [
+        test("constructor returns protected data directly", () => constructor_returns_protected_data_directly()),
+        test("constructor can return result of protected data", () => constructor_can_return_result_of_protected_data()),
+        test("same file can bypass result-returning data constructor", () => same_file_can_bypass_result_returning_data_constructor()),
+        test("type constructor runs before data constructor", () => type_constructor_runs_before_data_constructor()),
+        test("type constructor wraps data without own constructor", () => type_constructor_wraps_data_without_own_constructor()),
+        test("shared subtype applies all parent type constructors", () => shared_subtype_applies_all_parent_type_constructors()),
+    ])
+
+fun constructor_returns_protected_data_directly(): Assert =
+    assert_all([
+        assert_that(odd_number(3)).is_equal_to(3),
+        assert_that(odd_number(4)).is_equal_to(5),
+    ])
+
+fun constructor_can_return_result_of_protected_data(): Assert =
+    assert_all([
+        assert_that(validated_user_age(7)).is_equal_to("ok:7"),
+        assert_that(validated_user_age(0)).is_equal_to("err:Age has to be greater than 0. Was 0."),
+    ])
+
+fun same_file_can_bypass_result_returning_data_constructor(): Assert =
+    assert_all([
+        assert_that(validated_user_age_or_default(7)).is_equal_to(7),
+        assert_that(validated_user_age_or_default(0)).is_equal_to(1),
+    ])
+
+fun type_constructor_runs_before_data_constructor(): Assert =
+    assert_all([
+        assert_that(validated_named_user("Ada", "admin")).is_equal_to("ok:Ada:admin"),
+        assert_that(validated_named_user("", "admin")).is_equal_to("err:Name was empty"),
+        assert_that(validated_named_user("Ada", "")).is_equal_to("err:Role was empty"),
+    ])
+
+fun type_constructor_wraps_data_without_own_constructor(): Assert =
+    assert_all([
+        assert_that(validated_named_guest("Ada", "guest")).is_equal_to("ok:Ada:guest"),
+        assert_that(validated_named_guest("", "guest")).is_equal_to("err:Name was empty"),
+    ])
+
+fun shared_subtype_applies_all_parent_type_constructors(): Assert =
+    assert_all([
+        assert_that(validated_profile("Ada", "admin")).is_equal_to("ok:Ada:admin"),
+        assert_that(validated_profile("", "admin")).is_equal_to("err:Profile name was empty"),
+        assert_that(validated_profile("Ada", "")).is_equal_to("err:Profile role was empty"),
+    ])

@@ -1,0 +1,9 @@
+from /capy/lang/Result import { * }
+from /performance/sample/domain/Order import { Order, subtotal }
+
+fun result_message(result: Result[T]): String =
+    match result with
+    case Success _ -> "ok"
+    case Error { message } -> message
+
+fun order_total_cents(order: Order): long = subtotal(order).cents

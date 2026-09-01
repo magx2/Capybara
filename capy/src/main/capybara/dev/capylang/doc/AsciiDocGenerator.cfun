@@ -1,0 +1,1121 @@
+from /capy/collection/List import { * }
+from /capy/collection/Dict import { * }
+from /capy/collection/Seq import { * }
+from /capy/lang/String import { * }
+from /dev/capylang/compiler/CompiledAnnotationDeclaration import { CompiledAnnotationDeclaration }
+from /dev/capylang/compiler/CompiledExpression import { CompiledExpression, CompiledStringLiteral }
+from /dev/capylang/compiler/CompiledFunction import { CompiledFunction }
+from /dev/capylang/compiler/CompiledFunctionParameter import { CompiledFunctionParameter }
+from /dev/capylang/compiler/CompiledImportDeclaration import { CompiledImportDeclaration }
+from /dev/capylang/compiler/CompiledModule import { CompiledModule }
+from /dev/capylang/compiler/CompiledObjectOrientedClass import { CompiledObjectOrientedClass }
+from /dev/capylang/compiler/CompiledObjectOrientedField import { CompiledObjectOrientedField }
+from /dev/capylang/compiler/CompiledObjectOrientedInitBlock import { CompiledObjectOrientedInitBlock }
+from /dev/capylang/compiler/CompiledObjectOrientedInterface import { CompiledObjectOrientedInterface }
+from /dev/capylang/compiler/CompiledObjectOrientedMethod import { CompiledObjectOrientedMethod }
+from /dev/capylang/compiler/CompiledObjectOrientedUnit import { CompiledObjectOrientedUnit }
+from /dev/capylang/compiler/CompiledPrimitiveBackedType import { CompiledPrimitiveBackedType }
+from /dev/capylang/compiler/CompiledProgram import { * }
+from /dev/capylang/compiler/CompiledTypeReference import { CompiledTypeReference }
+from Documentation import { Documentation }
+
+data AsciiDocTypeTarget {
+    name: String,
+    displayName: String,
+    path: String,
+    anchor: String
+}
+
+fun generate_asciidoc_docs(program: CompiledProgram): List[Documentation] =
+    let typeTargets = asciidoc_type_targets(program)
+    [generate_asciidoc_index(program)]
+    + program.modules
+        .sort((a,b) => module_display_name(a).compare(module_display_name(b)))
+        .map(module => generate_asciidoc_docs_for_module(module, program.objectOrientedModules, typeTargets))
+        .reduce([], (docs, doc) => docs + doc)
+
+private fun generate_asciidoc_index(program: CompiledProgram): Documentation =
+    Documentation {
+        path: "/index.adoc",
+        content: "= Capybara Documentation\n\n"
+        + "== Modules\n\n"
+        + generate_module_index_entries(program.modules)
+    }
+
+private fun generate_module_index_entries(modules: List[CompiledModule]): String =
+    (if asciidoc_module_package_has_modules("", modules)
+    then generate_module_package_index("", "root", modules, 3)
+    else "")
+    + generate_module_package_tree("", modules, 3)
+
+private fun generate_module_package_tree(parentPath: String, modules: List[CompiledModule], headingLevel: int): String =
+    asciidoc_module_package_segments(parentPath, modules)
+        .sort((a,b) => a.compare(b))
+        .reduce("", (content, segment) =>
+            let packagePath = asciidoc_join_package_path(parentPath, segment)
+            content
+            + generate_module_package_index(packagePath, segment, modules, headingLevel)
+            + generate_module_package_tree(packagePath, modules, headingLevel + 1)
+        )
+
+private fun asciidoc_module_package_segments(parentPath: String, modules: List[CompiledModule]): List[String] =
+    modules.reduce([], (segments, module) =>
+        let segment = asciidoc_module_package_child_segment(parentPath, module.path)
+        if segment.is_empty()
+        then segments
+        else asciidoc_add_string_if_missing(segments, segment)
+    )
+
+private fun asciidoc_module_package_child_segment(parentPath: String, packagePath: String): String =
+    if packagePath.is_empty()
+    then ""
+    else if parentPath.is_empty()
+    then asciidoc_first_path_segment(packagePath)
+    else if packagePath == parentPath
+    then ""
+    else
+        let prefix = parentPath + "/"
+        if packagePath.starts_with(prefix)
+        then asciidoc_first_path_segment(packagePath[prefix.size().value, packagePath.size().value])
+        else ""
+
+private fun asciidoc_first_path_segment(path: String): String =
+    let slash = asciidoc_first_index_of(path, "/", 0)
+    if slash < 0
+    then path
+    else path[0, slash]
+
+private fun asciidoc_join_package_path(parentPath: String, segment: String): String =
+    if parentPath.is_empty()
+    then segment
+    else parentPath + "/" + segment
+
+private fun asciidoc_module_package_has_modules(packagePath: String, modules: List[CompiledModule]): bool =
+    match modules[0] with
+    case None -> false
+    case Some { module } ->
+        if module.path == packagePath
+        then true
+        else asciidoc_module_package_has_modules(packagePath, modules[1:])
+
+private fun generate_module_package_index(packagePath: String, heading: String, modules: List[CompiledModule], headingLevel: int): String =
+    let entries = modules
+        .sort((a,b) => a.name.compare(b.name))
+        .reduce("", (content, module) =>
+            if module.path == packagePath
+            then content + "* xref:{module_doc_path(module)}[{module.name}]\n"
+            else content
+        )
+    if entries.is_empty()
+    then "{asciidoc_heading_marks(headingLevel)} {heading}\n\n"
+    else "{asciidoc_heading_marks(headingLevel)} {heading}\n\n" + entries + "\n"
+
+private fun asciidoc_heading_marks(headingLevel: int): String =
+    if headingLevel <= 0
+    then ""
+    else "=" + asciidoc_heading_marks(headingLevel - 1)
+
+private fun module_doc_path(module: CompiledModule): String =
+    if module.path.is_empty()
+    then "{module.name}.adoc"
+    else "{module.path}/{module.name}.adoc"
+
+private fun module_display_name(module: CompiledModule): String =
+    if module.path.is_empty()
+    then module.name
+    else "{module.path}/{module.name}"
+
+private fun asciidoc_type_targets(program: CompiledProgram): List[AsciiDocTypeTarget] =
+    program.modules.reduce([], (targets, module) =>
+        targets
+        + asciidoc_schema_type_targets(module)
+        + asciidoc_backend_type_targets(module)
+        + asciidoc_object_type_targets(module, program.objectOrientedModules)
+    )
+
+private fun asciidoc_schema_type_targets(module: CompiledModule): List[AsciiDocTypeTarget] =
+    asciidoc_schema_type_names(module.functions).reduce([], (targets, typeName) =>
+        if asciidoc_primitive_schema_type(typeName, module.functions) | !asciidoc_public_schema_type(typeName, module.functions)
+        then targets
+        else targets + asciidoc_type_target(typeName, typeName, module_doc_path(module))
+    )
+
+private fun asciidoc_backend_type_targets(module: CompiledModule): List[AsciiDocTypeTarget] =
+    module.visiblePrimitiveBackedTypes
+        .entries()
+        .reduce([], (targets, entry) =>
+            let type = entry[1]
+            if asciidoc_private_visibility(type.visibility)
+            then targets
+            else targets + asciidoc_type_target(type.name, type.name, module_doc_path(module))
+        )
+
+private fun asciidoc_object_type_targets(module: CompiledModule, units: List[CompiledObjectOrientedUnit]): List[AsciiDocTypeTarget] =
+    match units[0] with
+    case None -> []
+    case Some { unit } ->
+        if unit.name == module.name & unit.path == module.path
+        then asciidoc_object_interface_type_targets(unit, module) + asciidoc_object_class_type_targets(unit, module)
+        else asciidoc_object_type_targets(module, units[1:])
+
+private fun asciidoc_object_interface_type_targets(unit: CompiledObjectOrientedUnit, module: CompiledModule): List[AsciiDocTypeTarget] =
+    unit.interfaces.reduce([], (targets, interface) =>
+        if asciidoc_private_visibility(interface.visibility)
+        then targets
+        else targets + asciidoc_type_target(asciidoc_object_interface_type_name(unit, interface.name), interface.name, module_doc_path(module))
+    )
+
+private fun asciidoc_object_class_type_targets(unit: CompiledObjectOrientedUnit, module: CompiledModule): List[AsciiDocTypeTarget] =
+    unit.classes.reduce([], (targets, class) =>
+        if asciidoc_private_visibility(class.visibility)
+        then targets
+        else targets + asciidoc_type_target(asciidoc_object_class_type_name(unit, class.name), class.name, module_doc_path(module))
+    )
+
+private fun asciidoc_type_target(name: String, displayName: String, path: String): AsciiDocTypeTarget =
+    AsciiDocTypeTarget {
+        name: name,
+        displayName: displayName,
+        path: path,
+        anchor: asciidoc_type_anchor(name)
+    }
+
+private fun generate_asciidoc_docs_for_module(module: CompiledModule, objectOrientedUnits: List[CompiledObjectOrientedUnit], typeTargets: List[AsciiDocTypeTarget]): Documentation =
+    let typeNames = asciidoc_schema_type_names(module.functions)
+    Documentation {
+        path: "/" + module_doc_path(module),
+        content: "= Module {module.name}\n\n"
+        + generate_top_level_function_docs(module.functions, typeNames, module, typeTargets)
+        + generate_top_level_constant_docs(module.functions, typeNames, module, typeTargets)
+        + generate_annotation_section_docs(module.annotations)
+        + generate_type_docs(module, typeTargets)
+        + generate_object_oriented_docs(module, objectOrientedUnits, typeTargets)
+    }
+
+private fun generate_function_docs(functions: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    functions
+        .sort((a,b) => a.name.compare(b.name))
+        .map(function => "{heading} fun {function.name}({generate_parameters(function.parameters, module, typeTargets)}): {type_name(function.returnType, module, typeTargets)}\n\n{generate_documentation(function)}\n\n")
+        .reduce("", (content, functionDoc) => content + functionDoc)
+
+private fun generate_constant_docs(constants: List[CompiledFunction], heading: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    constants
+        .sort((a,b) => a.name.compare(b.name))
+        .map(constant => "{heading} const {constant.name}: {type_name(constant.returnType, module, typeTargets)}\n\n{generate_documentation(constant)}\n\n")
+        .reduce("", (content, constantDoc) => content + constantDoc)
+
+private fun generate_top_level_function_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let topLevelFunctions = asciidoc_top_level_functions(functions, typeNames)
+    if topLevelFunctions.is_empty()
+    then ""
+    else "== Functions\n\n" + generate_function_docs(topLevelFunctions, "===", module, typeTargets) + "\n\n"
+
+private fun generate_top_level_constant_docs(functions: List[CompiledFunction], typeNames: List[String], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let constants = asciidoc_top_level_constants(functions, typeNames)
+    if constants.is_empty()
+    then ""
+    else "== Constants\n\n" + generate_constant_docs(constants, "===", module, typeTargets) + "\n\n"
+
+private fun asciidoc_top_level_functions(functions: List[CompiledFunction], typeNames: List[String]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_top_level_function(function, functions, typeNames)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_top_level_function(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
+    !asciidoc_private_visibility(function.visibility)
+    & !asciidoc_schema_function(function)
+    & !asciidoc_constant_function(function)
+    & !asciidoc_object_helper_function(function)
+    & !asciidoc_generated_local_function(function)
+    & !function.name.starts_with("__capy_constructor|")
+    & !asciidoc_function_belongs_to_type(function, typeNames)
+    & !asciidoc_enum_value_function(function, functions)
+
+private fun asciidoc_top_level_constants(functions: List[CompiledFunction], typeNames: List[String]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_top_level_constant(function, functions, typeNames)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_top_level_constant(function: CompiledFunction, functions: List[CompiledFunction], typeNames: List[String]): bool =
+    asciidoc_constant_function(function)
+    & !asciidoc_private_visibility(function.visibility)
+    & !asciidoc_schema_function(function)
+    & !asciidoc_object_helper_function(function)
+    & !asciidoc_generated_local_function(function)
+    & !asciidoc_function_belongs_to_type(function, typeNames)
+    & !asciidoc_enum_value_function(function, functions)
+
+private fun asciidoc_function_belongs_to_type(function: CompiledFunction, typeNames: List[String]): bool =
+    let owner = asciidoc_function_owner(function)
+    !owner.is_empty() & asciidoc_string_list_contains(typeNames, owner)
+
+private fun asciidoc_function_owner(function: CompiledFunction): String =
+    let dot = asciidoc_first_index_of(function.name, ".", 0)
+    if dot < 0
+    then ""
+    else asciidoc_schema_base_type_name(function.name[0, dot])
+
+private fun asciidoc_enum_value_function(function: CompiledFunction, functions: List[CompiledFunction]): bool =
+    function.visibility.starts_with("const:")
+    & asciidoc_string_list_contains(asciidoc_enum_value_names(functions), function.name)
+
+private fun asciidoc_generated_local_function(function: CompiledFunction): bool =
+    function.name.contains("__local__")
+
+private fun asciidoc_constant_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("const:")
+
+private fun asciidoc_object_helper_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("oo")
+
+private fun asciidoc_private_visibility(visibility: String): bool =
+    visibility == "private"
+    | visibility == "local"
+    | visibility == "const:private"
+    | visibility == "const:local"
+    | visibility == "oo:private"
+    | visibility == "oo:local"
+    | visibility == "oo_interface_method:private"
+    | visibility == "oo_interface_method:local"
+
+private fun generate_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    parameters
+        .map(parameter => generate_parameter(parameter, module, typeTargets))
+        .reduce("", (content, parameter) =>
+            if content.is_empty()
+            then parameter
+            else content + ", " + parameter
+        )
+
+private fun generate_documentation(function: CompiledFunction): String =
+    generate_text_documentation(function.documentation)
+
+private fun generate_text_documentation(documentation: List[String]): String =
+    documentation.reduce("", (content, docLine) => content + asciidoc_documentation_line(docLine) + "\n")
+
+private fun generate_documentation_for_annotation(annotation: CompiledAnnotationDeclaration): String =
+    generate_text_documentation(annotation.documentation)
+
+private fun asciidoc_documentation_line(line: String): String =
+    asciidoc_markdown_links(line)
+
+private fun asciidoc_markdown_links(value: String): String =
+    let open = asciidoc_first_index_of(value, "[", 0)
+    if open < 0
+    then value
+    else asciidoc_markdown_link_from_open(value, open)
+
+private fun asciidoc_markdown_link_from_open(value: String, open: int): String =
+    if asciidoc_markdown_link_image(value, open)
+    then asciidoc_markdown_link_skip(value, open)
+    else asciidoc_markdown_link_from_close(value, open, asciidoc_first_index_of(value, "]", open + 1))
+
+private fun asciidoc_markdown_link_from_close(value: String, open: int, close: int): String =
+    if close < 0 | !asciidoc_markdown_link_has_url_start(value, close)
+    then asciidoc_markdown_link_skip(value, open)
+    else asciidoc_markdown_link_from_url_end(value, open, close, asciidoc_first_index_of(value, ")", close + 2))
+
+private fun asciidoc_markdown_link_from_url_end(value: String, open: int, close: int, urlEnd: int): String =
+    if urlEnd < 0
+    then value
+    else asciidoc_markdown_link_from_parts(value, open, close, urlEnd)
+
+private fun asciidoc_markdown_link_from_parts(value: String, open: int, close: int, urlEnd: int): String =
+    let label = value[open + 1, close]
+    let url = value[close + 2, urlEnd]
+    if label.is_empty() | !asciidoc_external_url(url)
+    then asciidoc_markdown_link_skip(value, open)
+    else value[0, open] + url + "[" + label + "]" + asciidoc_markdown_links(value[urlEnd + 1, value.size().value])
+
+private fun asciidoc_markdown_link_skip(value: String, open: int): String =
+    value[0, open + 1] + asciidoc_markdown_links(value[open + 1, value.size().value])
+
+private fun asciidoc_markdown_link_image(value: String, open: int): bool =
+    if open <= 0
+    then false
+    else match value[open - 1] with
+    case None -> false
+    case Some { char } -> char == "!"
+
+private fun asciidoc_markdown_link_has_url_start(value: String, close: int): bool =
+    match value[close + 1] with
+    case None -> false
+    case Some { char } -> char == "("
+
+private fun asciidoc_external_url(url: String): bool =
+    url.starts_with("https://") | url.starts_with("http://")
+
+private fun generate_parameter(parameter: CompiledFunctionParameter, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "{parameter.name}: {type_name(parameter.typeReference, module, typeTargets)}"
+
+private fun type_name(type: CompiledTypeReference, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    asciidoc_type_reference_link(type.name, module, typeTargets) + type_arguments(type.arguments, module, typeTargets)
+
+private fun asciidoc_type_reference_name(name: String): String =
+    if name.starts_with("__capy_oo|")
+    then asciidoc_simple_qualified_name(name["__capy_oo|".size().value, name.size().value])
+    else asciidoc_simple_type_name(name)
+
+private fun asciidoc_simple_type_name(name: String): String =
+    let slash = asciidoc_last_index_of(name, "/", 0, -1)
+    let dot = asciidoc_last_index_of(name, ".", 0, -1)
+    let separator = if slash > dot then slash else dot
+    if separator < 0
+    then name
+    else name[separator + 1, name.size().value]
+
+private fun asciidoc_simple_qualified_name(name: String): String =
+    let dot = asciidoc_last_index_of(name, ".", 0, -1)
+    if dot < 0
+    then name
+    else name[dot + 1, name.size().value]
+
+private fun type_arguments(arguments: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    if arguments.is_empty()
+    then ""
+    else asciidoc_generic_start() + join_type_names(arguments, module, typeTargets) + asciidoc_generic_end()
+
+private fun asciidoc_generic_start(): String =
+    "&#91;"
+
+private fun asciidoc_generic_end(): String =
+    "&#93;"
+
+private fun join_type_names(arguments: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> type_name(argument, module, typeTargets) + join_type_names_tail(arguments[1:], module, typeTargets)
+
+private fun join_type_names_tail(arguments: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + type_name(argument, module, typeTargets) + join_type_names_tail(arguments[1:], module, typeTargets)
+
+private fun type_display_name(type: CompiledTypeReference): String =
+    asciidoc_type_reference_name(type.name) + type_display_arguments(type.arguments)
+
+private fun type_display_arguments(arguments: List[CompiledTypeReference]): String =
+    if arguments.is_empty()
+    then ""
+    else "[" + join_type_display_names(arguments) + "]"
+
+private fun join_type_display_names(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> type_display_name(argument) + join_type_display_names_tail(arguments[1:])
+
+private fun join_type_display_names_tail(arguments: List[CompiledTypeReference]): String =
+    match arguments[0] with
+    case None -> ""
+    case Some { argument } -> ", " + type_display_name(argument) + join_type_display_names_tail(arguments[1:])
+
+private fun asciidoc_type_reference_link(name: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let label = asciidoc_type_reference_name(name)
+    match asciidoc_find_type_target(name, module, typeTargets) with
+    case None -> label
+    case Some { target } -> asciidoc_type_xref(target, module, label)
+
+private fun asciidoc_type_text(typeText: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    if typeText ? "=>"
+    then typeText
+    else
+        let bracket = asciidoc_top_level_generic_bracket(typeText, 0, 0)
+        if bracket < 0
+        then asciidoc_type_reference_link(typeText.trim(), module, typeTargets)
+        else asciidoc_type_reference_link(typeText[0, bracket].trim(), module, typeTargets)
+            + asciidoc_generic_start()
+            + asciidoc_type_text_arguments(typeText[bracket + 1, typeText.size().value - 1], module, typeTargets)
+            + asciidoc_generic_end()
+
+private fun asciidoc_type_text_arguments(typeText: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let comma = asciidoc_top_level_comma(typeText, 0, 0)
+    if comma < 0
+    then asciidoc_type_text(typeText.trim(), module, typeTargets)
+    else asciidoc_type_text(typeText[0, comma].trim(), module, typeTargets)
+        + ", "
+        + asciidoc_type_text_arguments(typeText[comma + 1, typeText.size().value], module, typeTargets)
+
+private fun asciidoc_find_type_target(name: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    if name ? "=>"
+    then None {}
+    else if name.starts_with("__capy_oo|")
+    then asciidoc_find_type_target_by_name(name, typeTargets)
+    else if asciidoc_qualified_type_name(name)
+    then asciidoc_find_qualified_type_target(name, module, typeTargets)
+    else match asciidoc_find_type_target_in_module(name, module_doc_path(module), typeTargets) with
+        case Some { target } -> Some { target }
+        case None ->
+            match asciidoc_find_imported_type_target(name, module.imports, module, typeTargets) with
+            case Some { target } -> Some { target }
+            case None -> asciidoc_find_unique_type_target(name, typeTargets)
+
+private fun asciidoc_find_type_target_by_name(name: String, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    match typeTargets[0] with
+    case None -> None {}
+    case Some { target } ->
+        if target.name == name
+        then Some { target }
+        else asciidoc_find_type_target_by_name(name, typeTargets[1:])
+
+private fun asciidoc_find_type_target_in_module(name: String, path: String, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    let displayName = asciidoc_type_reference_name(name)
+    match typeTargets[0] with
+    case None -> None {}
+    case Some { target } ->
+        if target.path == path & target.displayName == displayName
+        then Some { target }
+        else asciidoc_find_type_target_in_module(name, path, typeTargets[1:])
+
+private fun asciidoc_find_imported_type_target(name: String, imports: List[CompiledImportDeclaration], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    match imports[0] with
+    case None -> None {}
+    case Some { declaration } ->
+        if !declaration.qualified & asciidoc_import_includes_name(name, declaration)
+        then
+            match asciidoc_find_type_target_in_module(name, asciidoc_import_doc_path(declaration.modulePath, module), typeTargets) with
+            case Some { target } -> Some { target }
+            case None -> asciidoc_find_imported_type_target(name, imports[1:], module, typeTargets)
+        else asciidoc_find_imported_type_target(name, imports[1:], module, typeTargets)
+
+private fun asciidoc_find_qualified_type_target(name: String, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    let displayName = asciidoc_type_reference_name(name)
+    let path = asciidoc_qualified_type_doc_path(name, module)
+    if path.is_empty()
+    then None {}
+    else asciidoc_find_type_target_in_module(displayName, path, typeTargets)
+
+private fun asciidoc_find_unique_type_target(name: String, typeTargets: List[AsciiDocTypeTarget]): /capy/lang/Option[AsciiDocTypeTarget] =
+    asciidoc_find_unique_type_target_from(name, typeTargets, None {}, 0)
+
+private fun asciidoc_find_unique_type_target_from(name: String, typeTargets: List[AsciiDocTypeTarget], found: /capy/lang/Option[AsciiDocTypeTarget], count: int): /capy/lang/Option[AsciiDocTypeTarget] =
+    let displayName = asciidoc_type_reference_name(name)
+    match typeTargets[0] with
+    case None ->
+        if count == 1
+        then found
+        else None {}
+    case Some { target } ->
+        if target.displayName == displayName
+        then asciidoc_find_unique_type_target_from(name, typeTargets[1:], Some { target }, count + 1)
+        else asciidoc_find_unique_type_target_from(name, typeTargets[1:], found, count)
+
+private fun asciidoc_type_xref(target: AsciiDocTypeTarget, module: CompiledModule, label: String): String =
+    if target.path == module_doc_path(module)
+    then "xref:#{target.anchor}[{label}]"
+    else "xref:{asciidoc_relative_doc_path(module, target.path)}#{target.anchor}[{label}]"
+
+private fun asciidoc_relative_doc_path(module: CompiledModule, targetPath: String): String =
+    asciidoc_parent_prefix(asciidoc_path_segment_count(module.path)) + targetPath
+
+private fun asciidoc_path_segment_count(path: String): int =
+    if path.is_empty()
+    then 0
+    else asciidoc_slash_count(path, 0, 1)
+
+private fun asciidoc_parent_prefix(count: int): String =
+    if count <= 0
+    then ""
+    else "../" + asciidoc_parent_prefix(count - 1)
+
+private fun asciidoc_slash_count(value: String, idx: int, count: int): int =
+    match value[idx] with
+    case None -> count
+    case Some { char } ->
+        if char == "/"
+        then asciidoc_slash_count(value, idx + 1, count + 1)
+        else asciidoc_slash_count(value, idx + 1, count)
+
+private fun asciidoc_import_includes_name(name: String, declaration: CompiledImportDeclaration): bool =
+    let displayName = asciidoc_type_reference_name(name)
+    if declaration.wildcard
+    then !asciidoc_string_list_contains(declaration.excludedNames, displayName)
+    else asciidoc_string_list_contains(declaration.importedNames, displayName)
+
+private fun asciidoc_qualified_type_name(name: String): bool =
+    (name ? "/") | (asciidoc_last_index_of(name, ".", 0, -1) > 0)
+
+private fun asciidoc_qualified_type_doc_path(name: String, module: CompiledModule): String =
+    let dot = asciidoc_last_index_of(name, ".", 0, -1)
+    if dot > 0
+    then asciidoc_import_doc_path(name[0, dot].replace(".", "/"), module)
+    else if name ? "/"
+    then asciidoc_normalize_import_module_path(name) + ".adoc"
+    else ""
+
+private fun asciidoc_import_doc_path(modulePath: String, module: CompiledModule): String =
+    let normalized = asciidoc_normalize_import_module_path(modulePath)
+    if normalized ? "/"
+    then normalized + ".adoc"
+    else if module.path.is_empty()
+    then normalized + ".adoc"
+    else module.path + "/" + normalized + ".adoc"
+
+private fun asciidoc_normalize_import_module_path(path: String): String =
+    let normalized = asciidoc_normalize_module_path(path)
+    if normalized.starts_with("dev/capylang/capybara/")
+    then "dev/capylang/" + normalized["dev/capylang/capybara/".size().value, normalized.size().value]
+    else if normalized.starts_with("capybara/")
+    then normalized["capybara/".size().value, normalized.size().value]
+    else normalized
+
+private fun asciidoc_normalize_module_path(path: String): String =
+    if path.starts_with("/")
+    then asciidoc_normalize_module_path(path[1, path.size().value])
+    else path
+
+private fun asciidoc_type_anchor(name: String): String =
+    "type-" + asciidoc_anchor_value(name)
+
+private fun asciidoc_anchor_value(value: String): String =
+    value
+        .replace("__capy_oo|", "oo-")
+        .replace("=>", "-to-")
+        .replace("/", "-")
+        .replace(".", "-")
+        .replace("|", "-")
+        .replace("[", "-")
+        .replace("]", "")
+        .replace(",", "-")
+        .replace(" ", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("`", "")
+
+private fun asciidoc_object_interface_type_name(unit: CompiledObjectOrientedUnit, name: String): String =
+    "__capy_oo|" + asciidoc_qualified_object_name(unit.path, name)
+
+private fun asciidoc_object_class_type_name(unit: CompiledObjectOrientedUnit, name: String): String =
+    "__capy_oo|" + asciidoc_qualified_object_name(unit.path, unit.name + "." + name)
+
+private fun asciidoc_qualified_object_name(path: String, name: String): String =
+    if path.is_empty()
+    then name
+    else path.replace("/", ".") + "." + name
+
+private fun asciidoc_top_level_generic_bracket(value: String, idx: int, depth: int): int =
+    match value[idx] with
+    case None -> -1
+    case Some { char } ->
+        if char == "[" & depth == 0
+        then idx
+        else if char == "["
+        then asciidoc_top_level_generic_bracket(value, idx + 1, depth + 1)
+        else if char == "]"
+        then asciidoc_top_level_generic_bracket(value, idx + 1, depth - 1)
+        else asciidoc_top_level_generic_bracket(value, idx + 1, depth)
+
+private fun asciidoc_top_level_comma(value: String, idx: int, depth: int): int =
+    match value[idx] with
+    case None -> -1
+    case Some { char } ->
+        if char == "," & depth == 0
+        then idx
+        else if char == "["
+        then asciidoc_top_level_comma(value, idx + 1, depth + 1)
+        else if char == "]"
+        then asciidoc_top_level_comma(value, idx + 1, depth - 1)
+        else asciidoc_top_level_comma(value, idx + 1, depth)
+
+private fun generate_schema_type_docs(functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    asciidoc_schema_type_names(functions)
+        .sort((a,b) => a.compare(b))
+        .reduce("", (content, typeName) =>
+            if asciidoc_primitive_schema_type(typeName, functions) | !asciidoc_public_schema_type(typeName, functions)
+            then content
+            else content + generate_schema_type_doc(typeName, functions, module, typeTargets)
+        )
+
+private fun generate_type_docs(module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let content = generate_schema_type_docs(module.functions, module, typeTargets)
+        + generate_backend_type_docs(module.visiblePrimitiveBackedTypes, module.functions, module, typeTargets)
+    if content.is_empty()
+    then ""
+    else "== Types\n\n" + content
+
+private fun generate_schema_type_doc(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "[[{asciidoc_type_anchor(typeName)}]]\n"
+    + "=== {asciidoc_type_kind(typeName, functions)} {asciidoc_type_display_name(typeName, functions)}\n\n"
+    + asciidoc_schema_documentation_named("__capy_schema_type|" + typeName, functions)
+    + "\n"
+    + generate_type_field_docs(typeName, functions, module, typeTargets)
+    + generate_union_variant_docs(typeName, functions, module, typeTargets)
+    + generate_enum_value_docs(typeName, functions)
+    + generate_type_constant_docs(typeName, functions, module, typeTargets)
+    + generate_type_function_docs(typeName, functions, module, typeTargets)
+
+private fun asciidoc_type_kind(typeName: String, functions: List[CompiledFunction]): String =
+    if !asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions).is_empty()
+    then "enum"
+    else if !asciidoc_union_variant_names(typeName, functions).is_empty()
+    then "union"
+    else "data"
+
+private fun asciidoc_type_display_name(typeName: String, functions: List[CompiledFunction]): String =
+    let parameters = asciidoc_schema_values("__capy_schema_param|" + typeName + "|", functions)
+    if parameters.is_empty()
+    then typeName
+    else typeName + "[" + join_strings(parameters, ", ") + "]"
+
+private fun generate_type_field_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let fields = asciidoc_schema_functions("__capy_schema_field|" + typeName + "|", functions)
+    if !asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions).is_empty()
+    then ""
+    else if fields.is_empty()
+    then ""
+    else "==== Fields\n\n"
+        + fields
+            .sort((a,b) => asciidoc_schema_field_name(asciidoc_schema_value(a)).compare(asciidoc_schema_field_name(asciidoc_schema_value(b))))
+            .reduce("", (content, field) => content + generate_type_field_doc(field, module, typeTargets))
+        + "\n"
+
+private fun generate_type_field_doc(function: CompiledFunction, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let field = asciidoc_schema_value(function)
+    "* `{asciidoc_schema_field_name(field)}`: {asciidoc_type_text(asciidoc_schema_field_type(field), module, typeTargets)}\n"
+    + generate_type_field_documentation(function)
+
+private fun generate_type_field_documentation(function: CompiledFunction): String =
+    if function.documentation.is_empty()
+    then ""
+    else "+\n" + generate_documentation(function) + "\n"
+
+private fun generate_union_variant_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let variants = asciidoc_public_union_variant_names(typeName, functions)
+    if variants.is_empty()
+    then ""
+    else "==== Variants\n\n"
+        + variants
+            .sort((a,b) => asciidoc_type_display_name(a, functions).compare(asciidoc_type_display_name(b, functions)))
+            .reduce("", (content, variant) => content + "* {asciidoc_type_text(asciidoc_type_display_name(variant, functions), module, typeTargets)}\n")
+        + "\n"
+
+private fun asciidoc_public_union_variant_names(typeName: String, functions: List[CompiledFunction]): List[String] =
+    asciidoc_union_variant_names(typeName, functions).reduce([], (acc, variant) =>
+        if asciidoc_public_schema_type(variant, functions)
+        then acc + variant
+        else acc
+    )
+
+private fun generate_enum_value_docs(typeName: String, functions: List[CompiledFunction]): String =
+    let values = asciidoc_schema_values("__capy_schema_enum|" + typeName + "|", functions)
+    if values.is_empty()
+    then ""
+    else "==== Values\n\n"
+        + values
+            .sort((a,b) => a.compare(b))
+            .reduce("", (content, value) => content + "* `{value}`\n")
+        + "\n"
+
+private fun generate_type_function_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let ownedFunctions = asciidoc_type_functions(typeName, functions)
+    if ownedFunctions.is_empty()
+    then ""
+    else "==== Functions\n\n"
+        + generate_function_docs(ownedFunctions, "=====", module, typeTargets)
+
+private fun generate_type_constant_docs(typeName: String, functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let ownedConstants = asciidoc_type_constants(typeName, functions)
+    if ownedConstants.is_empty()
+    then ""
+    else "==== Constants\n\n"
+        + generate_constant_docs(ownedConstants, "=====", module, typeTargets)
+
+private fun asciidoc_type_functions(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if !asciidoc_private_visibility(function.visibility)
+            & !asciidoc_schema_function(function)
+            & !asciidoc_constant_function(function)
+            & !asciidoc_object_helper_function(function)
+            & !asciidoc_generated_local_function(function)
+            & !function.name.starts_with("__capy_constructor|")
+            & asciidoc_function_owner(function) == typeName
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_type_constants(typeName: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_constant_function(function)
+            & !asciidoc_private_visibility(function.visibility)
+            & !asciidoc_schema_function(function)
+            & !asciidoc_object_helper_function(function)
+            & !asciidoc_generated_local_function(function)
+            & asciidoc_function_owner(function) == typeName
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_schema_type_names(functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with("__capy_schema_type|")
+        then asciidoc_add_string_if_missing(acc, function.name["__capy_schema_type|".size().value, function.name.size().value])
+        else acc
+    )
+
+private fun asciidoc_union_variant_names(typeName: String, functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function)
+            & function.name.starts_with("__capy_schema_parent|")
+            & asciidoc_schema_base_type_name(asciidoc_schema_value(function)) == typeName
+        then asciidoc_add_string_if_missing(acc, asciidoc_schema_parent_child_name(function.name))
+        else acc
+    )
+
+private fun asciidoc_enum_value_names(functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with("__capy_schema_enum|")
+        then asciidoc_add_string_if_missing(acc, asciidoc_schema_value(function))
+        else acc
+    )
+
+private fun asciidoc_schema_parent_child_name(name: String): String =
+    let prefixSize = "__capy_schema_parent|".size().value
+    let rest = name[prefixSize, name.size().value]
+    let separator = asciidoc_first_index_of(rest, "|", 0)
+    if separator < 0
+    then rest
+    else rest[0, separator]
+
+private fun asciidoc_primitive_schema_type(typeName: String, functions: List[CompiledFunction]): bool =
+    !asciidoc_schema_value_named("__capy_schema_primitive|" + typeName, functions).is_empty()
+
+private fun asciidoc_public_schema_type(typeName: String, functions: List[CompiledFunction]): bool =
+    !asciidoc_private_visibility(asciidoc_schema_value_named("__capy_schema_visibility|" + typeName, functions))
+
+private fun asciidoc_schema_function(function: CompiledFunction): bool =
+    function.visibility.starts_with("const:schema")
+
+private fun asciidoc_schema_functions(prefix: String, functions: List[CompiledFunction]): List[CompiledFunction] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with(prefix)
+        then acc + function
+        else acc
+    )
+
+private fun asciidoc_schema_values(prefix: String, functions: List[CompiledFunction]): List[String] =
+    functions.reduce([], (acc, function) =>
+        if asciidoc_schema_function(function) & function.name.starts_with(prefix)
+        then acc + asciidoc_schema_value(function)
+        else acc
+    )
+
+private fun asciidoc_schema_value_named(name: String, functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if asciidoc_schema_function(function) & function.name == name
+        then asciidoc_schema_value(function)
+        else asciidoc_schema_value_named(name, functions[1:])
+
+private fun asciidoc_schema_documentation_named(name: String, functions: List[CompiledFunction]): String =
+    match functions[0] with
+    case None -> ""
+    case Some { function } ->
+        if asciidoc_schema_function(function) & function.name == name
+        then generate_documentation(function)
+        else asciidoc_schema_documentation_named(name, functions[1:])
+
+private fun asciidoc_schema_value(function: CompiledFunction): String =
+    match function.body with
+    case CompiledStringLiteral literal -> literal.value
+    case _ -> ""
+
+private fun asciidoc_schema_field_name(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun asciidoc_schema_field_type(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then "any"
+    else value[separator + 1, value.size().value]
+
+private fun asciidoc_schema_base_type_name(value: String): String =
+    let trimmed = value.trim()
+    let bracket = asciidoc_first_index_of(trimmed, "[", 0)
+    if bracket < 0
+    then trimmed
+    else trimmed[0, bracket]
+
+private fun asciidoc_add_string_if_missing(values: List[String], value: String): List[String] =
+    if asciidoc_string_list_contains(values, value)
+    then values
+    else values + value
+
+private fun asciidoc_string_list_contains(values: List[String], expected: String): bool =
+    match values[0] with
+    case None -> false
+    case Some { value } -> value == expected | asciidoc_string_list_contains(values[1:], expected)
+
+private fun generate_backend_type_docs(types: Dict[CompiledPrimitiveBackedType], functions: List[CompiledFunction], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    types
+        .entries()
+        .sort((a,b) => a[0].compare(b[0]))
+        .reduce("", (content, entry) =>
+            let type = entry[1]
+            if asciidoc_private_visibility(type.visibility)
+            then content
+            else content
+                + "[[{asciidoc_type_anchor(type.name)}]]\n"
+                + "=== type {type.name}: {type_name(type.backingType, module, typeTargets)}\n\n{generate_documentation_for_backend_type(type)}\n"
+                + generate_type_function_docs(type.name, functions, module, typeTargets)
+                + "\n"
+        )
+
+private fun generate_documentation_for_backend_type(type: CompiledPrimitiveBackedType): String =
+    generate_text_documentation(type.documentation)
+
+private fun generate_object_oriented_docs(module: CompiledModule, units: List[CompiledObjectOrientedUnit], typeTargets: List[AsciiDocTypeTarget]): String =
+    match units[0] with
+    case None -> ""
+    case Some { unit } ->
+        if unit.name == module.name & unit.path == module.path
+        then generate_object_oriented_unit_docs(unit, module, typeTargets)
+        else generate_object_oriented_docs(module, units[1:], typeTargets)
+
+private fun generate_object_oriented_unit_docs(unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let content = generate_object_interface_docs(unit.interfaces, unit, module, typeTargets) + generate_object_class_docs(unit.classes, unit, module, typeTargets)
+    if content.is_empty()
+    then ""
+    else "\n\n== Object-Oriented\n\n" + content
+
+private fun generate_object_interface_docs(interfaces: List[CompiledObjectOrientedInterface], unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    interfaces
+        .sort((a,b) => a.name.compare(b.name))
+        .map(interface =>
+            if asciidoc_private_visibility(interface.visibility)
+            then ""
+            else generate_object_interface_doc(interface, unit, module, typeTargets)
+        )
+        .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_interface_doc(interface: CompiledObjectOrientedInterface, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "[[{asciidoc_type_anchor(asciidoc_object_interface_type_name(unit, interface.name))}]]\n"
+    + "=== {interface.kind} {interface.name}\n\n"
+    + generate_text_documentation(interface.documentation)
+    + "\n"
+    + generate_object_parent_docs(interface.parents, module, typeTargets)
+    + generate_object_method_docs(interface.methods, module, typeTargets)
+
+private fun generate_object_class_docs(classes: List[CompiledObjectOrientedClass], unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    classes
+        .sort((a,b) => a.name.compare(b.name))
+        .map(class =>
+            if asciidoc_private_visibility(class.visibility)
+            then ""
+            else generate_object_class_doc(class, unit, module, typeTargets)
+        )
+        .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_class_doc(class: CompiledObjectOrientedClass, unit: CompiledObjectOrientedUnit, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "[[{asciidoc_type_anchor(asciidoc_object_class_type_name(unit, class.name))}]]\n"
+    + "=== {object_class_open_label(class)}class {class.name}{object_parameters_signature(class.parameters, module, typeTargets)}\n\n"
+    + generate_text_documentation(class.documentation)
+    + "\n"
+    + generate_object_parent_docs(class.parents, module, typeTargets)
+    + generate_object_field_docs(class.fields, module, typeTargets)
+    + generate_object_init_docs(class.initBlocks)
+    + generate_object_method_docs(class.methods, module, typeTargets)
+
+private fun object_class_open_label(class: CompiledObjectOrientedClass): String =
+    if class.open then "open " else ""
+
+private fun object_parameters_signature(parameters: List[CompiledFunctionParameter], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    if parameters.is_empty()
+    then ""
+    else "({generate_parameters(parameters, module, typeTargets)})"
+
+private fun generate_object_parent_docs(parents: List[CompiledTypeReference], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    if parents.is_empty()
+    then ""
+    else "==== Parents\n\n"
+        + parents
+            .sort((a,b) => type_display_name(a).compare(type_display_name(b)))
+            .reduce("", (content, parent) => content + "* {type_name(parent, module, typeTargets)}\n")
+        + "\n"
+
+private fun generate_object_field_docs(fields: List[CompiledObjectOrientedField], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let visibleFields = asciidoc_public_object_fields(fields)
+    if visibleFields.is_empty()
+    then ""
+    else "==== Fields\n\n"
+        + visibleFields
+            .sort((a,b) => a.name.compare(b.name))
+            .reduce("", (content, field) => content + generate_object_field_doc(field, module, typeTargets))
+        + "\n"
+
+private fun generate_object_field_doc(field: CompiledObjectOrientedField, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "* `field {field.name}`: {type_name(field.typeReference, module, typeTargets)}{object_field_initializer_label(field)}\n"
+    + generate_object_member_documentation(field.documentation)
+
+private fun asciidoc_public_object_fields(fields: List[CompiledObjectOrientedField]): List[CompiledObjectOrientedField] =
+    fields.reduce([], (acc, field) =>
+        if asciidoc_private_visibility(field.visibility)
+        then acc
+        else acc + field
+    )
+
+private fun object_field_initializer_label(field: CompiledObjectOrientedField): String =
+    if field.hasValue then " (default)" else ""
+
+private fun generate_object_init_docs(initBlocks: List[CompiledObjectOrientedInitBlock]): String =
+    if initBlocks.is_empty()
+    then ""
+    else "==== Initializers\n\n" + generate_object_init_items(initBlocks, 1) + "\n"
+
+private fun generate_object_init_items(initBlocks: List[CompiledObjectOrientedInitBlock], idx: int): String =
+    match initBlocks[0] with
+    case None -> ""
+    case Some { initBlock } ->
+        "===== init {idx}\n\n"
+        + generate_text_documentation(initBlock.documentation)
+        + "\n"
+        + generate_object_init_items(initBlocks[1:], idx + 1)
+
+private fun generate_object_method_docs(methods: List[CompiledObjectOrientedMethod], module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    let visibleMethods = asciidoc_public_object_methods(methods)
+    if visibleMethods.is_empty()
+    then ""
+    else "==== Methods\n\n"
+        + visibleMethods
+            .sort((a,b) => a.name.compare(b.name))
+            .map(method => generate_object_method_doc(method, module, typeTargets))
+            .reduce("", (content, doc) => content + doc)
+
+private fun generate_object_method_doc(method: CompiledObjectOrientedMethod, module: CompiledModule, typeTargets: List[AsciiDocTypeTarget]): String =
+    "===== def {method.name}({generate_parameters(method.parameters, module, typeTargets)}): {type_name(method.returnType, module, typeTargets)}\n\n"
+    + generate_text_documentation(method.documentation)
+    + "\n"
+
+private fun asciidoc_public_object_methods(methods: List[CompiledObjectOrientedMethod]): List[CompiledObjectOrientedMethod] =
+    methods.reduce([], (acc, method) =>
+        if asciidoc_private_visibility(method.visibility)
+        then acc
+        else acc + method
+    )
+
+private fun generate_object_member_documentation(documentation: List[String]): String =
+    if documentation.is_empty()
+    then ""
+    else "+\n" + generate_text_documentation(documentation) + "\n"
+
+private fun generate_annotation_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
+    annotations
+        .entries()
+        .sort((a,b) => a[0].compare(b[0]))
+        .reduce("", (content, entry) =>
+            let annotation = entry[1]
+            if asciidoc_private_visibility(annotation.visibility)
+            then content
+            else content + generate_annotation_doc(annotation)
+        )
+
+private fun generate_annotation_section_docs(annotations: Dict[CompiledAnnotationDeclaration]): String =
+    let content = generate_annotation_docs(annotations)
+    if content.is_empty()
+    then ""
+    else "== Annotations\n\n" + content + "\n\n"
+
+private fun generate_annotation_doc(annotation: CompiledAnnotationDeclaration): String =
+    "=== annotation @{annotation.name}\n\n"
+    + generate_documentation_for_annotation(annotation)
+    + "\n"
+    + "* Repeatable: {annotation_repeatable_value(annotation)}\n"
+    + "* Targets: " + join_strings(annotation.targets.sort((a,b) => a.compare(b)), ", ") + "\n"
+    + generate_annotation_fields(annotation.fields)
+    + "\n"
+
+private fun annotation_repeatable_value(annotation: CompiledAnnotationDeclaration): String =
+    if annotation.repeatable then "yes" else "no"
+
+private fun generate_annotation_fields(fields: List[String]): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ ->
+        "\n==== Fields\n\n"
+        + fields
+            .sort((a,b) => annotation_field_name(a).compare(annotation_field_name(b)))
+            .reduce("", (content, field) => content + annotation_field_doc(field))
+        + "\n"
+
+private fun annotation_field_doc(field: String): String =
+    "* `{annotation_field_name(field)}`: `{annotation_field_type(field)}` ({annotation_field_presence(field)})\n"
+
+private fun annotation_field_presence(field: String): String =
+    if annotation_field_has_default(field)
+    then "optional, default " + annotation_field_default_value(field)
+    else "required"
+
+private fun annotation_field_name(value: String): String =
+    let separator = asciidoc_first_index_of(value, "|", 0)
+    if separator < 0
+    then value
+    else value[0, separator]
+
+private fun annotation_field_type(value: String): String =
+    let first = asciidoc_first_index_of(value, "|", 0)
+    let second = if first < 0 then -1 else asciidoc_first_index_of(value, "|", first + 1)
+    if first < 0
+    then "any"
+    else if second < 0
+    then value[first + 1, value.size().value]
+    else value[first + 1, second]
+
+private fun annotation_field_has_default(value: String): bool =
+    let second = annotation_field_second_separator(value)
+    let third = annotation_field_third_separator(value)
+    if second < 0 | third < 0
+    then false
+    else value[second + 1, third] == "true"
+
+private fun annotation_field_default_value(value: String): String =
+    let third = annotation_field_third_separator(value)
+    if third < 0
+    then "`nothing`"
+    else
+        let payload = value[third + 1, value.size().value]
+        let colon = asciidoc_first_index_of(payload, ":", 0)
+        if colon < 0
+        then "`nothing`"
+        else if payload[0, colon] == "nothing"
+        then "`nothing`"
+        else "`" + payload[colon + 1, payload.size().value] + "`"
+
+private fun annotation_field_second_separator(value: String): int =
+    let first = asciidoc_first_index_of(value, "|", 0)
+    if first < 0 then -1 else asciidoc_first_index_of(value, "|", first + 1)
+
+private fun annotation_field_third_separator(value: String): int =
+    let second = annotation_field_second_separator(value)
+    if second < 0 then -1 else asciidoc_first_index_of(value, "|", second + 1)
+
+private fun join_strings(values: List[String], separator: String): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> value + join_strings_tail(values[1:], separator)
+
+private fun join_strings_tail(values: List[String], separator: String): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> separator + value + join_strings_tail(values[1:], separator)
+
+private fun asciidoc_first_index_of(value: String, needle: String, idx: int): int =
+    match value[idx] with
+    case None -> -1
+    case Some { char } ->
+        if char == needle
+        then idx
+        else asciidoc_first_index_of(value, needle, idx + 1)
+
+private fun asciidoc_last_index_of(value: String, needle: String, idx: int, found: int): int =
+    match value[idx] with
+    case None -> found
+    case Some { char } ->
+        if char == needle
+        then asciidoc_last_index_of(value, needle, idx + 1, idx)
+        else asciidoc_last_index_of(value, needle, idx + 1, found)

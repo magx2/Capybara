@@ -1,0 +1,49 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from OperatorPrecedence import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/OperatorPrecedence.cfun", [
+        test("leap_year uses modulo and comparison before boolean operators", () => leap_year_uses_modulo_and_comparison_before_boolean_operators()),
+        test("and_binds_after_modulo_and_comparison evaluates modulo and comparison first", () => and_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first()),
+        test("or_binds_after_modulo_and_comparison evaluates modulo and comparison first", () => or_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first()),
+        test("multiplication_binds_before_addition returns true", () => multiplication_binds_before_addition_returns_true()),
+        test("power_binds_before_multiplication returns true", () => power_binds_before_multiplication_returns_true()),
+        test("arithmetic_binds_before_comparison_and_equality returns true", () => arithmetic_binds_before_comparison_and_equality_returns_true()),
+        test("and_binds_before_or returns true", () => and_binds_before_or_returns_true()),
+    ])
+
+private fun leap_year_uses_modulo_and_comparison_before_boolean_operators(): Assert =
+    assert_all([
+        assert_that(leap_year(2024)).is_true(),
+        assert_that(leap_year(2023)).is_false(),
+        assert_that(leap_year(1900)).is_false(),
+        assert_that(leap_year(2000)).is_true(),
+    ])
+
+private fun and_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first(): Assert =
+    assert_all([
+        assert_that(and_binds_after_modulo_and_comparison(4, 9)).is_true(),
+        assert_that(and_binds_after_modulo_and_comparison(4, 10)).is_false(),
+        assert_that(and_binds_after_modulo_and_comparison(5, 9)).is_false(),
+    ])
+
+private fun or_binds_after_modulo_and_comparison_evaluates_modulo_and_comparison_first(): Assert =
+    assert_all([
+        assert_that(or_binds_after_modulo_and_comparison(4, 10)).is_true(),
+        assert_that(or_binds_after_modulo_and_comparison(5, 9)).is_true(),
+        assert_that(or_binds_after_modulo_and_comparison(5, 10)).is_false(),
+    ])
+
+private fun multiplication_binds_before_addition_returns_true(): Assert =
+    assert_that(multiplication_binds_before_addition()).is_true()
+
+private fun power_binds_before_multiplication_returns_true(): Assert =
+    assert_that(power_binds_before_multiplication()).is_true()
+
+private fun arithmetic_binds_before_comparison_and_equality_returns_true(): Assert =
+    assert_that(arithmetic_binds_before_comparison_and_equality()).is_true()
+
+private fun and_binds_before_or_returns_true(): Assert =
+    assert_that(and_binds_before_or()).is_true()

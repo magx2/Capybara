@@ -1,0 +1,102 @@
+from /capy/lang/Result import { * }
+
+/// Fractional value between zero and one.
+///
+/// Example:
+/// ```cfun
+/// let half = ratio! { 0.5 }
+/// half.to_percentage() == percentage! { 50.0 }
+/// ```
+type ratio -> double with constructor {
+    if value >= 0.0 & value <= 1.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "ratio must be between 0.0 and 1.0" }
+}
+
+/// Percentage value between zero and one hundred.
+type percentage -> double with constructor {
+    if value >= 0.0 & value <= 100.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "percentage must be between 0.0 and 100.0" }
+}
+
+/// Probability value between zero and one.
+type probability -> double with constructor {
+    if value >= 0.0 & value <= 1.0
+    then Success { value }
+    else Error { kind: "capy.lang.number.out_of_range", message: "probability must be between 0.0 and 1.0" }
+}
+
+/// Ratio representing zero.
+const ZERO_RATIO: ratio = ratio! { 0.0 }
+/// Ratio representing one whole.
+const WHOLE_RATIO: ratio = ratio! { 1.0 }
+/// Percentage representing zero percent.
+const ZERO_PERCENTAGE: percentage = percentage! { 0.0 }
+/// Percentage representing one hundred percent.
+const FULL_PERCENTAGE: percentage = percentage! { 100.0 }
+/// Probability representing an impossible event.
+const IMPOSSIBLE_PROBABILITY: probability = probability! { 0.0 }
+/// Probability representing a certain event.
+const CERTAIN_PROBABILITY: probability = probability! { 1.0 }
+
+/// Converts this ratio to a percentage.
+fun ratio.to_percentage(): percentage =
+    percentage! { this.value * 100.0 }
+
+/// Converts this ratio to a probability with the same value.
+fun ratio.to_probability(): probability =
+    probability! { this.value }
+
+/// Converts this percentage to a ratio.
+fun percentage.to_ratio(): ratio =
+    ratio! { this.value / 100.0 }
+
+/// Converts this probability to a ratio with the same value.
+fun probability.to_ratio(): ratio =
+    ratio! { this.value }
+
+/// Returns whether this ratio is greater than `other`.
+fun ratio.`>`(other: ratio): bool = this.value > other.value
+/// Returns whether this ratio is greater than or equal to `other`.
+fun ratio.`>=`(other: ratio): bool = this.value >= other.value
+/// Returns whether this ratio is less than `other`.
+fun ratio.`<`(other: ratio): bool = this.value < other.value
+/// Returns whether this ratio is less than or equal to `other`.
+fun ratio.`<=`(other: ratio): bool = this.value <= other.value
+/// Returns whether this ratio has the same value as `other`.
+fun ratio.`==`(other: ratio): bool = this.value == other.value
+
+/// Returns whether this percentage is greater than `other`.
+fun percentage.`>`(other: percentage): bool = this.value > other.value
+/// Returns whether this percentage is greater than or equal to `other`.
+fun percentage.`>=`(other: percentage): bool = this.value >= other.value
+/// Returns whether this percentage is less than `other`.
+fun percentage.`<`(other: percentage): bool = this.value < other.value
+/// Returns whether this percentage is less than or equal to `other`.
+fun percentage.`<=`(other: percentage): bool = this.value <= other.value
+/// Returns whether this percentage has the same value as `other`.
+fun percentage.`==`(other: percentage): bool = this.value == other.value
+
+/// Returns whether this probability is greater than `other`.
+fun probability.`>`(other: probability): bool = this.value > other.value
+/// Returns whether this probability is greater than or equal to `other`.
+fun probability.`>=`(other: probability): bool = this.value >= other.value
+/// Returns whether this probability is less than `other`.
+fun probability.`<`(other: probability): bool = this.value < other.value
+/// Returns whether this probability is less than or equal to `other`.
+fun probability.`<=`(other: probability): bool = this.value <= other.value
+/// Returns whether this probability has the same value as `other`.
+fun probability.`==`(other: probability): bool = this.value == other.value
+
+/// Function form of `value.to_percentage()`.
+fun ratio_to_percentage(value: ratio): percentage = value.to_percentage()
+
+/// Function form of `value.to_probability()`.
+fun ratio_to_probability(value: ratio): probability = value.to_probability()
+
+/// Function form of `value.to_ratio()` for a percentage.
+fun percentage_to_ratio(value: percentage): ratio = value.to_ratio()
+
+/// Function form of `value.to_ratio()` for a probability.
+fun probability_to_ratio(value: probability): ratio = value.to_ratio()

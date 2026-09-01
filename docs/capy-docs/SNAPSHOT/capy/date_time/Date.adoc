@@ -1,0 +1,210 @@
+= Module Date
+
+== Functions
+
+=== fun from_days_since_unix_epoch(days_since_epoch: int): xref:#type-Date[Date]
+
+Converts days since Unix epoch (`1970-01-01`) to `Date`.
+
+Example: `from_days_since_unix_epoch(1)` returns `1970-01-02`.
+
+
+=== fun from_iso_8601(iso: xref:../../capy/lang/String.adoc#type-String[String]): xref:../../capy/lang/Result.adoc#type-Result[Result]&#91;xref:#type-Date[Date]&#93;
+
+Parses an ISO 8601 calendar date in basic or extended complete form.
+
+Example:
+```cfun
+from_iso_8601("2026-06-05")
+from_iso_8601("20260605")
+```
+Both forms return the same `Date`.
+
+
+
+
+== Constants
+
+=== const APRIL: xref:#type-month[month]
+
+April, represented by month number 4.
+
+
+=== const AUGUST: xref:#type-month[month]
+
+August, represented by month number 8.
+
+
+=== const DECEMBER: xref:#type-month[month]
+
+December, represented by month number 12.
+
+
+=== const FEBRUARY: xref:#type-month[month]
+
+February, represented by month number 2.
+
+
+=== const JANUARY: xref:#type-month[month]
+
+January, represented by month number 1.
+
+
+=== const JULY: xref:#type-month[month]
+
+July, represented by month number 7.
+
+
+=== const JUNE: xref:#type-month[month]
+
+June, represented by month number 6.
+
+
+=== const MARCH: xref:#type-month[month]
+
+March, represented by month number 3.
+
+
+=== const MAY: xref:#type-month[month]
+
+May, represented by month number 5.
+
+
+=== const NOVEMBER: xref:#type-month[month]
+
+November, represented by month number 11.
+
+
+=== const OCTOBER: xref:#type-month[month]
+
+October, represented by month number 10.
+
+
+=== const SEPTEMBER: xref:#type-month[month]
+
+September, represented by month number 9.
+
+
+=== const UNIX_DATE: xref:#type-Date[Date]
+
+Unix epoch date, 1970-01-01.
+
+
+
+
+== Types
+
+[[type-Date]]
+=== data Date
+
+Calendar date represented by day, month and year.
+
+The constructor validates the provided values and returns an error for
+impossible dates.
+
+Example:
+```cfun
+Date { day: 29, month: FEBRUARY, year: 2024 }
+Date { day: 29, month: FEBRUARY, year: 2025 }
+```
+The leap-year date succeeds; the invalid 2025 date returns `Error`.
+
+==== Fields
+
+* `day`: int
+* `month`: xref:#type-month[month]
+* `year`: int
+
+==== Functions
+
+===== fun Date.add_days(days: int): xref:#type-Date[Date]
+
+Adds days to this date.
+
+Example: `UNIX_DATE.add_days(31)` returns `1970-02-01`.
+
+
+===== fun Date.add_years_months(years: int, months: int): xref:#type-Date[Date]
+
+Adds years and months to this date, clamping the day to target month length.
+
+Example:
+```cfun
+Date! { day: 31, month: JANUARY, year: 2024 }.add_years_months(0, 1)
+```
+Returns `2024-02-29`, because February 2024 has no day 31.
+
+
+===== fun Date.first_day_of_month(): xref:#type-Date[Date]
+
+Returns the first day of this date's month.
+
+
+===== fun Date.last_day_of_month(): xref:#type-Date[Date]
+
+Returns the last valid day of this date's month.
+
+
+===== fun Date.leap_year(): bool
+
+Returns `true` when this date is in a leap year.
+
+
+===== fun Date.to_days_since_unix_epoch(): int
+
+Converts this date to days since Unix epoch (`1970-01-01`).
+
+Example: `UNIX_DATE.to_days_since_unix_epoch()` returns `0`.
+
+
+===== fun Date.to_iso_8601(): xref:../../capy/lang/String.adoc#type-String[String]
+
+Formats this date as an ISO 8601 calendar date.
+
+Example: `Date! { day: 5, month: JUNE, year: 2026 }.to_iso_8601()`
+returns `2026-06-05`.
+
+
+[[type-month]]
+=== type month: int
+
+Calendar month number in the range 1..12.
+
+==== Functions
+
+===== fun month.`<=`(other: xref:#type-month[month]): bool
+
+Returns whether this month is the same as or earlier in the year than `other`.
+
+
+===== fun month.`<`(other: xref:#type-month[month]): bool
+
+Returns whether this month is earlier in the year than `other`.
+
+
+===== fun month.`==`(other: xref:#type-month[month]): bool
+
+Returns whether this month has the same month number as `other`.
+
+
+===== fun month.`>=`(other: xref:#type-month[month]): bool
+
+Returns whether this month is the same as or later in the year than `other`.
+
+
+===== fun month.`>`(other: xref:#type-month[month]): bool
+
+Returns whether this month is later in the year than `other`.
+
+
+===== fun month.next(): xref:#type-month[month]
+
+Returns the following month, wrapping December to January.
+
+
+===== fun month.previous(): xref:#type-month[month]
+
+Returns the preceding month, wrapping January to December.
+
+
+

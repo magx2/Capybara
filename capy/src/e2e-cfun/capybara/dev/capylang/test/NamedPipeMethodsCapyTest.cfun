@@ -1,0 +1,112 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+from /capy/lang/Option import { * }
+from /capy/lang/Result import { * }
+from /capy/collection/Seq import { * }
+from /capy/collection/List import { * }
+from /capy/collection/Set import { * }
+from /capy/collection/Dict import { * }
+from NamedPipeMethods import { * }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/NamedPipeMethods.cfun", [
+        test("list named methods produce expected results", () => list_named_methods_produce_expected_results()),
+        test("set named methods produce expected results", () => set_named_methods_produce_expected_results()),
+        test("dict aliases match operators", () => dict_aliases_match_operators()),
+        test("seq aliases produce expected results", () => seq_aliases_produce_expected_results()),
+        test("string filter and reject produce expected results", () => string_filter_and_reject_produce_expected_results()),
+        test("option aliases match operators and expected values", () => option_aliases_match_operators_and_expected_values()),
+        test("result aliases match operators and expected values", () => result_aliases_match_operators_and_expected_values()),
+    ])
+
+private fun list_named_methods_produce_expected_results(): Assert =
+    let values = [-1, 0, 1, 2]
+    assert_all([
+        assert_that(list_map_named(values).as_list()).is_equal_to(list_map_operator(values).as_list()),
+        assert_that(list_map_named(values).as_list()).is_equal_to([-2, 0, 2, 4]),
+        assert_that(list_filter_named(values).as_list()).is_equal_to([1, 2]),
+        assert_that(list_reject_named(values).as_list()).is_equal_to([-1, 0]),
+        assert_that(list_filter_named(values).as_list()).is_equal_to(list_filter_operator(values).as_list()),
+        assert_that(list_flat_map_named([1, 2]).as_list()).is_equal_to(list_flat_map_operator([1, 2]).as_list()),
+        assert_that(list_flat_map_named([1, 2]).as_list()).is_equal_to([1, 2, 2, 3]),
+        assert_that(list_reduce_named(values)).is_equal_to(list_reduce_operator(values)),
+        assert_that(list_reduce_named(values)).is_equal_to(2),
+    ])
+
+private fun set_named_methods_produce_expected_results(): Assert =
+    let values = {-1, 0, 1, 2}
+    let mapped = set_map_named(values).as_list()
+    let filtered = set_filter_named(values).as_list()
+    let rejected = set_reject_named(values).as_list()
+    let flat_mapped = set_flat_map_named({1, 2}).as_list()
+    assert_all([
+        assert_that(set_map_named(values).as_list()).is_equal_to(set_map_operator(values).as_list()),
+        assert_that(mapped).has_size(4).contains(-2).contains(0).contains(2).contains(4),
+        assert_that(filtered).has_size(2).contains(1).contains(2),
+        assert_that(rejected).has_size(2).contains(-1).contains(0),
+        assert_that(set_filter_operator(values).as_list()).has_size(2).contains(1).contains(2),
+        assert_that(set_flat_map_named({1, 2}).as_list()).is_equal_to(set_flat_map_operator({1, 2}).as_list()),
+        assert_that(flat_mapped).has_size(4).contains(1).contains(2).contains(11).contains(12),
+        assert_that(set_reduce_named(values)).is_equal_to(set_reduce_operator(values)),
+        assert_that(set_reduce_named(values)).is_equal_to(2),
+    ])
+
+private fun dict_aliases_match_operators(): Assert =
+    let values: Dict[int] = {"keep": 1, "drop": 2, "last": 11}
+    assert_all([
+        assert_that(dict_map_named(values)).is_equal_to(dict_map_operator(values)),
+        assert_that(dict_map_named(values)).is_equal_to({"keep": "keep:1", "drop": "drop:2", "last": "last:11"}),
+        assert_that(dict_filter_named(values)).is_equal_to({"last": 11}),
+        assert_that(dict_reject_named(values)).is_equal_to({"keep": 1, "drop": 2}),
+        assert_that(dict_filter_named(values)).is_equal_to(dict_filter_operator(values)),
+        assert_that(dict_reduce_named(values)).is_equal_to(dict_reduce_operator(values)),
+    ])
+
+private fun seq_aliases_produce_expected_results(): Assert =
+    let values = [1, 2, 3]
+    assert_all([
+        assert_that(seq_map_named(values)).is_equal_to(seq_map_operator(values)),
+        assert_that(seq_map_named(values)).is_equal_to([3, 6, 9]),
+        assert_that(seq_flat_map_named(values)).is_equal_to(seq_flat_map_operator(values)),
+        assert_that(seq_flat_map_named(values)).is_equal_to([1, 2, 2, 3, 3, 4]),
+        assert_that(seq_reduce_named(values)).is_equal_to(6),
+    ])
+
+private fun string_filter_and_reject_produce_expected_results(): Assert =
+    assert_all([
+        assert_that(string_filter_named("abc").as_list()).is_equal_to(["b"]),
+        assert_that(string_filter_symbolic("abc").as_list()).is_equal_to(["b"]),
+        assert_that(string_reject_named("abc").as_list()).is_equal_to(["a", "c"]),
+    ])
+
+private fun option_aliases_match_operators_and_expected_values(): Assert =
+    let value = Some { "capy" }
+    let number = Some { 42 }
+    let matching = Some { "drop" }
+    let empty: Option[String] = None {}
+    assert_all([
+        assert_that(option_map_named(value)).is_equal_to(option_map_operator(value)),
+        assert_that(option_map_named(value)).contains("capy!"),
+        assert_that(option_map_named_type_change(number)).is_equal_to(option_map_operator_type_change(number)),
+        assert_that(option_map_named_type_change(number)).contains("v=42"),
+        assert_that(option_filter_named(matching)).is_equal_to(option_filter_operator(matching)),
+        assert_that(option_flat_map_named(value)).contains("capy!"),
+        assert_that(option_reduce_named(value)).is_equal_to("start:capy"),
+        assert_that(option_reduce_named(empty)).is_equal_to("start:"),
+        assert_that(option_reduce_left_named(value)).is_equal_to("start:capy"),
+    ])
+
+private fun result_aliases_match_operators_and_expected_values(): Assert =
+    let success: Result[int] = Success { 3 }
+    let error: Result[int] = Error { "boom" }
+    assert_all([
+        assert_that(result_map_named(success)).is_equal_to(result_map_operator(success)),
+        assert_that(result_map_named(success)).succeeds("v=3"),
+        assert_that(result_flat_map_named(success)).is_equal_to(result_flat_map_operator(success)),
+        assert_that(result_flat_map_named(success)).succeeds("v=3"),
+        assert_that(result_reduce_named(success)).is_equal_to(result_reduce_operator(success)),
+        assert_that(result_reduce_named(success)).is_equal_to("ok:3"),
+        assert_that(result_reduce_named(error)).is_equal_to("err:boom"),
+        assert_that(result_reduce_left_named(success)).is_equal_to("ok:3"),
+    ])

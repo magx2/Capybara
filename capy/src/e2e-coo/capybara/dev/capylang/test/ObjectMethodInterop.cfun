@@ -1,0 +1,6 @@
+from /capy/lang/Effect import { * }
+
+fun invoke_foo(x: int): Effect[String] =
+    let foo <- Foo()
+    let result <- foo.foo(x)
+    result
