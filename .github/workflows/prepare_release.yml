@@ -122,7 +122,7 @@ jobs:
           gh workflow run check.yml --ref "${RELEASE_BRANCH}"
           gh workflow run verify_version.yml --ref "${RELEASE_BRANCH}"
 
-      - name: Bump minor on default branch
+      - name: Open minor version bump PR
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -199,5 +199,4 @@ jobs:
           echo "Watching Build & Check run ${CHECK_RUN_ID}: ${CHECK_RUN_URL}"
           gh run watch "${CHECK_RUN_ID}" --exit-status
 
-          gh pr merge "${PR_NUMBER}" --rebase --delete-branch
-          gh workflow run check.yml --ref "${DEFAULT_BRANCH}"
+          echo "Minor version bump PR #${PR_NUMBER} is ready for manual merge."
