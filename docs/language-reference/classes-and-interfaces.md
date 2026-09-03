@@ -33,23 +33,26 @@ have either an expression body (`= expression`) or a statement block.
 Classes are public. Fields and methods are public by default; use `local` for
 package and subpackage visibility or `private` for module-only visibility.
 Classes are closed to inheritance by default; prefix a base class with `open`
-when another class should be allowed to extend it. An `abstract class` may
-declare abstract methods.
+when another class should be allowed to extend it.
 
-Methods support `open`, `abstract`, `override`, and `final`. Mark an
-implementation with `override` when it replaces an inherited method:
+Define a method with the same signature to replace an inherited implementation:
 
 ```coo
 open class Named {
-    open def name(): String = "unknown"
+    def name(): String = "unknown"
 }
 
 class User(name: String): Named {
     field name: String = name
 
-    override def name(): String = this.name
+    def name(): String = this.name
 }
 ```
+
+The grammar currently accepts the method modifiers `open`, `abstract`,
+`override`, and `final`, but the compiler does not retain or enforce them. Do
+not rely on them to require an override, prevent an override, or emit an
+abstract target-language method.
 
 ## Interfaces
 
@@ -68,14 +71,14 @@ interface NamedClock: Clock {
 class FixedClock(value: long): NamedClock {
     field value: long = value
 
-    override def now_millis(): long = this.value
-    override def name(): String = "fixed"
+    def now_millis(): long = this.value
+    def name(): String = "fixed"
 }
 ```
 
 Interfaces may extend other interfaces. A class may have at most one class
-parent and may implement multiple interfaces. The compiler checks the nominal
-contracts and generates the corresponding target-language inheritance shape.
+parent and may implement multiple interfaces. The generators use these nominal
+contracts to produce the corresponding target-language inheritance shape.
 
 Traits use the same parent list but provide implemented, behavior-only
 methods. Trait fields and initialization are not supported by the current
@@ -161,9 +164,10 @@ public final class SystemClock implements Clock {
 }
 ```
 
-Java interfaces are emitted as Java interfaces. Use the Capybara method name
-from the generated contract; unlike exported functional functions, interface
-method names are not converted to `lowerCamelCase`.
+Java interfaces are emitted as Java interfaces. Implement the exact method name
+in the generated interface: the Java generator rewrites selected
+standard-library-style names, such as `is_empty` to `isEmpty` and `starts_with`
+to `startsWith`, while names such as `now_millis` remain unchanged.
 
 ### JavaScript
 
@@ -208,17 +212,18 @@ class SystemClock(Clock):
 
 ## Source Layout and Provider Behavior
 
-Native implementation source is discovered in sibling `java`, `js`, `py`,
-`native/java`, `native/js`, and `native/py` directories near the Capybara input
-directory. For example:
+Native implementation source is discovered in `native/java`, `native/js`, and
+`native/py` directories near the Capybara input directory. When the input is a
+directory named `capybara`, put `native` beside that directory. For example:
 
 ```text
 src/main/
 |-- capybara/dev/capylang/example/Clock.coo
 |-- capybara/dev/capylang/example/ClockProvider.cfun
-|-- java/dev/capylang/example/nativeinterop/SystemClock.java
-|-- js/dev/capylang/example/nativeinterop/SystemClock.js
-`-- py/dev/capylang/example/nativeinterop/SystemClock.py
+`-- native/
+    |-- java/dev/capylang/example/nativeinterop/SystemClock.java
+    |-- js/dev/capylang/example/nativeinterop/SystemClock.js
+    `-- py/dev/capylang/example/nativeinterop/SystemClock.py
 ```
 
 Generate only the backend whose native source should be used:
