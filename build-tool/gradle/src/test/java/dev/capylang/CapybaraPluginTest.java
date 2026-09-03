@@ -1,10 +1,11 @@
 package dev.capylang;
 
 import org.gradle.api.Project;
-import org.gradle.api.artifacts.FileCollectionDependency;
+import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
+import org.gradle.api.plugins.JavaLibraryPlugin;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
@@ -328,14 +329,22 @@ class CapybaraPluginTest {
     }
 
     @Test
-    void shouldAddCapybaraJavaRuntimeToConsumerClasspaths() throws Exception {
+    void shouldAddPublishableCapybaraJavaRuntimeToConsumerClasspaths() {
         var project = newProject();
-        var runtimePath = CapybaraPlugin.capybaraRuntimePath().toFile();
 
-        assertTrue(project.getConfigurations().getByName("implementation").getDependencies().stream()
-                .filter(FileCollectionDependency.class::isInstance)
-                .map(FileCollectionDependency.class::cast)
-                .anyMatch(dependency -> dependency.getFiles().getFiles().contains(runtimePath)));
+        assertCapybaraRuntimeDependency(project, "implementation");
+    }
+
+    @Test
+    void shouldExposeCapybaraJavaRuntimeFromJavaLibraries() {
+        var project = ProjectBuilder.builder()
+                .withProjectDir(tempDir.toFile())
+                .build();
+        project.setVersion("0.0.0-test");
+        project.getPluginManager().apply(JavaLibraryPlugin.class);
+        project.getPluginManager().apply(CapybaraPlugin.class);
+
+        assertCapybaraRuntimeDependency(project, "api");
     }
 
     @Test
@@ -864,6 +873,18 @@ class CapybaraPluginTest {
         project.getPluginManager().apply(JavaPlugin.class);
         project.getPluginManager().apply(CapybaraPlugin.class);
         return project;
+    }
+
+    private static void assertCapybaraRuntimeDependency(Project project, String configuration) {
+        var runtime = project.getConfigurations().getByName(configuration).getDependencies().stream()
+                .filter(dependency -> "dev.capylang".equals(dependency.getGroup()))
+                .filter(dependency -> "capy".equals(dependency.getName()))
+                .findFirst()
+                .orElseThrow();
+
+        assertInstanceOf(ExternalModuleDependency.class, runtime);
+        assertEquals(CapybaraPlugin.capybaraRuntimeDependency(),
+                runtime.getGroup() + ":" + runtime.getName() + ":" + runtime.getVersion());
     }
 
     private static boolean containsFileNamed(Path directory, String fileName) throws IOException {

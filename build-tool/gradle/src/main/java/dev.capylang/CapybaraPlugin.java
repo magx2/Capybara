@@ -1,6 +1,5 @@
 package dev.capylang;
 
-import capy.lang.Effect;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.logging.LogLevel;
@@ -9,7 +8,7 @@ import org.gradle.api.tasks.testing.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -163,7 +162,10 @@ public class CapybaraPlugin implements Plugin<Project> {
 
         var sourceSets = project.getExtensions().findByType(SourceSetContainer.class);
         if (sourceSets != null) {
-            project.getDependencies().add("implementation", project.files(capybaraRuntimePath()));
+            var runtimeConfiguration = project.getConfigurations().findByName("api") == null
+                    ? "implementation"
+                    : "api";
+            project.getDependencies().add(runtimeConfiguration, capybaraRuntimeDependency());
             var mainSourceSet = sourceSets.getByName("main");
             var testSourceSet = sourceSets.getByName("test");
 
@@ -318,11 +320,18 @@ public class CapybaraPlugin implements Plugin<Project> {
         };
     }
 
-    static Path capybaraRuntimePath() {
-        try {
-            return Path.of(Effect.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-        } catch (URISyntaxException exception) {
-            throw new IllegalStateException("Unable to locate the Capybara Java runtime.", exception);
+    static String capybaraRuntimeDependency() {
+        return "dev.capylang:capy:" + capybaraVersion();
+    }
+
+    private static String capybaraVersion() {
+        try (var input = CapybaraPlugin.class.getResourceAsStream("/capybara-version.txt")) {
+            if (input == null) {
+                throw new IllegalStateException("Missing capybara-version.txt from the Capybara runtime.");
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8).trim();
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Unable to read the Capybara runtime version.", exception);
         }
     }
 
