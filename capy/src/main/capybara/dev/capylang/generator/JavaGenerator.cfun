@@ -244,7 +244,6 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     + java_function_type_interfaces()
     + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
     + java_imported_primitive_constructor_adapters(allModules, module, allModules)
-    + java_object_interfaces(objects.interfaces, module, allModules)
     + java_object_classes(objects.classes, constantBindings, module, allModules)
     + java_constants(constants, module, allModules)
     + java_functions(module.functions, constantBindings, module, allModules, nativeProviderScope)
@@ -794,43 +793,11 @@ private fun java_object_top_level_interface_method(method: CompiledObjectOriente
         + "    }" + newline()
     else "    " + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ");" + newline()
 
-/// Formats Java source text for object interfaces.
-private fun java_object_interfaces(interfaces: List[CompiledObjectOrientedInterface], module: CompiledModule, allModules: List[CompiledModule]): String =
-    match interfaces[0] with
-    case None -> ""
-    case Some { objectInterface } ->
-        java_object_interface(objectInterface, module, allModules) + newline()
-            + java_object_interfaces(interfaces[1:], module, allModules)
-
-/// Formats Java source text for object interface.
-private fun java_object_interface(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
-    "    " + java_visibility_prefix(objectInterface.visibility) + "interface " + java_identifier(objectInterface.name) + java_object_interface_parent_clause(objectInterface.parents, module, allModules) + " {" + newline()
-    + java_object_interface_methods(objectInterface.methods, objectInterface, module, allModules)
-    + "    }" + newline()
-
 /// Formats the Java clause for object interface parent.
 private fun java_object_interface_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
     if parents.is_empty()
     then ""
     else " extends " + java_object_parent_types(parents, module, allModules)
-
-/// Formats Java source text for object interface methods.
-private fun java_object_interface_methods(methods: List[CompiledObjectOrientedMethod], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
-    match methods[0] with
-    case None -> ""
-    case Some { method } ->
-        java_object_interface_method(method, objectInterface, module, allModules, "        ")
-            + java_object_interface_methods(methods[1:], objectInterface, module, allModules)
-
-/// Formats Java source text for object interface method.
-private fun java_object_interface_method(method: CompiledObjectOrientedMethod, objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
-    if objectInterface.kind == "trait"
-    then
-        let env = java_object_interface_method_bindings(method.parameters, objectInterface, module)
-        indent + "default " + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ") {" + newline()
-        + java_object_interface_method_body(method, env, module, allModules, indent + "    ")
-        + indent + "}" + newline()
-    else indent + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ");" + newline()
 
 /// Creates Java name/type bindings for object interface method.
 private fun java_object_interface_method_bindings(parameters: List[CompiledFunctionParameter], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule): List[JavaBinding] =
@@ -5215,7 +5182,7 @@ private fun java_object_type(type: CompiledTypeReference): bool =
 
 /// Computes the Java name for object type Java.
 private fun java_object_type_java_name(type: CompiledTypeReference): String =
-    type.name[java_object_type_prefix_size(), type.name.size().value]
+    java_dotted_class_name(type.name[java_object_type_prefix_size(), type.name.size().value])
 
 /// Checks whether a call has the standard-library to seq call shape.
 private fun stdlib_to_seq_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
