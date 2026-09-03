@@ -35,6 +35,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     private static final Pattern QUALIFIED_IMPORT_PATTERN = Pattern.compile(
             "^\\s*import\\s+(" + MODULE_NAME_PATTERN + ")\\s*$"
     );
+    private static final Pattern IDENTIFIER_PATTERN = Pattern.compile("[a-z_][a-zA-Z0-9_]*");
 
     @Override
     public ParsedProgram parse(List<RawModule> modules) {
@@ -195,9 +196,25 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                     String msg,
                     RecognitionException e
             ) {
-                errors.add(new SyntaxError(line, charPositionInLine, msg));
+                errors.add(new SyntaxError(
+                        line,
+                        charPositionInLine,
+                        improveSyntaxErrorMessage(offendingSymbol, msg)
+                ));
             }
         };
+    }
+
+    private static String improveSyntaxErrorMessage(Object offendingSymbol, String message) {
+        if (offendingSymbol instanceof Token token
+                && message.startsWith("mismatched input")
+                && message.contains("expecting")
+                && message.contains("NAME")
+                && IDENTIFIER_PATTERN.matcher(token.getText()).matches()) {
+            return "keyword '%s' cannot be used as an identifier; choose a different name"
+                    .formatted(token.getText());
+        }
+        return message;
     }
 
     private static void throwIfInvalid(RawModule module, List<SyntaxError> errors) {

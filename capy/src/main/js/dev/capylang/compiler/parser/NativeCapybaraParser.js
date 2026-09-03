@@ -223,8 +223,19 @@ class SyntaxErrorCollector extends (antlr4.error.ErrorListener || antlr4Package.
         this.errors = [];
     }
     syntaxError(recognizer, offendingSymbol, line, column, msg, e) {
-        this.errors.push([line, column, msg]);
+        this.errors.push([line, column, improve_syntax_error_message(offendingSymbol, msg)]);
     }
+}
+
+function improve_syntax_error_message(offending_symbol, message) {
+    var token = offending_symbol?.text;
+    if (message.startsWith("mismatched input")
+            && message.includes("expecting")
+            && message.includes("NAME")
+            && /^[a-z_][a-zA-Z0-9_]*$/.test(token)) {
+        return `keyword '${token}' cannot be used as an identifier; choose a different name`;
+    }
+    return message;
 }
 
 function throw_if_invalid(module, errors) {
