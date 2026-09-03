@@ -767,7 +767,7 @@ private fun java_object_interface_modules_for_module(interfaces: List[CompiledOb
 private fun java_object_interface_relative_path(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule): String =
     if module.path.is_empty()
     then java_identifier(objectInterface.name) + ".java"
-    else module.path + "/" + java_identifier(objectInterface.name) + ".java"
+    else java_package_relative_path(module.path) + "/" + java_identifier(objectInterface.name) + ".java"
 
 /// Emits top-level Java interface source for a compiled object interface.
 private fun java_object_top_level_interface_code(objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1585,6 +1585,10 @@ private fun java_dotted_class_name(name: String): String =
     if separator < 0
     then java_identifier(name)
     else java_identifier(name[0, separator]) + "." + java_dotted_class_name(name[separator + 1, name.size().value])
+
+/// Converts a Capybara package path into legal Java source directories.
+private fun java_package_relative_path(path: String): String =
+    path_to_class(path).replace(".", "/")
 
 /// Checks whether a string starts with the requested prefix.
 private fun java_generator_string_has_prefix(value: String, prefix: String): bool =
@@ -14398,7 +14402,7 @@ private fun java_package(module: CompiledModule): String =
 private fun java_module_relative_path(module: CompiledModule, extension: String): String =
     if module.path.is_empty()
     then java_module_class_name(module) + extension
-    else module.path + "/" + java_module_class_name(module) + extension
+    else java_package_relative_path(module.path) + "/" + java_module_class_name(module) + extension
 
 /// Sanitizes a Capybara name into a Java identifier.
 private fun java_identifier(name: String): String =

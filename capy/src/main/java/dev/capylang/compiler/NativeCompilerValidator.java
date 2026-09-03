@@ -1074,6 +1074,7 @@ public final class NativeCompilerValidator {
         }
         if (!distinctSequenceListMismatch(function.returnType(), actual)
                 && !definiteNestedTypeMismatch(function.returnType(), actual)
+                && !definiteEffectMismatch(function.returnType(), actual, function.body())
                 && !returnTypeAssignable(context, module, actual, function.returnType())) {
             return;
         }
@@ -1231,6 +1232,17 @@ public final class NativeCompilerValidator {
             }
         }
         return false;
+    }
+
+    private boolean definiteEffectMismatch(TypeReference expected, TypeReference actual, Expression body) {
+        return unqualified(expected.name()).equals("Effect")
+                && !unqualified(actual.name()).equals("Effect")
+                && !effectfulBlock(body);
+    }
+
+    private boolean effectfulBlock(Expression expression) {
+        return expression instanceof BlockExpression block
+                && block.bindings().stream().anyMatch(binding -> binding.operator().equals("<-"));
     }
 
     private boolean definiteTypeArgumentMismatch(TypeReference expected, TypeReference actual) {
