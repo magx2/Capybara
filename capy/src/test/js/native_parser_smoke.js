@@ -71,6 +71,24 @@ assertEqual(parsed.modules[1].objectOriented.interfaces[0].name, 'Clock', 'objec
 assertEqual(parsed.modules[1].objectOriented.classes[0].name, 'FixedClock', 'object class');
 
 try {
+    parserImpl.parse([
+        rawModule(
+            'UI',
+            'paper-soccer/ui',
+            'interface UI {\n  def draw_field(field: Field): Unit\n}\n',
+            'OBJECT_ORIENTED'
+        ),
+    ]);
+    throw new Error('reserved keyword parser error was not raised');
+} catch (error) {
+    assertEqual(
+        error.message,
+        "paper-soccer/ui/UI.coo:2:17: ParserError: keyword 'field' cannot be used as an identifier; choose a different name",
+        'reserved keyword parser error'
+    );
+}
+
+try {
     const { compile } = require('dev/capylang/compiler/CapybaraCompiler.js');
     const { empty_native_provider_manifest } = require('dev/capylang/compiler/CompiledProgram.js');
     const emptyLibraries = { to_list: () => [] };

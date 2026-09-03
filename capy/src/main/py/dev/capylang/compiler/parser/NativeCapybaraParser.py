@@ -214,7 +214,20 @@ class SyntaxErrorCollector(ErrorListener):
         self.errors = []
 
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        self.errors.append((line, column, msg))
+        self.errors.append((line, column, improve_syntax_error_message(offendingSymbol, msg)))
+
+
+def improve_syntax_error_message(offending_symbol, message):
+    token = getattr(offending_symbol, "text", None)
+    if (
+        message.startswith("mismatched input")
+        and "expecting" in message
+        and "NAME" in message
+        and token is not None
+        and re.fullmatch(r"[a-z_][a-zA-Z0-9_]*", token)
+    ):
+        return f"keyword '{token}' cannot be used as an identifier; choose a different name"
+    return message
 
 
 def throw_if_invalid(module, errors):

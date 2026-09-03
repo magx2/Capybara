@@ -78,6 +78,26 @@ def main():
     assert_equal(parsed["modules"][1]["objectOriented"]["interfaces"][0]["name"], "Clock", "object interface")
     assert_equal(parsed["modules"][1]["objectOriented"]["classes"][0]["name"], "FixedClock", "object class")
 
+    try:
+        parser_impl.parse(
+            [
+                raw_module(
+                    "UI",
+                    "paper-soccer/ui",
+                    "interface UI {\n  def draw_field(field: Field): Unit\n}\n",
+                    "OBJECT_ORIENTED",
+                )
+            ]
+        )
+        raise AssertionError("reserved keyword parser error was not raised")
+    except ValueError as error:
+        assert_equal(
+            str(error),
+            "paper-soccer/ui/UI.coo:2:17: ParserError: "
+            "keyword 'field' cannot be used as an identifier; choose a different name",
+            "reserved keyword parser error",
+        )
+
     output = os.environ.get("PYTHON_NATIVE_PARSER_SMOKE_OUTPUT")
     if output:
         Path(output, "native-parser-smoke.txt").write_text("ok\n", encoding="utf-8")
