@@ -9,6 +9,7 @@ import dev.capylang.generator.Generator;
 import dev.capylang.generator.JavaGenerator;
 import dev.capylang.generator.JavaScriptGenerator;
 import dev.capylang.generator.PythonGenerator;
+import dev.capylang.generator.internal.GeneratedJavaGenerator;
 import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
@@ -22,6 +23,7 @@ import capy.lang.Either;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 
@@ -267,11 +269,11 @@ class CompilationTest {
 
         var generatedModules = JavaGenerator.javaGenerator(program).modules();
         var field = generatedModules.stream()
-                .filter(module -> module.relativePath().equals("paper-soccer/Field.java"))
+                .filter(module -> module.relativePath().equals("paper_soccer/Field.java"))
                 .findFirst()
                 .orElseThrow();
         var main = generatedModules.stream()
-                .filter(module -> module.relativePath().equals("paper-soccer/Main.java"))
+                .filter(module -> module.relativePath().equals("paper_soccer/Main.java"))
                 .findFirst()
                 .orElseThrow();
 
@@ -301,7 +303,7 @@ class CompilationTest {
         assertThat(compilation).isInstanceOf(Either.Left.class);
         var program = (CompiledProgram) ((Either.Left<?, ?>) compilation).value();
         var main = JavaGenerator.javaGenerator(program).modules().stream()
-                .filter(module -> module.relativePath().equals("paper-soccer/Main.java"))
+                .filter(module -> module.relativePath().equals("paper_soccer/Main.java"))
                 .findFirst()
                 .orElseThrow();
 
@@ -430,7 +432,22 @@ class CompilationTest {
                 .findFirst()
                 .orElseThrow()
                 .code())
-                .contains("package paper_soccer.shared_code;");
+                .contains("package paper_soccer.shared_code;")
+                .doesNotContain("paper-soccer", "shared-code");
+    }
+
+    @Test
+    void shouldSanitizeCrossModuleFunctionBindingOwners() throws ReflectiveOperationException {
+        var ownerMethod = Arrays.stream(GeneratedJavaGenerator.class.getDeclaredMethods())
+                .filter(method -> method.getName().startsWith("java_function_binding_class_name__"))
+                .findFirst()
+                .orElseThrow();
+        ownerMethod.setAccessible(true);
+
+        assertThat(ownerMethod.invoke(null, Map.of(
+                "modulePath", "paper-soccer/shared-code",
+                "moduleName", "Support"
+        ))).isEqualTo("paper_soccer.shared_code.Support");
     }
 
     @Test
