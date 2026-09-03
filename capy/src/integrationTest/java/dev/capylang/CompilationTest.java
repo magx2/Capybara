@@ -416,6 +416,24 @@ class CompilationTest {
     }
 
     @Test
+    void shouldSanitizeJavaPackageDirectories() {
+        var program = compileProgram(List.of(
+                rawModule("Main", "/paper-soccer/shared-code", "fun result(): int = 42")
+        ));
+
+        var generated = JavaGenerator.javaGenerator(program);
+        assertThat(generated.modules())
+                .extracting(module -> module.relativePath())
+                .contains("paper_soccer/shared_code/Main.java");
+        assertThat(generated.modules().stream()
+                .filter(module -> module.relativePath().equals("paper_soccer/shared_code/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("package paper_soccer.shared_code;");
+    }
+
+    @Test
     void shouldRejectAbsoluteImportWithoutRootModuleName() {
         assertThatThrownBy(() -> CapybaraCompiler.compile(
                 List.of(rawModule("main", "", """
@@ -1363,6 +1381,26 @@ class CompilationTest {
                         "if (__capybaraProgram instanceof capy.lang.Program.Failed __capybaraFailed)",
                         "java.lang.System.exit(__capybaraFailed.exit_code());"
                 );
+    }
+
+    @Test
+    void shouldRejectDirectProgramValueFromEffectMainDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Main", "/paper-soccer", """
+                        from /capy/lang/Effect import { Effect }
+                        from /capy/lang/Program import { Program, Success }
+
+                        fun main(args: List[String]): Effect[Program] =
+                            Success {}
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Function `main` returns `Success`, but declares `Effect[Program]`.");
     }
 
     @Test

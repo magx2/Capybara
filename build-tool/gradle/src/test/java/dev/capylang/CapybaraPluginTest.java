@@ -1,6 +1,7 @@
 package dev.capylang;
 
 import org.gradle.api.Project;
+import org.gradle.api.artifacts.FileCollectionDependency;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.plugins.JavaPlugin;
@@ -324,6 +325,17 @@ class CapybaraPluginTest {
         assertTrue(testSrcDirs.contains(project.file("build/generated/sources/capybara/java/check")));
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/test-capybara/java")));
         assertFalse(testSrcDirs.contains(project.file("src/main/java")));
+    }
+
+    @Test
+    void shouldAddCapybaraJavaRuntimeToConsumerClasspaths() throws Exception {
+        var project = newProject();
+        var runtimePath = CapybaraPlugin.capybaraRuntimePath().toFile();
+
+        assertTrue(project.getConfigurations().getByName("implementation").getDependencies().stream()
+                .filter(FileCollectionDependency.class::isInstance)
+                .map(FileCollectionDependency.class::cast)
+                .anyMatch(dependency -> dependency.getFiles().getFiles().contains(runtimePath)));
     }
 
     @Test
