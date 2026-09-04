@@ -2953,7 +2953,71 @@ public final class NativeCompilerValidator {
                     }
                 }
             }
+            for (var linkedModule : linkedModules) {
+                if (linkedObjectMethodExists(
+                        linkedModule,
+                        receiverName,
+                        methodName,
+                        arity,
+                        visitedTypes
+                )) {
+                    return true;
+                }
+            }
             return false;
+        }
+
+        private boolean linkedObjectMethodExists(
+                CompiledModule module,
+                String receiverName,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            var classMethod = "__capy_oo_method|" + receiverName + "|" + methodName;
+            var interfaceMethod = "__capy_oo_interface_method|" + receiverName + "|" + methodName;
+            if (module.functions().stream().anyMatch(function ->
+                    (function.name().equals(classMethod) || function.name().equals(interfaceMethod))
+                            && function.parameters().size() == arity)) {
+                return true;
+            }
+            return linkedObjectParentsContainMethod(
+                    module,
+                    receiverName,
+                    "__capy_oo_parent|",
+                    methodName,
+                    arity,
+                    visitedTypes
+            ) || linkedObjectParentsContainMethod(
+                    module,
+                    receiverName,
+                    "__capy_oo_interface_parent|",
+                    methodName,
+                    arity,
+                    visitedTypes
+            );
+        }
+
+        private boolean linkedObjectParentsContainMethod(
+                CompiledModule module,
+                String receiverName,
+                String parentPrefix,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            var prefix = parentPrefix + receiverName + "|";
+            return module.functions().stream()
+                    .filter(function -> function.name().startsWith(prefix))
+                    .map(function -> function.body())
+                    .filter(CompiledExpression.CompiledStringLiteral.class::isInstance)
+                    .map(CompiledExpression.CompiledStringLiteral.class::cast)
+                    .anyMatch(parent -> objectMethodExists(
+                            schemaTypeReference(parent.value()).name(),
+                            methodName,
+                            arity,
+                            visitedTypes
+                    ));
         }
 
         private boolean objectParentsContainMethod(
