@@ -116,6 +116,17 @@ public final class NativeCompilerValidator {
             )),
             Map.entry("Tuple", Map.of("get", Set.of(1)))
     );
+    private static final Set<String> COLLECTION_RECEIVER_TYPES = Set.of("List", "Set", "String", "Seq", "Dict");
+    private static final Set<String> COLLECTION_ONE_ARGUMENT_METHODS = Set.of(
+            "map", "filter", "`|-`", "reject", "flat_map", "any", "all"
+    );
+    private static final Set<String> COLLECTION_TWO_ARGUMENT_METHODS = Set.of("reduce", "reduce_left");
+    private static final Set<String> SEQ_ZERO_ARGUMENT_METHODS = Set.of("as_list", "first", "rest");
+    private static final Set<String> SET_ZERO_ARGUMENT_METHODS = Set.of("power_set", "℘");
+    private static final Set<String> SET_ONE_ARGUMENT_METHODS = Set.of(
+            "contains", "is_subset_of", "is_proper_subset_of", "is_superset_of", "is_proper_superset_of",
+            "union", "intersection", "difference", "symmetric_difference", "cartesian_product"
+    );
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
                     "map", Set.of(1),
@@ -805,6 +816,9 @@ public final class NativeCompilerValidator {
                 .contains(arity)) {
             return;
         }
+        if (intrinsicCollectionMethod(receiverName, methodName, arity)) {
+            return;
+        }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
         expectedArities.addAll(STANDARD_METHOD_ARITIES
                 .getOrDefault(receiverName, Map.of())
@@ -857,6 +871,29 @@ public final class NativeCompilerValidator {
         if (receiverTypes.isEmpty()) {
             return;
         }
+    }
+
+    private boolean intrinsicCollectionMethod(String receiverName, String methodName, int arity) {
+        if (!COLLECTION_RECEIVER_TYPES.contains(receiverName)) {
+            return false;
+        }
+        if ((COLLECTION_ONE_ARGUMENT_METHODS.contains(methodName) && arity == 1)
+                || (COLLECTION_TWO_ARGUMENT_METHODS.contains(methodName) && arity == 2)
+                || (methodName.equals("is_empty") && arity == 0)) {
+            return true;
+        }
+        if ((receiverName.equals("List") || receiverName.equals("Seq"))
+                && methodName.equals("fold") && arity == 1) {
+            return true;
+        }
+        if (receiverName.equals("Seq")
+                && SEQ_ZERO_ARGUMENT_METHODS.contains(methodName)
+                && arity == 0) {
+            return true;
+        }
+        return receiverName.equals("Set")
+                && ((SET_ZERO_ARGUMENT_METHODS.contains(methodName) && arity == 0)
+                || (SET_ONE_ARGUMENT_METHODS.contains(methodName) && arity == 1));
     }
 
     private Optional<String> wrappedExtensionReceiverType(
