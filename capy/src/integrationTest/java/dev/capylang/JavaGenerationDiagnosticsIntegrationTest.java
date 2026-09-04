@@ -58,6 +58,36 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void renamesModuleClassWhenTopLevelInterfaceHasTheSourceFileName() throws Exception {
+        writeSource("paper-soccer/ui/UI.coo", """
+                interface UI {
+                    def draw_field(game_field: String): String
+                }
+
+                class ConsoleUI: UI {
+                    override def draw_field(game_field: String): String = game_field
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var ui = outputDir().resolve("paper_soccer/ui/UI.java");
+        var uiModule = outputDir().resolve("paper_soccer/ui/UI_.java");
+        assertThat(ui)
+                .exists()
+                .content()
+                .contains("public interface UI {")
+                .doesNotContain("public final class UI");
+        assertThat(uiModule)
+                .exists()
+                .content()
+                .contains("public final class UI_")
+                .contains("class ConsoleUI implements paper_soccer.ui.UI")
+                .doesNotContain("interface UI {");
+        assertJavaCompiles(ui, uiModule);
+    }
+
+    @Test
     void generatesTypedLambdasWithUserDefinedAndGenericTypesForEveryBackend() throws Exception {
         var source = writeSource("sample/TypedLambdaModels.cfun", """
                 data User { name: String }
