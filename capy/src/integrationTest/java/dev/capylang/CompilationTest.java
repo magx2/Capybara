@@ -112,6 +112,28 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferObjectMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(
+                rawModule("Foo", "", """
+                        class Foo {
+                            def foo(value: int): String = "object"
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                rawModule("FooExtensions", "", """
+                        from /Foo import { Foo }
+
+                        fun Foo.foo(): String = "extension"
+
+                        fun call(foo: Foo): String = foo.foo(5)
+                        """)
+        ));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldAllowExtensionMethodCalledOnItsDeclaredReceiver() {
         compileProgram(extensionMethodReceiverModules("""
                 fun valid(value: Kaprekar): Kaprekar = value.diff()
