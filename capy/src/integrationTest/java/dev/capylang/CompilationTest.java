@@ -170,6 +170,46 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferNativeMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("StringExtensions", "", """
+                fun String.get(): int = 0
+
+                fun first(value: String): Option[char] = value.get(0)
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldNotUseUnrelatedObjectMethodToSuppressExtensionArityError() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("ObjectFoo", "", """
+                                class Foo {
+                                    def bar(value: int): String = "object"
+                                }
+                                """, SourceKind.OBJECT_ORIENTED),
+                        rawModule("FunctionalFoo", "", """
+                                data Foo {}
+
+                                fun Foo.bar(): String = "extension"
+
+                                fun call(foo: Foo): String = foo.bar(1)
+                                """)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `bar` on receiver type `Foo` expects 0 arguments, but received 1.");
+    }
+
+    @Test
     void shouldAllowExtensionMethodCalledOnItsDeclaredReceiver() {
         compileProgram(extensionMethodReceiverModules("""
                 fun valid(value: Kaprekar): Kaprekar = value.diff()

@@ -106,6 +106,16 @@ public final class NativeCompilerValidator {
     private static final Map<String, Set<Integer>> BUILTIN_METHOD_ARITIES = Map.of(
             "size", Set.of(0)
     );
+    private static final Map<String, Map<String, Set<Integer>>> NATIVE_METHOD_ARITIES = Map.ofEntries(
+            Map.entry("String", Map.of("get", Set.of(1, 2))),
+            Map.entry("List", Map.of("get", Set.of(1, 2))),
+            Map.entry("Dict", Map.of(
+                    "entries", Set.of(0),
+                    "contains_key", Set.of(1),
+                    "get", Set.of(1)
+            )),
+            Map.entry("Tuple", Map.of("get", Set.of(1)))
+    );
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
                     "map", Set.of(1),
@@ -783,10 +793,16 @@ public final class NativeCompilerValidator {
         if (receiverTypes.contains(receiverName)) {
             return;
         }
-        if (context.objectMethodExists(receiverName, methodName, arity)) {
+        if (context.objectMethodExists(module, receiverName, methodName, arity)) {
             return;
         }
         if (BUILTIN_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
+            return;
+        }
+        if (NATIVE_METHOD_ARITIES
+                .getOrDefault(receiverName, Map.of())
+                .getOrDefault(methodName, Set.of())
+                .contains(arity)) {
             return;
         }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
@@ -2919,11 +2935,17 @@ public final class NativeCompilerValidator {
             return false;
         }
 
-        private boolean objectMethodExists(String receiverType, String methodName, int arity) {
-            return objectMethodExists(receiverType, methodName, arity, new HashSet<>());
+        private boolean objectMethodExists(
+                ParsedModule module,
+                String receiverType,
+                String methodName,
+                int arity
+        ) {
+            return objectMethodExists(module, receiverType, methodName, arity, new HashSet<>());
         }
 
         private boolean objectMethodExists(
+                ParsedModule module,
                 String receiverType,
                 String methodName,
                 int arity,
@@ -2933,44 +2955,84 @@ public final class NativeCompilerValidator {
             if (!visitedTypes.add(receiverName)) {
                 return false;
             }
-            for (var parsedModule : typesByModule.keySet()) {
-                for (var objectClass : parsedModule.objectOriented().classes()) {
-                    if (objectClass.name().equals(receiverName)
-                            && (objectMethodsContain(objectClass.methods(), methodName, arity)
-                            || objectParentsContainMethod(
-                                    objectClass.parents(),
-                                    methodName,
-                                    arity,
-                                    visitedTypes
-                            ))) {
-                        return true;
-                    }
-                }
-                for (var objectInterface : parsedModule.objectOriented().interfaces()) {
-                    if (objectInterface.name().equals(receiverName)
-                            && (objectMethodsContain(objectInterface.methods(), methodName, arity)
-                            || objectParentsContainMethod(
-                                    objectInterface.parents(),
-                                    methodName,
-                                    arity,
-                                    visitedTypes
-                            ))) {
-                        return true;
-                    }
-                }
+            if (moduleHasType(module, receiverName)) {
+                return parsedObjectMethodExists(module, receiverName, methodName, arity, visitedTypes);
             }
-            for (var linkedModule : linkedModules) {
-                if (linkedObjectMethodExists(
-                        linkedModule,
-                        receiverName,
-                        methodName,
-                        arity,
-                        visitedTypes
-                )) {
+            for (var declaration : module.imports()) {
+                if (!importExposes(declaration, receiverName)) {
+                    continue;
+                }
+                var parsedOwner = parsedModule(declaration.modulePath());
+                if (parsedOwner != null && moduleHasType(parsedOwner, receiverName)
+                        && parsedObjectMethodExists(
+                                parsedOwner,
+                                receiverName,
+                                methodName,
+                                arity,
+                                visitedTypes
+                        )) {
+                    return true;
+                }
+                var linkedOwner = linkedModule(declaration.modulePath());
+                if (linkedOwner != null && linkedObjectTypeExists(linkedOwner, receiverName)
+                        && linkedObjectMethodExists(
+                                linkedOwner,
+                                receiverName,
+                                methodName,
+                                arity,
+                                visitedTypes
+                        )) {
                     return true;
                 }
             }
             return false;
+        }
+
+        private boolean parsedObjectMethodExists(
+                ParsedModule module,
+                String receiverName,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            for (var objectClass : module.objectOriented().classes()) {
+                if (objectClass.name().equals(receiverName)
+                        && (objectMethodsContain(objectClass.methods(), methodName, arity)
+                        || objectParentsContainMethod(
+                                module,
+                                objectClass.parents(),
+                                methodName,
+                                arity,
+                                visitedTypes
+                        ))) {
+                    return true;
+                }
+            }
+            for (var objectInterface : module.objectOriented().interfaces()) {
+                if (objectInterface.name().equals(receiverName)
+                        && (objectMethodsContain(objectInterface.methods(), methodName, arity)
+                        || objectParentsContainMethod(
+                                module,
+                                objectInterface.parents(),
+                                methodName,
+                                arity,
+                                visitedTypes
+                        ))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean importExposes(ImportDeclaration declaration, String name) {
+            return !declaration.qualified()
+                    && !declaration.excludedNames().contains(name)
+                    && (declaration.wildcard() || declaration.importedNames().contains(name));
+        }
+
+        private boolean linkedObjectTypeExists(CompiledModule module, String name) {
+            return hasLinkedSchema(module, "__capy_oo_class|" + name)
+                    || hasLinkedSchema(module, "__capy_oo_interface|" + name);
         }
 
         private boolean linkedObjectMethodExists(
@@ -3018,7 +3080,7 @@ public final class NativeCompilerValidator {
                     .map(function -> function.body())
                     .filter(CompiledExpression.CompiledStringLiteral.class::isInstance)
                     .map(CompiledExpression.CompiledStringLiteral.class::cast)
-                    .anyMatch(parent -> objectMethodExists(
+                    .anyMatch(parent -> linkedObjectMethodExists(
                             schemaTypeReference(parent.value()).name(),
                             methodName,
                             arity,
@@ -3026,14 +3088,36 @@ public final class NativeCompilerValidator {
                     ));
         }
 
+        private boolean linkedObjectMethodExists(
+                String receiverType,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            var receiverName = unqualified(receiverType);
+            if (!visitedTypes.add(receiverName)) {
+                return false;
+            }
+            return linkedModules.stream()
+                    .filter(module -> linkedObjectTypeExists(module, receiverName))
+                    .anyMatch(module -> linkedObjectMethodExists(
+                            module,
+                            receiverName,
+                            methodName,
+                            arity,
+                            visitedTypes
+                    ));
+        }
+
         private boolean objectParentsContainMethod(
+                ParsedModule module,
                 List<TypeReference> parents,
                 String methodName,
                 int arity,
                 Set<String> visitedTypes
         ) {
             return parents.stream().anyMatch(parent ->
-                    objectMethodExists(parent.name(), methodName, arity, visitedTypes));
+                    objectMethodExists(module, parent.name(), methodName, arity, visitedTypes));
         }
 
         private boolean objectMethodsContain(List<ObjectOrientedMethod> methods, String methodName, int arity) {
