@@ -43,8 +43,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(compileGenerateStderr("java")).isEmpty();
 
-        var ui = outputDir().resolve("paper-soccer/ui/UI.java");
-        var uiContract = outputDir().resolve("paper-soccer/ui/UIContract.java");
+        var ui = outputDir().resolve("paper_soccer/ui/UI.java");
+        var uiContract = outputDir().resolve("paper_soccer/ui/UIContract.java");
         assertThat(ui)
                 .exists()
                 .content()

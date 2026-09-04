@@ -337,13 +337,13 @@ class CompilationTest {
 
         var generated = JavaGenerator.javaGenerator(legacyProgram);
         var contract = generated.modules().stream()
-                .filter(generatedModule -> generatedModule.relativePath().equals("paper-soccer/ui/UIContract.java"))
+                .filter(generatedModule -> generatedModule.relativePath().equals("paper_soccer/ui/UIContract.java"))
                 .findFirst()
                 .orElseThrow();
 
         assertThat(generated.modules())
                 .extracting(generatedModule -> generatedModule.relativePath())
-                .contains("paper-soccer/ui/UI.java");
+                .contains("paper_soccer/ui/UI.java");
         assertThat(contract.code())
                 .contains("class ConsoleUI implements paper_soccer.ui.UI")
                 .doesNotContain("UIContract.UI");
