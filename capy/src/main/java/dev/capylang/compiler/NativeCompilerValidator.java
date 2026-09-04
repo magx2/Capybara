@@ -395,14 +395,14 @@ public final class NativeCompilerValidator {
                 parameterTypes(function),
                 errors
         );
+        validateJavaBackendVariables(
+                context,
+                module,
+                function.body(),
+                functionVariableNames(function),
+                errors
+        );
         if (javaBackendSelected()) {
-            validateJavaBackendVariables(
-                    context,
-                    module,
-                    function.body(),
-                    functionVariableNames(function),
-                    errors
-            );
             validateJavaBackendExpression(
                     module,
                     function.body(),
@@ -520,8 +520,17 @@ public final class NativeCompilerValidator {
             });
             case FieldAccessExpression access ->
                     validateJavaBackendVariables(context, module, access.receiver(), variables, errors);
-            case FunctionCallExpression call -> call.arguments().forEach(argument ->
-                    validateJavaBackendVariables(context, module, argument, variables, errors));
+            case FunctionCallExpression call -> {
+                if (!knownJavaBackendVariable(context, module, call.name(), variables)) {
+                    errors.add(error(
+                            module,
+                            call.location(),
+                            "Unresolved function call `" + call.name() + "`."
+                    ));
+                }
+                call.arguments().forEach(argument ->
+                        validateJavaBackendVariables(context, module, argument, variables, errors));
+            }
             case IfExpression ifExpression -> {
                 validateJavaBackendVariables(context, module, ifExpression.condition(), variables, errors);
                 validateJavaBackendVariables(context, module, ifExpression.thenBranch(), variables, errors);
@@ -618,6 +627,8 @@ public final class NativeCompilerValidator {
     ) {
         return variables.contains(name)
                 || knownFunction(context, module, name)
+                || context.symbolExists(parsedModulePath(module), name)
+                || context.hasConstructor(module, name)
                 || name.contains(".")
                 || name.contains("/");
     }
@@ -673,6 +684,7 @@ public final class NativeCompilerValidator {
             case BinaryExpression binary -> {
                 validatePipeRightOperand(context, module, binary, types, errors);
                 validateSequenceConcatOperands(context, module, binary, types, errors);
+                validateCollectionFlatMapMapper(context, module, binary, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, binary.left(), types, errors);
                 if (PIPE_OPERATORS.contains(binary.operator())
                         && binary.right() instanceof LambdaExpression mapper) {
@@ -751,6 +763,7 @@ public final class NativeCompilerValidator {
             case MethodCallExpression call -> {
                 validateKnownExtensionMethodReceiver(context, module, call, types, errors);
                 validateResultFlatMapMapper(context, module, call, types, errors);
+                validateCallableMethodArgument(context, module, call, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, call.receiver(), types, errors);
                 var receiverType = validationExpressionType(context, module, call.receiver(), types);
                 var valueType = receiverType != null && receiverType.arguments().size() == 1
@@ -771,6 +784,7 @@ public final class NativeCompilerValidator {
                 }
             }
             case ReduceExpression reduce -> {
+                validateReduceCallableArgument(context, module, reduce, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, reduce.receiver(), types, errors);
                 validateNestedLambdaFunctionArguments(context, module, reduce.initial(), types, errors);
                 var reduceTypes = new LinkedHashMap<>(types);
@@ -1522,6 +1536,122 @@ public final class NativeCompilerValidator {
         ));
     }
 
+    private void validateCallableMethodArgument(
+            Context context,
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!Set.of("map", "flat_map", "filter", "recover").contains(call.name())
+                || call.arguments().size() != 1) {
+            return;
+        }
+        var receiverType = validationExpressionType(context, module, call.receiver(), types);
+        if (receiverType == null
+                || !STANDARD_METHODS_BY_RECEIVER
+                .getOrDefault(unqualified(receiverType.name()), Set.of())
+                .contains(call.name())) {
+            return;
+        }
+        var mapper = call.arguments().getFirst();
+        if (mapper instanceof LambdaExpression || mapper instanceof FunctionReferenceExpression) {
+            return;
+        }
+        var mapperType = validationExpressionType(context, module, mapper, types);
+        if (mapperType != null && functionTypeName(mapperType.name())) {
+            return;
+        }
+        var subject = mapper instanceof VariableExpression variable
+                ? "variable `" + variable.name() + "`"
+                : "the supplied expression";
+        errors.add(error(
+                module,
+                call.location(),
+                "Method `" + call.name() + "` requires a callable mapper; " + subject
+                        + " is not callable in this context."
+        ));
+    }
+
+    private void validateCollectionFlatMapMapper(
+            Context context,
+            ParsedModule module,
+            BinaryExpression binary,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!binary.operator().equals("|*") || !(binary.right() instanceof LambdaExpression mapper)) {
+            return;
+        }
+        var receiverType = validationExpressionType(context, module, binary.left(), types);
+        var elementType = validationIterableElementType(receiverType);
+        if (receiverType == null || elementType == null
+                || !Set.of("List", "Seq", "Set").contains(unqualified(receiverType.name()))) {
+            return;
+        }
+        if (mapper.body() instanceof MethodCallExpression call
+                && call.name().equals("map")
+                && call.receiver() instanceof VariableExpression variable
+                && !mapper.parameters().isEmpty()
+                && variable.name().equals(decodedLambdaParameterName(mapper.parameters().getFirst()))
+                && Set.of("Result", "Option", "Effect", "Async").contains(unqualified(elementType.name()))) {
+            var wrapper = unqualified(elementType.name());
+            errors.add(error(
+                    module,
+                    binary.location(),
+                    "Collection operator `|*` requires its mapper to return a collection; `"
+                            + wrapper + ".map` returns `" + wrapper + "`."
+            ));
+            return;
+        }
+        var mapperType = validationExpressionType(
+                context,
+                module,
+                mapper.body(),
+                validationLambdaTypes(mapper, elementType, types)
+        );
+        if (mapperType == null
+                || Set.of("List", "Seq", "Set").contains(unqualified(mapperType.name()))) {
+            return;
+        }
+        errors.add(error(
+                module,
+                binary.location(),
+                "Collection operator `|*` requires its mapper to return a collection; `"
+                        + displayType(mapperType) + "` is not a collection."
+        ));
+    }
+
+    private void validateReduceCallableArgument(
+            Context context,
+            ParsedModule module,
+            ReduceExpression reduce,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!(reduce.body() instanceof MethodCallExpression call)
+                || !Set.of("map", "flat_map", "filter", "recover").contains(call.name())
+                || !(call.receiver() instanceof VariableExpression receiver)
+                || !receiver.name().equals(reduce.accumulatorName())
+                || call.arguments().size() != 1
+                || !(call.arguments().getFirst() instanceof VariableExpression variable)
+                || !variable.name().equals(reduce.valueName())) {
+            return;
+        }
+        var valueType = validationIterableElementType(
+                validationExpressionType(context, module, reduce.receiver(), types)
+        );
+        if (valueType != null && functionTypeName(valueType.name())) {
+            return;
+        }
+        errors.add(error(
+                module,
+                call.location(),
+                "Method `" + call.name() + "` requires a callable mapper; variable `"
+                        + variable.name() + "` is not callable in this context."
+        ));
+    }
+
     private boolean resultCompatibleType(TypeReference type) {
         return switch (unqualified(type.name())) {
             case "Result", "Success", "Error" -> true;
@@ -1771,7 +1901,7 @@ public final class NativeCompilerValidator {
             return null;
         }
         var receiverName = unqualified(receiverType.name());
-        if ((receiverName.equals("List") || receiverName.equals("Seq"))
+        if ((receiverName.equals("List") || receiverName.equals("Seq") || receiverName.equals("Set"))
                 && receiverType.arguments().size() == 1) {
             return receiverType.arguments().getFirst();
         }
@@ -2490,6 +2620,16 @@ public final class NativeCompilerValidator {
 
     private void validateExpression(Context context, ParsedModule module, Expression expression, List<CompilerError> errors) {
         switch (expression) {
+            case UnsupportedExpression unsupported -> {
+                if (!unsupported.source().equals("<native>")
+                        && (unsupported.location().line() != 0 || unsupported.location().column() != 0)) {
+                    errors.add(error(
+                            module,
+                            unsupported.location(),
+                            "Unsupported functional construct: `" + unsupported.source() + "`."
+                    ));
+                }
+            }
             case BinaryExpression binary -> {
                 validateExpression(context, module, binary.left(), errors);
                 validateExpression(context, module, binary.right(), errors);

@@ -2036,14 +2036,18 @@ class CompilationTest {
     }
 
     @Test
-    void shouldFailJavaGenerationInsteadOfEmittingUnsupportedFunctionStubs() {
+    void shouldRejectInvalidCallBeforeJavaGeneration() {
         var source = "fun broken(): int = missing()";
-        var program = compileProgram(List.of(rawModule("Broken", "/sample/app", source, SourceKind.FUNCTIONAL)));
 
-        assertThatThrownBy(() -> JavaGenerator.javaGenerator(program))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/app/Broken.cfun` at 1:20 in function `broken`: "
-                        + "unresolved function call `missing`. No Java source was written for this module.");
+        assertThatThrownBy(() -> compileProgram(List.of(rawModule(
+                "Broken",
+                "/sample/app",
+                source,
+                SourceKind.FUNCTIONAL
+        ))))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("Unresolved function call `missing`.")
+                .hasMessageNotContaining("Unsupported CFUN expression at");
     }
 
     @Test

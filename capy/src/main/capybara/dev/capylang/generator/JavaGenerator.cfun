@@ -1890,14 +1890,10 @@ private fun java_function_body(function: CompiledFunction, returnType: CompiledT
         let effectBody = effect_block_body(block, env, returnType, module, allModules, "        ")
         if !effectBody.is_empty()
         then effectBody
-        else if !expression_emittable_as(function.body, returnType, env, module, allModules)
-        then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
         else block_statements(block.bindings, env, returnType, module, allModules, "        ")
             + "        return " + block_result_code(block, env, returnType, module, allModules) + ";" + newline()
     case _ ->
-        if !expression_emittable_as(function.body, returnType, env, module, allModules)
-        then "        throw new UnsupportedOperationException(\"Unsupported CFUN expression at " + function.location.line + ":" + function.location.column + "\");" + newline()
-        else "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
+        "        return " + expression_code(function.body, env, returnType, module, allModules) + ";" + newline()
 
 /// Checks whether a function is a Clock native runtime wrapper.
 private fun java_clock_native_function(function: CompiledFunction, module: CompiledModule): bool =
