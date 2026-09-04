@@ -146,6 +146,49 @@ public final class NativeCompilerValidator {
             "contains", "is_subset_of", "is_proper_subset_of", "is_superset_of", "is_proper_superset_of",
             "union", "intersection", "difference", "symmetric_difference", "cartesian_product"
     );
+    private static final Map<String, Set<Integer>> ASSERT_METHOD_ARITIES = Map.ofEntries(
+            Map.entry("is_equal_to", Set.of(1, 2, 3)),
+            Map.entry("is_true", Set.of(0)),
+            Map.entry("is_false", Set.of(0)),
+            Map.entry("is_greater_than", Set.of(1)),
+            Map.entry("is_less_than", Set.of(1)),
+            Map.entry("is_greater_or_equals_than", Set.of(1)),
+            Map.entry("is_less_or_equals_than", Set.of(1)),
+            Map.entry("is_zero", Set.of(0)),
+            Map.entry("is_one", Set.of(0)),
+            Map.entry("is_between", Set.of(2)),
+            Map.entry("starts_with", Set.of(1)),
+            Map.entry("does_not_start_with", Set.of(1)),
+            Map.entry("contains", Set.of(1)),
+            Map.entry("has_size", Set.of(1)),
+            Map.entry("is_empty", Set.of(0)),
+            Map.entry("succeeds", Set.of(0, 1)),
+            Map.entry("fails", Set.of(0, 1)),
+            Map.entry("has_day", Set.of(1)),
+            Map.entry("has_month", Set.of(1)),
+            Map.entry("has_year", Set.of(1)),
+            Map.entry("has_hour", Set.of(1)),
+            Map.entry("has_minute", Set.of(1)),
+            Map.entry("has_second", Set.of(1)),
+            Map.entry("has_offset_minutes", Set.of(1)),
+            Map.entry("has_date", Set.of(1, 3)),
+            Map.entry("has_time", Set.of(1, 3)),
+            Map.entry("has_years", Set.of(1)),
+            Map.entry("has_months", Set.of(1)),
+            Map.entry("has_days", Set.of(1)),
+            Map.entry("has_hours", Set.of(1)),
+            Map.entry("has_minutes", Set.of(1)),
+            Map.entry("has_seconds", Set.of(1)),
+            Map.entry("has_weeks", Set.of(1)),
+            Map.entry("has_start", Set.of(1)),
+            Map.entry("has_end", Set.of(1)),
+            Map.entry("has_duration", Set.of(1)),
+            Map.entry("fails_with_kind", Set.of(1, 2)),
+            Map.entry("does_not_contain", Set.of(1)),
+            Map.entry("contains_key", Set.of(1)),
+            Map.entry("does_not_contain_key", Set.of(1)),
+            Map.entry("contains_value", Set.of(1))
+    );
     private static final Set<String> NUMERIC_TYPES = Set.of("byte", "int", "long", "float", "double");
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
@@ -837,6 +880,10 @@ public final class NativeCompilerValidator {
             return;
         }
         if (intrinsicCollectionMethod(receiverName, methodName, arity)) {
+            return;
+        }
+        if (receiverName.equals("Assert")
+                && ASSERT_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
             return;
         }
         if (arity == 0
