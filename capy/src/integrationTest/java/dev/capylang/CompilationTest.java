@@ -56,6 +56,22 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectStandardMethodCallWithWrongArity() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("ResultArity", "", """
+                        fun invalid(result: Result[int]): Result[int] = result.map()
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `map` on receiver type `Result[int]` expects 1 argument, but received 0.");
+    }
+
+    @Test
     void shouldRejectExtensionMethodCalledOnWrappedReceiverDuringCompilation() {
         var result = CapybaraCompiler.compile(
                 extensionMethodReceiverModules("""
@@ -64,6 +80,25 @@ class CompilationTest {
                         private fun test(name: String, body: () => any): int = 0
 
                         fun broken(): int = test('Kaprekar.diff()', () => K1234.diff())
+                        """),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `diff` requires receiver type `Kaprekar`, but the receiver has type "
+                        + "`Result[Kaprekar]`; extract a `Kaprekar` value before calling the method.");
+    }
+
+    @Test
+    void shouldRejectWrongArityExtensionMethodCalledOnWrappedReceiverDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                extensionMethodReceiverModules("""
+                        const K1234: Result[Kaprekar] = Success { Kaprekar { 1234 } }
+
+                        fun broken(): Kaprekar = K1234.diff(1)
                         """),
                 new LinkedHashSet<>(),
                 emptyNativeProviders(),
