@@ -868,7 +868,7 @@ public final class NativeCompilerValidator {
         if (receiverTypes.contains(receiverName)) {
             return;
         }
-        if (context.objectMethodExists(module, receiverName, methodName, arity)) {
+        if (context.objectMethodExists(module, receiverType.name(), methodName, arity)) {
             return;
         }
         if (methodName.equals("size") && arity == 0 && SIZE_RECEIVER_TYPES.contains(receiverName)) {
@@ -3093,14 +3093,15 @@ public final class NativeCompilerValidator {
                 Set<String> visitedTypes
         ) {
             var receiverName = unqualified(receiverType);
-            if (!visitedTypes.add(receiverName)) {
+            if (!visitedTypes.add(receiverType)) {
                 return false;
             }
-            if (moduleHasType(module, receiverName)) {
+            var qualifiedReceiver = receiverType.lastIndexOf('.') >= 0;
+            if (!qualifiedReceiver && moduleHasType(module, receiverName)) {
                 return parsedObjectMethodExists(module, receiverName, methodName, arity, visitedTypes);
             }
             for (var declaration : module.imports()) {
-                if (!importExposes(declaration, receiverName)) {
+                if (!importExposesObjectReceiver(declaration, receiverType, receiverName)) {
                     continue;
                 }
                 var parsedOwner = parsedModule(declaration.modulePath());
@@ -3127,6 +3128,20 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private boolean importExposesObjectReceiver(
+                ImportDeclaration declaration,
+                String receiverType,
+                String receiverName
+        ) {
+            var separator = receiverType.lastIndexOf('.');
+            if (separator < 0) {
+                return importExposes(declaration, receiverName);
+            }
+            var qualifier = unqualified(receiverType.substring(0, separator));
+            return declaration.qualified()
+                    && unqualified(declaration.modulePath()).equals(qualifier);
         }
 
         private boolean parsedObjectMethodExists(
