@@ -183,6 +183,19 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferCollectionMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("ListExtensions", "", """
+                fun List[T].map(): List[T] = []
+
+                fun doubled(values: List[int]): List[int] = values.map(value => value * 2)
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldNotUseUnrelatedObjectMethodToSuppressExtensionArityError() {
         var result = CapybaraCompiler.compile(
                 List.of(
