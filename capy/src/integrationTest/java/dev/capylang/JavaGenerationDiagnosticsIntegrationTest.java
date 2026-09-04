@@ -66,6 +66,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
                 class ConsoleUI: UI {
                     override def draw_field(game_field: String): String = game_field
+
+                    def copy(): ConsoleUI = this
                 }
                 """);
 
@@ -83,6 +85,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .content()
                 .contains("public final class UI_")
                 .contains("class ConsoleUI implements paper_soccer.ui.UI")
+                .contains("paper_soccer.ui.UI_.ConsoleUI copy()")
                 .doesNotContain("interface UI {");
         assertJavaCompiles(ui, uiModule);
     }
