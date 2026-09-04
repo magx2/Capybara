@@ -71,6 +71,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class NativeCompilerValidator {
@@ -102,11 +103,40 @@ public final class NativeCompilerValidator {
             "Effect", "Program", "Assert", "TestFile", "TestCase", "Seq", "Regex", "Match",
             "Path", "Ordering", "size", "index"
     );
+    private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
+            Map.entry("Result", Map.of(
+                    "map", Set.of(1),
+                    "flat_map", Set.of(1),
+                    "reduce", Set.of(2),
+                    "reduce_left", Set.of(2),
+                    "recover", Set.of(1),
+                    "or_else", Set.of(1),
+                    "or", Set.of(1)
+            )),
+            Map.entry("Option", Map.of(
+                    "map", Set.of(1),
+                    "filter", Set.of(1),
+                    "flat_map", Set.of(1),
+                    "reduce", Set.of(2),
+                    "or_else", Set.of(1),
+                    "or", Set.of(1)
+            )),
+            Map.entry("Effect", Map.of(
+                    "map", Set.of(1),
+                    "flat_map", Set.of(1),
+                    "start", Set.of(0)
+            )),
+            Map.entry("Async", Map.of(
+                    "join", Set.of(0),
+                    "map", Set.of(1),
+                    "flat_map", Set.of(1)
+            ))
+    );
     private static final Map<String, Set<String>> STANDARD_METHODS_BY_RECEIVER = Map.ofEntries(
-            Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "recover", "or_else", "or")),
-            Map.entry("Option", Set.of("map", "filter", "flat_map", "reduce", "or_else", "or")),
-            Map.entry("Effect", Set.of("map", "flat_map", "start")),
-            Map.entry("Async", Set.of("join", "map", "flat_map"))
+            Map.entry("Result", STANDARD_METHOD_ARITIES.get("Result").keySet()),
+            Map.entry("Option", STANDARD_METHOD_ARITIES.get("Option").keySet()),
+            Map.entry("Effect", STANDARD_METHOD_ARITIES.get("Effect").keySet()),
+            Map.entry("Async", STANDARD_METHOD_ARITIES.get("Async").keySet())
     );
 
     public List<CompilerError> validate(
@@ -750,11 +780,13 @@ public final class NativeCompilerValidator {
         if (receiverTypes.contains(receiverName)) {
             return;
         }
-        var standardMethods = STANDARD_METHODS_BY_RECEIVER.get(receiverName);
-        if (standardMethods != null && standardMethods.contains(methodName)) {
+        var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
+        expectedArities.addAll(STANDARD_METHOD_ARITIES
+                .getOrDefault(receiverName, Map.of())
+                .getOrDefault(methodName, Set.of()));
+        if (expectedArities.contains(arity)) {
             return;
         }
-        var expectedArities = context.extensionMethodArities(module, receiverName, methodName);
         if (!expectedArities.isEmpty()) {
             var expected = String.join(" or ", expectedArities.stream().map(Object::toString).toList());
             var arguments = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
@@ -765,6 +797,26 @@ public final class NativeCompilerValidator {
                     location,
                     "Method `" + methodName + "` on receiver type `" + displayType(receiverType)
                             + "` expects " + expected + arguments + ", but received " + arity + "."
+            ));
+            return;
+        }
+        var standardMethods = STANDARD_METHODS_BY_RECEIVER.get(receiverName);
+        if (standardMethods != null && standardMethods.contains(methodName)) {
+            return;
+        }
+        var methodReceiverTypes = context.extensionMethodReceiverTypes(module, methodName);
+        var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, methodReceiverTypes);
+        if (wrappedReceiverType.isPresent()) {
+            var wrappedName = wrappedReceiverType.orElseThrow();
+            var expectedTypes = receiverTypes.contains(wrappedName)
+                    ? String.join("`, `", receiverTypes)
+                    : wrappedName;
+            var hint = "; extract a `" + wrappedName + "` value before calling the method";
+            errors.add(error(
+                    module,
+                    location,
+                    "Method `" + methodName + "` requires receiver type `" + expectedTypes
+                            + "`, but the receiver has type `" + displayType(receiverType) + "`" + hint + "."
             ));
             return;
         }
@@ -780,20 +832,6 @@ public final class NativeCompilerValidator {
         if (receiverTypes.isEmpty()) {
             return;
         }
-        var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, receiverTypes);
-        if (wrappedReceiverType.isEmpty()) {
-            return;
-        }
-        var expectedTypes = String.join("`, `", receiverTypes);
-        var hint = wrappedReceiverType
-                .map(type -> "; extract a `" + type + "` value before calling the method")
-                .orElse("");
-        errors.add(error(
-                module,
-                location,
-                "Method `" + methodName + "` requires receiver type `" + expectedTypes
-                        + "`, but the receiver has type `" + displayType(receiverType) + "`" + hint + "."
-        ));
     }
 
     private Optional<String> wrappedExtensionReceiverType(
@@ -3052,6 +3090,10 @@ public final class NativeCompilerValidator {
             return receiverTypes;
         }
 
+        private Set<String> extensionMethodReceiverTypes(ParsedModule module, String methodName) {
+            return extensionMethodReceiverTypes(module, methodName, -1);
+        }
+
         private Set<Integer> extensionMethodArities(
                 ParsedModule module,
                 String receiverType,
@@ -3199,7 +3241,7 @@ public final class NativeCompilerValidator {
         ) {
             for (var definition : module.definitions()) {
                 if (!(definition instanceof FunctionDefinition function)
-                        || function.function().parameters().size() != arity
+                        || (arity >= 0 && function.function().parameters().size() != arity)
                         || (declaration != null && function.function().visibility().equals("private"))) {
                     continue;
                 }
@@ -3222,7 +3264,8 @@ public final class NativeCompilerValidator {
                 Set<String> receiverTypes
         ) {
             for (var function : module.functions()) {
-                if (function.parameters().size() != arity || function.visibility().equals("private")) {
+                if ((arity >= 0 && function.parameters().size() != arity)
+                        || function.visibility().equals("private")) {
                     continue;
                 }
                 var receiverType = extensionMethodReceiverType(function.name(), methodName);
