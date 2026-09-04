@@ -764,6 +764,19 @@ public final class NativeCompilerValidator {
             return;
         }
         if (receiverTypes.isEmpty()) {
+            var expectedArities = context.extensionMethodArities(module, receiverName, methodName);
+            if (!expectedArities.isEmpty()) {
+                var expected = String.join(" or ", expectedArities.stream().map(Object::toString).toList());
+                var arguments = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
+                        ? " argument"
+                        : " arguments";
+                errors.add(error(
+                        module,
+                        location,
+                        "Method `" + methodName + "` on receiver type `" + displayType(receiverType)
+                                + "` expects " + expected + arguments + ", but received " + arity + "."
+                ));
+            }
             return;
         }
         var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, receiverTypes);
@@ -3038,6 +3051,41 @@ public final class NativeCompilerValidator {
             return receiverTypes;
         }
 
+        private Set<Integer> extensionMethodArities(
+                ParsedModule module,
+                String receiverType,
+                String methodName
+        ) {
+            var arities = new LinkedHashSet<Integer>();
+            collectParsedExtensionMethodArities(module, null, receiverType, methodName, arities);
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule != null) {
+                    collectParsedExtensionMethodArities(
+                            importedModule,
+                            declaration,
+                            receiverType,
+                            methodName,
+                            arities
+                    );
+                }
+                var linkedModule = linkedModule(declaration.modulePath());
+                if (linkedModule != null) {
+                    collectLinkedExtensionMethodArities(
+                            declaration,
+                            linkedModule,
+                            receiverType,
+                            methodName,
+                            arities
+                    );
+                }
+            }
+            return arities;
+        }
+
         private TypeReference extensionMethodReturnType(
                 ParsedModule module,
                 String receiverType,
@@ -3183,6 +3231,51 @@ public final class NativeCompilerValidator {
                         methodName
                 )) {
                     receiverTypes.add(receiverType);
+                }
+            }
+        }
+
+        private void collectParsedExtensionMethodArities(
+                ParsedModule module,
+                ImportDeclaration declaration,
+                String receiverType,
+                String methodName,
+                Set<Integer> arities
+        ) {
+            for (var definition : module.definitions()) {
+                if (!(definition instanceof FunctionDefinition function)
+                        || (declaration != null && function.function().visibility().equals("private"))) {
+                    continue;
+                }
+                var owner = extensionMethodReceiverType(function.function().name(), methodName);
+                if (receiverType.equals(owner) && (declaration == null || importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                ))) {
+                    arities.add(function.function().parameters().size());
+                }
+            }
+        }
+
+        private void collectLinkedExtensionMethodArities(
+                ImportDeclaration declaration,
+                CompiledModule module,
+                String receiverType,
+                String methodName,
+                Set<Integer> arities
+        ) {
+            for (var function : module.functions()) {
+                if (function.visibility().equals("private")) {
+                    continue;
+                }
+                var owner = extensionMethodReceiverType(function.name(), methodName);
+                if (receiverType.equals(owner) && importedExtensionMethodVisible(
+                        declaration,
+                        receiverType,
+                        methodName
+                )) {
+                    arities.add(function.parameters().size());
                 }
             }
         }
