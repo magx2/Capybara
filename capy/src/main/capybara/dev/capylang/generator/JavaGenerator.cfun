@@ -14219,7 +14219,23 @@ private fun module_fqcn(module: CompiledModule): String =
 
 /// Formats a module name as a legal Java class identifier.
 private fun java_module_class_name(module: CompiledModule): String =
-    java_identifier(module.name)
+    java_module_class_name_avoiding_interfaces(java_identifier(module.name), module.functions)
+
+/// Avoids colliding with a top-level Java interface declared by the module.
+private fun java_module_class_name_avoiding_interfaces(candidate: String, functions: List[CompiledFunction]): String =
+    if java_top_level_interface_name_exists(candidate, functions)
+    then java_module_class_name_avoiding_interfaces(candidate + "_", functions)
+    else candidate
+
+/// Checks whether compiled object metadata declares a Java interface with this sanitized name.
+private fun java_top_level_interface_name_exists(candidate: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if compiled_object_interface_schema(function)
+            & java_identifier(function.name[oo_interface_schema_prefix_size(), function.name.size().value]) == candidate
+        then true
+        else java_top_level_interface_name_exists(candidate, functions[1:])
 
 /// Formats source text for module source file.
 private fun module_source_file(module: CompiledModule): String =
