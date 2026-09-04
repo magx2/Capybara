@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
 class CapybaraCompilerLibrariesIntegrationTest {
@@ -212,7 +213,7 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     @Test
-    void shouldNotGatherJavaScriptTestsWhenSliceEndIsUnsupported() {
+    void shouldRejectUnsupportedSliceEndDuringCompilation() {
         var source = """
                 from /capy/test/Assert import { * }
                 from /capy/test/CapyTest import { * }
@@ -226,16 +227,15 @@ class CapybaraCompilerLibrariesIntegrationTest {
                 private fun slice_with_placeholder(value: String): String =
                     value[0, ???]
                 """;
-        var generated = JavaScriptGenerator.javaScriptGenerator(compileProgram(List.of(rawModule("SliceEndPlaceholder", "/foo/app", source)), new LinkedHashSet<>()));
-
-        assertThat(generated.modules())
-                .extracting(GeneratedModule::relativePath)
-                .contains("foo/app/SliceEndPlaceholder.js", "capy/test/CapyTestRuntime.js");
-        var runtime = generated.modules().stream()
-                .filter(module -> module.relativePath().equals("capy/test/CapyTestRuntime.js"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(runtime.code()).doesNotContain("SliceEndPlaceholder");
+        assertThatThrownBy(() -> compileProgram(
+                List.of(rawModule("SliceEndPlaceholder", "/foo/app", source)),
+                new LinkedHashSet<>()
+        ))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("/foo/app/SliceEndPlaceholder.cfun")
+                .hasMessageContaining("line\": 11")
+                .hasMessageContaining("column\": 13")
+                .hasMessageContaining("Unsupported functional construct: `???`.");
     }
 
     @Test

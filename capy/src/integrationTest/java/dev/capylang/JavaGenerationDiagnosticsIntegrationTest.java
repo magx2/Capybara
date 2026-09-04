@@ -22,7 +22,6 @@ import java.util.Optional;
 import javax.tools.ToolProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ResourceLock(Resources.SYSTEM_ERR)
 class JavaGenerationDiagnosticsIntegrationTest {
@@ -349,14 +348,29 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     void reportsExtensionMethodArityMismatchBeforeJavaGeneration() throws Exception {
         writeSource("paper-soccer/Game.cfun", """
-                data Game {}
-                data Point {}
-                data Player {}
+                data Field {}
+                data Game {
+                    game_field: Field,
+                    moves: List[Point],
+                    to_move: Player,
+                }
 
-                fun Game.ball_position(game: Game): Point = Point {}
-                fun Player.ball_position(): Point = Point {}
+                data Point { x: int, y: int }
+                enum Player { PLAYER_A, PLAYER_B }
+                enum Move { UP, DOWN }
 
-                fun move(game: Game): Point = game.ball_position()
+                fun Game.ball_position(game: Game): Point = Point { x: 0, y: 0 }
+                fun Point.move(move: Move): Point = this
+
+                /// Applies a move to the game.
+                fun move(game: Game, move: Move): Result[Game] =
+                    Success {
+                        Game {
+                            game_field: game.game_field,
+                            moves: game.moves + game.ball_position().move(move),
+                            to_move: game.to_move
+                        }
+                    }
                 """);
 
         assertThat(compileGenerateStderr())
@@ -387,15 +401,16 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
     @Test
     void reportsUnresolvedCallAndDoesNotWriteJavaOutput() throws Exception {
-        var source = writeSource("sample/CallFailure.cfun", """
+        var source = writeSource("paper-soccer/CallFailure.cfun", """
+                /// Calls a function that is not in scope.
                 fun broken(): int =
                     missing()
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/CallFailure.cfun` at 2:4 in function `broken`: "
-                        + "unresolved function call `missing`. No Java source was written for this module.");
+        assertThat(compileGenerateStderr()).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /paper-soccer/CallFailure.cfun:3:4: Unresolved function call `missing`.
+                """);
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -411,11 +426,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     missing()
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("in function `broken`: unresolved function call `missing`")
-                .satisfies(exception -> assertThat(exception.getMessage())
-                        .doesNotContain("unresolved function call `println`"));
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Unresolved function call `missing`.")
+                .doesNotContain("Unresolved function call `println`.");
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -431,12 +445,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     |> pure(''), (acc, print_effect) => acc.flat_map(print_effect)
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("in function `broken`: method `flat_map` requires a callable mapper; "
-                        + "variable `print_effect` is not callable in this context")
-                .satisfies(exception -> assertThat(exception.getMessage())
-                        .doesNotContain("unresolved function call `println`"));
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Method `flat_map` requires a callable mapper; variable `print_effect` "
+                        + "is not callable in this context.")
+                .doesNotContain("Unresolved function call `println`.");
 
         assertThat(generatedPath(source)).doesNotExist();
     }
@@ -1455,11 +1468,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     values |* result => result.map(value => value + 1)
                 """);
 
-        assertThatThrownBy(this::compileGenerate)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Java generation failed for `sample/CollectionFlatMapFailure.cfun` at 4:4 "
-                        + "in function `broken`: collection operator `|*` requires its mapper to return "
-                        + "a collection; `Result.map` returns `Result`. No Java source was written for this module.");
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Collection operator `|*` requires its mapper to return a collection; "
+                        + "`Result.map` returns `Result`.");
 
         assertThat(generatedPath(source)).doesNotExist();
     }
