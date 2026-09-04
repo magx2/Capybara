@@ -177,6 +177,35 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferObjectMethodFromQualifiedImportOverExtensionMethodWithDifferentArity() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Objects", "/objects", """
+                                class Foo {
+                                    def bar(value: int): String = "object"
+                                }
+                                """, SourceKind.OBJECT_ORIENTED),
+                        rawModule("Extensions", "/extensions", """
+                                data Foo {}
+
+                                fun Foo.bar(): String = "extension"
+                                """),
+                        rawModule("Consumer", "", """
+                                import /objects/Objects
+                                from /extensions/Extensions import { * }
+
+                                fun call(foo: Objects.Foo): String = foo.bar(5)
+                                """)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Left.class);
+    }
+
+    @Test
     void shouldPreferBuiltinMethodOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("StringExtensions", "", """
                 fun String.size(extra: int): int = extra
