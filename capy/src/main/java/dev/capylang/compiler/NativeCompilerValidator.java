@@ -780,6 +780,9 @@ public final class NativeCompilerValidator {
         if (receiverTypes.contains(receiverName)) {
             return;
         }
+        if (context.objectMethodExists(receiverName, methodName, arity)) {
+            return;
+        }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
         expectedArities.addAll(STANDARD_METHOD_ARITIES
                 .getOrDefault(receiverName, Map.of())
@@ -2908,6 +2911,64 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private boolean objectMethodExists(String receiverType, String methodName, int arity) {
+            return objectMethodExists(receiverType, methodName, arity, new HashSet<>());
+        }
+
+        private boolean objectMethodExists(
+                String receiverType,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            var receiverName = unqualified(receiverType);
+            if (!visitedTypes.add(receiverName)) {
+                return false;
+            }
+            for (var parsedModule : typesByModule.keySet()) {
+                for (var objectClass : parsedModule.objectOriented().classes()) {
+                    if (objectClass.name().equals(receiverName)
+                            && (objectMethodsContain(objectClass.methods(), methodName, arity)
+                            || objectParentsContainMethod(
+                                    objectClass.parents(),
+                                    methodName,
+                                    arity,
+                                    visitedTypes
+                            ))) {
+                        return true;
+                    }
+                }
+                for (var objectInterface : parsedModule.objectOriented().interfaces()) {
+                    if (objectInterface.name().equals(receiverName)
+                            && (objectMethodsContain(objectInterface.methods(), methodName, arity)
+                            || objectParentsContainMethod(
+                                    objectInterface.parents(),
+                                    methodName,
+                                    arity,
+                                    visitedTypes
+                            ))) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private boolean objectParentsContainMethod(
+                List<TypeReference> parents,
+                String methodName,
+                int arity,
+                Set<String> visitedTypes
+        ) {
+            return parents.stream().anyMatch(parent ->
+                    objectMethodExists(parent.name(), methodName, arity, visitedTypes));
+        }
+
+        private boolean objectMethodsContain(List<ObjectOrientedMethod> methods, String methodName, int arity) {
+            return methods.stream().anyMatch(method ->
+                    method.name().equals(methodName) && method.parameters().size() == arity);
         }
 
         private boolean moduleHasType(ParsedModule module, String name) {
