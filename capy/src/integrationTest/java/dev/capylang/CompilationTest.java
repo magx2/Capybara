@@ -227,6 +227,24 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferPrimitiveBackedIntrinsicForParsedImportedType() {
+        var program = compileProgram(List.of(
+                rawModule("Digits", "", "type digit -> int"),
+                rawModule("DigitExtensions", "", """
+                        from /Digits import { digit }
+
+                        fun digit.to_string(extra: int): String = "extension"
+
+                        fun digit_text(value: digit): String = value.to_string()
+                        """)
+        ));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldNotUseUnrelatedObjectMethodToSuppressExtensionArityError() {
         var result = CapybaraCompiler.compile(
                 List.of(
