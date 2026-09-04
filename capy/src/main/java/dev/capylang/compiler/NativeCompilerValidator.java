@@ -132,7 +132,10 @@ public final class NativeCompilerValidator {
             )),
             Map.entry("char", Map.of("to_string", Set.of(0)))
     );
-    private static final Set<String> COLLECTION_RECEIVER_TYPES = Set.of("List", "Set", "String", "Seq", "Dict");
+    private static final Set<String> SEQ_RECEIVER_TYPES = Set.of("Seq", "Cons", "End");
+    private static final Set<String> COLLECTION_RECEIVER_TYPES = Set.of(
+            "List", "Set", "String", "Seq", "Cons", "End", "Dict"
+    );
     private static final Set<String> COLLECTION_ONE_ARGUMENT_METHODS = Set.of(
             "map", "filter", "`|-`", "reject", "flat_map", "any", "all"
     );
@@ -905,11 +908,11 @@ public final class NativeCompilerValidator {
                 || (methodName.equals("is_empty") && arity == 0)) {
             return true;
         }
-        if ((receiverName.equals("List") || receiverName.equals("Seq"))
+        if ((receiverName.equals("List") || SEQ_RECEIVER_TYPES.contains(receiverName))
                 && methodName.equals("fold") && arity == 1) {
             return true;
         }
-        if (receiverName.equals("Seq")
+        if (SEQ_RECEIVER_TYPES.contains(receiverName)
                 && SEQ_ZERO_ARGUMENT_METHODS.contains(methodName)
                 && arity == 0) {
             return true;

@@ -196,6 +196,23 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferSeqNodeMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("SeqExtensions", "", """
+                from /capy/collection/Seq import { Seq, Cons, End }
+
+                fun Cons[T].map(): Seq[T] = this
+                fun End.as_list(extra: int): List[int] = [extra]
+
+                fun doubled(values: Cons[int]): Seq[int] = values.map(value => value * 2)
+                fun empty_list(values: End): List[int] = values.as_list()
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldPreferStringCompareOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("StringExtensions", "", """
                 fun String.compare(): int = 0
