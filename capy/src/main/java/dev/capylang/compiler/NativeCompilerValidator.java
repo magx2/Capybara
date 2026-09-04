@@ -105,14 +105,19 @@ public final class NativeCompilerValidator {
     );
     private static final Set<String> SIZE_RECEIVER_TYPES = Set.of("List", "Set", "Dict", "String", "char");
     private static final Map<String, Map<String, Set<Integer>>> NATIVE_METHOD_ARITIES = Map.ofEntries(
-            Map.entry("String", Map.of(
-                    "get", Set.of(1, 2),
-                    "compare", Set.of(1),
-                    "to_int", Set.of(0),
-                    "to_long", Set.of(0),
-                    "to_double", Set.of(0),
-                    "to_float", Set.of(0),
-                    "to_bool", Set.of(0)
+            Map.entry("String", Map.ofEntries(
+                    Map.entry("get", Set.of(1, 2)),
+                    Map.entry("compare", Set.of(1)),
+                    Map.entry("trim", Set.of(0)),
+                    Map.entry("contains", Set.of(1)),
+                    Map.entry("starts_with", Set.of(1)),
+                    Map.entry("end_with", Set.of(1)),
+                    Map.entry("replace", Set.of(2)),
+                    Map.entry("to_int", Set.of(0)),
+                    Map.entry("to_long", Set.of(0)),
+                    Map.entry("to_double", Set.of(0)),
+                    Map.entry("to_float", Set.of(0)),
+                    Map.entry("to_bool", Set.of(0))
             )),
             Map.entry("List", Map.of("get", Set.of(1, 2))),
             Map.entry("Dict", Map.of(

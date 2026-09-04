@@ -252,6 +252,30 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferNativeStringMethodsOverExtensionsWithDifferentArities() {
+        var program = compileProgram(List.of(rawModule("StringExtensions", "", """
+                fun String.trim(extra: int): String = this
+                fun String.contains(): bool = false
+                fun String.starts_with(): bool = false
+                fun String.end_with(): bool = false
+                fun String.replace(old: String): String = this
+
+                fun trimmed(value: String): String = value.trim()
+                fun contains(value: String): bool = value.contains("x")
+                fun starts_with(value: String): bool = value.starts_with("x")
+                fun ends_with(value: String): bool = value.end_with("x")
+                fun replaced(value: String): String = value.replace("x", "y")
+                """)));
+
+        assertThat(JavaScriptGenerator.javaScriptGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+        assertThat(PythonGenerator.pythonGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldPreferCollectionMethodOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("ListExtensions", "", """
                 fun List[T].map(): List[T] = []
