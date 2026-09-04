@@ -196,6 +196,19 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferStringCompareOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("StringExtensions", "", """
+                fun String.compare(): int = 0
+
+                fun compare_strings(value: String, other: String): Ordering = value.compare(other)
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldNotUseUnrelatedObjectMethodToSuppressExtensionArityError() {
         var result = CapybaraCompiler.compile(
                 List.of(
