@@ -233,6 +233,19 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferAssertMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("AssertExtensions", "", """
+                fun Assert.is_true(extra: int): Assert = this
+
+                fun valid(value: Assert): Assert = value.is_true()
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldPreferStringCompareOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("StringExtensions", "", """
                 fun String.compare(): int = 0
