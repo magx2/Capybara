@@ -543,6 +543,8 @@ tasks.named('compileCapybara') {
     inputDir.set(capybaraPreparedMainSourceDir)
     writeLinkedOutput.set(false)
     includeJavaLibResources.set(false)
+    actions.clear()
+    actions.add(new buildlogic.ParallelBootstrapCompileAction())
 }
 
 def replaceGeneratedLookupMethod = { String source, String methodPrefix, Closure<String> replacement ->
