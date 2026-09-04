@@ -684,7 +684,7 @@ private fun java_data_type_boxed_java_type(type: CompiledTypeReference, module: 
     else if type.name == "array"
     then java_data_type_java_type(first_type_argument(type), module, allModules) + "[]"
     else if java_object_type(type)
-    then java_object_type_java_name(type)
+    then java_object_type_java_name_in_context(type, allModules)
     else if !primitiveType.is_empty()
     then primitiveType
     else match primitive_backed_backing_type(type.name, module, allModules) with
@@ -822,7 +822,7 @@ private fun java_object_classes(classes: List[CompiledObjectOrientedClass], cons
 /// Formats Java source text for object class.
 private fun java_object_class(objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "    " + java_visibility_prefix(objectClass.visibility) + "static " + java_object_class_final_modifier(objectClass) + "class " + java_identifier(objectClass.name) + java_object_class_parent_clause(objectClass.parents, module, allModules) + " {" + newline()
-    + java_object_fields(objectClass.fields)
+    + java_object_fields(objectClass.fields, module, allModules)
     + java_object_constructor(objectClass, module, allModules)
     + java_object_methods(objectClass.methods, objectClass, constantBindings, module, allModules)
     + "    }" + newline()
@@ -886,23 +886,23 @@ private fun java_object_parent_type_tail(parents: List[CompiledTypeReference], m
 /// Computes the Java type for object parent.
 private fun java_object_parent_type(parent: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if java_object_type(parent)
-    then java_object_type_java_name(parent)
+    then java_object_type_java_name_in_context(parent, allModules)
     else match find_object_interface_by_name(parent.name, module, allModules) with
     case Some { binding } -> java_object_interface_java_name(binding.moduleClassName, binding.objectInterface.name)
     case None -> java_identifier(type_unqualified_name(parent.name))
 
 /// Formats Java source text for object fields.
-private fun java_object_fields(fields: List[CompiledObjectOrientedField]): String =
+private fun java_object_fields(fields: List[CompiledObjectOrientedField], module: CompiledModule, allModules: List[CompiledModule]): String =
     match fields[0] with
     case None -> ""
     case Some { field } ->
-        "        " + java_visibility_prefix(field.visibility) + java_type(field.typeReference) + " " + java_identifier(field.name) + ";" + newline()
-            + java_object_fields(fields[1:])
+        "        " + java_visibility_prefix(field.visibility) + top_level_java_type(field.typeReference, module, allModules) + " " + java_identifier(field.name) + ";" + newline()
+            + java_object_fields(fields[1:], module, allModules)
 
 /// Formats Java source text for object constructor.
 private fun java_object_constructor(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     let env = java_object_constructor_bindings(objectClass, module)
-    "        public " + java_identifier(objectClass.name) + "(" + java_parameters(objectClass.parameters) + ") {" + newline()
+    "        public " + java_identifier(objectClass.name) + "(" + top_level_java_parameters(objectClass.parameters, module, allModules) + ") {" + newline()
     + java_object_field_assignments(objectClass.fields, env, module, allModules)
     + java_object_init_statements(objectClass.initBlocks, env, module, allModules)
     + "        }" + newline() + newline()
@@ -946,7 +946,7 @@ private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], obj
 /// Formats Java source text for object method.
 private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let env = java_object_method_bindings(method.parameters, objectClass, module) + constantBindings
-    "        " + java_visibility_prefix(method.visibility) + java_type(method.returnType) + " " + java_method_name(method.name) + "(" + java_parameters(method.parameters) + ") {" + newline()
+    "        " + java_visibility_prefix(method.visibility) + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ") {" + newline()
     + java_object_method_body(method, env, module, allModules)
     + "        }" + newline()
 
@@ -5183,6 +5183,42 @@ private fun java_object_type(type: CompiledTypeReference): bool =
 /// Computes the Java name for object type Java.
 private fun java_object_type_java_name(type: CompiledTypeReference): String =
     java_dotted_class_name(type.name[java_object_type_prefix_size(), type.name.size().value])
+
+/// Rebinds legacy object-class metadata to a collision-aware generated module class name.
+private fun java_object_type_java_name_in_context(type: CompiledTypeReference, allModules: List[CompiledModule]): String =
+    let javaName = java_object_type_java_name(type)
+    let separator = last_dot_index(javaName)
+    if separator < 0
+    then javaName
+    else
+        let ownerName = javaName[0, separator]
+        let className = javaName[separator + 1, javaName.size().value]
+        rebind_legacy_object_class_java_name(ownerName, className, javaName, allModules)
+
+/// Rebinds an object class when its legacy owner matches a compiled module.
+private fun rebind_legacy_object_class_java_name(ownerName: String, className: String, javaName: String, modules: List[CompiledModule]): String =
+    match modules[0] with
+    case None -> javaName
+    case Some { module } ->
+        if legacy_module_fqcn(module) == ownerName & module_declares_object_class(className, module.functions)
+        then module_fqcn(module) + "." + java_identifier(className)
+        else rebind_legacy_object_class_java_name(ownerName, className, javaName, modules[1:])
+
+/// Checks whether compiled schema metadata declares an object class by name.
+private fun module_declares_object_class(className: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if compiled_object_class_schema(function)
+            & function.name[oo_class_schema_prefix_size(), function.name.size().value] == className
+        then true
+        else module_declares_object_class(className, functions[1:])
+
+/// Formats the Java module class name used before top-level interface collision handling.
+private fun legacy_module_fqcn(module: CompiledModule): String =
+    if module.path.is_empty()
+    then java_identifier(module.name)
+    else path_to_class(module.path) + "." + java_identifier(module.name)
 
 /// Checks whether a call has the standard-library to seq call shape.
 private fun stdlib_to_seq_call(call: CompiledFunctionCallExpression, module: CompiledModule): bool =
@@ -13499,7 +13535,7 @@ private fun top_level_boxed_java_type(type: CompiledTypeReference, module: Compi
     let simple_type = simple_java_type_name(type.name)
     if function_type(type) then top_level_java_functional_type(type, module, allModules)
     else if type.name == "array" then top_level_java_type(first_type_argument(type), module, allModules) + "[]"
-    else if java_object_type(type) then java_object_type_java_name(type)
+    else if java_object_type(type) then java_object_type_java_name_in_context(type, allModules)
     else if !primitive_type.is_empty() then primitive_type
     else match primitive_backed_backing_type(type.name, module, allModules) with
         case Some { backingType } -> top_level_boxed_java_type(backingType, module, allModules)

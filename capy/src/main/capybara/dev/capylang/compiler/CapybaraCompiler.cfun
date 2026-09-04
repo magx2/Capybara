@@ -3076,8 +3076,27 @@ private fun compiler_imported_module_class(module: ParsedModule, modulePath: Str
 /// Formats source text for parsed module fully qualified class name.
 private fun parsed_module_fqcn(module: ParsedModule): String =
     if module.path.is_empty()
-    then module.name
-    else normalize_module_path(module.path).replace("/", ".") + "." + module.name
+    then parsed_module_java_class_name(module)
+    else normalize_module_path(module.path).replace("/", ".") + "." + parsed_module_java_class_name(module)
+
+/// Computes a parsed module Java class name that does not collide with a top-level interface.
+private fun parsed_module_java_class_name(module: ParsedModule): String =
+    parsed_module_java_class_name_avoiding_interfaces(compiler_java_identifier(module.name), module.objectOriented.interfaces)
+
+/// Appends underscores until the parsed module Java class name is unique among its interfaces.
+private fun parsed_module_java_class_name_avoiding_interfaces(candidate: String, interfaces: List[ObjectOrientedInterface]): String =
+    if parsed_object_interface_java_name_exists(candidate, interfaces)
+    then parsed_module_java_class_name_avoiding_interfaces(candidate + "_", interfaces)
+    else candidate
+
+/// Checks whether a parsed object interface uses the requested sanitized Java name.
+private fun parsed_object_interface_java_name_exists(candidate: String, interfaces: List[ObjectOrientedInterface]): bool =
+    match interfaces[0] with
+    case None -> false
+    case Some { interface } ->
+        if compiler_java_identifier(interface.name) == candidate
+        then true
+        else parsed_object_interface_java_name_exists(candidate, interfaces[1:])
 
 /// Computes the name for object interface Java.
 private fun object_interface_java_name(module: ParsedModule, name: String): String =
