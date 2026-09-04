@@ -134,6 +134,29 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferLinkedObjectMethodOverExtensionMethodWithDifferentArity() {
+        var libraries = compileProgram(List.of(rawModule("Foo", "", """
+                class Foo {
+                    def foo(value: int): String = "object"
+                }
+                """, SourceKind.OBJECT_ORIENTED)));
+        var compilation = CapybaraCompiler.compile(
+                List.of(rawModule("FooExtensions", "", """
+                        from /Foo import { Foo }
+
+                        fun Foo.foo(): String = "extension"
+
+                        fun call(foo: Foo): String = foo.foo(5)
+                        """)),
+                new LinkedHashSet<>(libraries.modules()),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(compilation).isInstanceOf(Either.Left.class);
+    }
+
+    @Test
     void shouldAllowExtensionMethodCalledOnItsDeclaredReceiver() {
         compileProgram(extensionMethodReceiverModules("""
                 fun valid(value: Kaprekar): Kaprekar = value.diff()
