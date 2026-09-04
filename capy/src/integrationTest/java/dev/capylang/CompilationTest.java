@@ -33,6 +33,27 @@ import static org.assertj.core.api.Assertions.fail;
 
 class CompilationTest {
     @Test
+    void shouldRejectExtensionMethodCallWithWrongArity() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Game", "paper_soccer", """
+                        data Game {}
+                        data Point {}
+
+                        fun Game.ball_position(game: Game): Point = Point {}
+
+                        fun move(game: Game): Point = game.ball_position()
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `ball_position` on receiver type `Game` expects 1 argument, but received 0.");
+    }
+
+    @Test
     void shouldRejectExtensionMethodCalledOnWrappedReceiverDuringCompilation() {
         var result = CapybaraCompiler.compile(
                 extensionMethodReceiverModules("""
