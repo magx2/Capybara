@@ -846,6 +846,12 @@ public final class NativeCompilerValidator {
             return;
         }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
+        if (expectedArities.isEmpty()) {
+            var backingReceiverName = context.primitiveBackingType(module, receiverName);
+            if (backingReceiverName != null) {
+                expectedArities.addAll(context.extensionMethodArities(module, backingReceiverName, methodName));
+            }
+        }
         expectedArities.addAll(STANDARD_METHOD_ARITIES
                 .getOrDefault(receiverName, Map.of())
                 .getOrDefault(methodName, Set.of()));
@@ -3270,6 +3276,33 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private String primitiveBackingType(ParsedModule module, String name) {
+            var typeName = unqualified(name);
+            var parsed = primitiveBackedTypeDeclaration(module, typeName);
+            if (parsed != null) {
+                return unqualified(parsed.backingType().name());
+            }
+            String match = null;
+            for (var declaration : module.imports()) {
+                if (!importExposes(declaration, typeName)) {
+                    continue;
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked == null) {
+                    continue;
+                }
+                var primitive = linked.visiblePrimitiveBackedTypes().get(typeName);
+                if (primitive == null) {
+                    continue;
+                }
+                if (match != null) {
+                    return null;
+                }
+                match = unqualified(primitive.backingType().name());
+            }
+            return match;
         }
 
         private Optional<String> linkedSchemaValue(CompiledModule module, String name) {

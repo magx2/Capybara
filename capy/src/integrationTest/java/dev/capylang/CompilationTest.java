@@ -56,6 +56,26 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectProxiedExtensionMethodCallWithWrongArity() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Text", "", """
+                        type text -> String
+
+                        fun String.decorate(extra: int): String = this
+
+                        fun invalid(value: text): String = value.decorate()
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `decorate` on receiver type `text` expects 1 argument, but received 0.");
+    }
+
+    @Test
     void shouldRejectStandardMethodCallWithWrongArity() {
         var result = CapybaraCompiler.compile(
                 List.of(rawModule("ResultArity", "", """
