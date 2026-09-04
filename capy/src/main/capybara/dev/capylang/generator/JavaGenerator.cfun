@@ -888,7 +888,7 @@ private fun java_object_parent_type(parent: CompiledTypeReference, module: Compi
     if java_object_type(parent)
     then java_object_type_java_name(parent)
     else match find_object_interface_by_name(parent.name, module, allModules) with
-    case Some { binding } -> binding.moduleClassName + "." + java_identifier(binding.objectInterface.name)
+    case Some { binding } -> java_object_interface_java_name(binding.moduleClassName, binding.objectInterface.name)
     case None -> java_identifier(type_unqualified_name(parent.name))
 
 /// Formats Java source text for object fields.
