@@ -321,6 +321,9 @@ class CapybaraPluginTest {
         var generatedFile = tempDir.resolve("build/generated/sources/capybara-check/java/foo/Generated.java");
         Files.createDirectories(generatedFile.getParent());
         Files.writeString(generatedFile, "class Generated {}");
+        var staleGeneratedTestFile = tempDir.resolve("build/generated/sources/test-capybara/java/foo/StaleTest.java");
+        Files.createDirectories(staleGeneratedTestFile.getParent());
+        Files.writeString(staleGeneratedTestFile, "class StaleTest {}");
         var project = newProject(List.of("check"));
         var sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
         var testSrcDirs = sourceSets.getByName("test").getJava().getSrcDirs();
@@ -330,6 +333,7 @@ class CapybaraPluginTest {
         assertFalse(testSrcDirs.contains(project.file("build/generated/sources/capybara-check/java")));
         assertFalse(testSrcDirs.contains(project.file("src/main/java")));
         assertTrue(compileTestJava.getSource().getFiles().contains(generatedFile.toFile()));
+        assertFalse(compileTestJava.getSource().getFiles().contains(staleGeneratedTestFile.toFile()));
     }
 
     @Test

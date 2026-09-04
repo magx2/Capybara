@@ -213,6 +213,7 @@ public class CapybaraPlugin implements Plugin<Project> {
             });
             project.getTasks().named("compileTestJava", JavaCompile.class, task -> {
                 if (singleJavaVerificationBuild) {
+                    task.setSource(testSourceSet.getJava().minus(project.fileTree(generatedTestJavaDir)));
                     task.source(generatedCheckJavaDir);
                     if (hasJvmMainSources) {
                         task.source(project.file("src/main/java"));
