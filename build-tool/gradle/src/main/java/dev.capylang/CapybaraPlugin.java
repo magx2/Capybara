@@ -4,6 +4,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.api.tasks.testing.Test;
 
 import java.io.IOException;
@@ -47,7 +48,7 @@ public class CapybaraPlugin implements Plugin<Project> {
         var generatedMainJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java");
         var generatedTestJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/java");
         var generatedTestMainJavaDir = layout.getBuildDirectory().dir("generated/sources/test-capybara/main-java");
-        var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara/java/check");
+        var generatedCheckJavaDir = layout.getBuildDirectory().dir("generated/sources/capybara-check/java");
         var capybaraMainSourceDirectory = layout.getProjectDirectory().dir("src/main/capybara");
         var capybaraTestSourceDirectory = layout.getProjectDirectory().dir("src/test/capybara");
         var capybaraMainSourceDir = capybaraMainSourceDirectory.getAsFile();
@@ -167,15 +168,10 @@ public class CapybaraPlugin implements Plugin<Project> {
             sourceSets.named("main", sourceSet ->
                     sourceSet.getJava().srcDir(generatedMainJavaDir));
             sourceSets.named("test", sourceSet -> {
+                sourceSet.getJava().srcDir(generatedTestJavaDir);
                 if (singleJavaVerificationBuild) {
-                    sourceSet.getJava().srcDir(generatedCheckJavaDir);
-                    if (hasJvmMainSources) {
-                        sourceSet.getJava().srcDir(project.file("src/main/java"));
-                    }
                     sourceSet.setCompileClasspath(sourceSet.getCompileClasspath().minus(mainSourceSet.getOutput()));
                     sourceSet.setRuntimeClasspath(sourceSet.getRuntimeClasspath().minus(mainSourceSet.getOutput()));
-                } else {
-                    sourceSet.getJava().srcDir(generatedTestJavaDir);
                 }
             });
             project.getTasks().named("compileJava", task -> {
@@ -215,8 +211,12 @@ public class CapybaraPlugin implements Plugin<Project> {
                     task.setDependsOn(java.util.List.of());
                 }
             });
-            project.getTasks().named("compileTestJava", task -> {
+            project.getTasks().named("compileTestJava", JavaCompile.class, task -> {
                 if (singleJavaVerificationBuild) {
+                    task.source(generatedCheckJavaDir);
+                    if (hasJvmMainSources) {
+                        task.source(project.file("src/main/java"));
+                    }
                     task.setDependsOn(task.getDependsOn().stream()
                             .filter(dependency -> {
                                 if (dependency instanceof org.gradle.api.tasks.TaskProvider<?> provider) {
