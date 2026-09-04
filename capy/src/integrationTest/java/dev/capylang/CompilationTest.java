@@ -157,6 +157,19 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferBuiltinMethodOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("StringExtensions", "", """
+                fun String.size(extra: int): int = extra
+
+                fun length(value: String): int = value.size()
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldAllowExtensionMethodCalledOnItsDeclaredReceiver() {
         compileProgram(extensionMethodReceiverModules("""
                 fun valid(value: Kaprekar): Kaprekar = value.diff()

@@ -103,6 +103,9 @@ public final class NativeCompilerValidator {
             "Effect", "Program", "Assert", "TestFile", "TestCase", "Seq", "Regex", "Match",
             "Path", "Ordering", "size", "index"
     );
+    private static final Map<String, Set<Integer>> BUILTIN_METHOD_ARITIES = Map.of(
+            "size", Set.of(0)
+    );
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
                     "map", Set.of(1),
@@ -781,6 +784,9 @@ public final class NativeCompilerValidator {
             return;
         }
         if (context.objectMethodExists(receiverName, methodName, arity)) {
+            return;
+        }
+        if (BUILTIN_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
             return;
         }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
