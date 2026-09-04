@@ -347,6 +347,45 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsExtensionMethodArityMismatchBeforeJavaGeneration() throws Exception {
+        writeSource("paper-soccer/Game.cfun", """
+                data Game {}
+                data Point {}
+                data Player {}
+
+                fun Game.ball_position(game: Game): Point = Point {}
+                fun Player.ball_position(): Point = Point {}
+
+                fun move(game: Game): Point = game.ball_position()
+                """);
+
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Method `ball_position` on receiver type `Game` expects 1 argument, but received 0.")
+                .doesNotContain("the function contains an expression unsupported by the Java backend");
+
+        assertThat(outputDir().resolve("paper_soccer/Game.java")).doesNotExist();
+    }
+
+    @Test
+    void generatesJavaForExtensionMethodCallWithMatchingArity() throws Exception {
+        writeSource("paper-soccer/Game.cfun", """
+                data Game {}
+                data Point {}
+
+                fun Game.ball_position(game: Game): Point = Point {}
+
+                fun move(game: Game): Point = game.ball_position(game)
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+        assertThat(outputDir().resolve("paper_soccer/Game.java"))
+                .exists()
+                .content()
+                .doesNotContain("Unsupported CFUN expression at");
+    }
+
+    @Test
     void reportsUnresolvedCallAndDoesNotWriteJavaOutput() throws Exception {
         var source = writeSource("sample/CallFailure.cfun", """
                 fun broken(): int =
