@@ -103,9 +103,7 @@ public final class NativeCompilerValidator {
             "Effect", "Program", "Assert", "TestFile", "TestCase", "Seq", "Regex", "Match",
             "Path", "Ordering", "size", "index"
     );
-    private static final Map<String, Set<Integer>> BUILTIN_METHOD_ARITIES = Map.of(
-            "size", Set.of(0)
-    );
+    private static final Set<String> SIZE_RECEIVER_TYPES = Set.of("List", "Set", "Dict", "String", "char");
     private static final Map<String, Map<String, Set<Integer>>> NATIVE_METHOD_ARITIES = Map.ofEntries(
             Map.entry("String", Map.of(
                     "get", Set.of(1, 2),
@@ -216,7 +214,9 @@ public final class NativeCompilerValidator {
             Map.entry("Async", Map.of(
                     "join", Set.of(0),
                     "map", Set.of(1),
-                    "flat_map", Set.of(1)
+                    "flat_map", Set.of(1),
+                    "`|`", Set.of(1),
+                    "`|*`", Set.of(1)
             ))
     );
     private static final Map<String, Set<String>> STANDARD_METHODS_BY_RECEIVER = Map.ofEntries(
@@ -815,7 +815,7 @@ public final class NativeCompilerValidator {
                 context,
                 module,
                 call.name(),
-                call.arguments().size(),
+                call.arguments(),
                 receiverType,
                 call.location(),
                 errors
@@ -842,7 +842,7 @@ public final class NativeCompilerValidator {
                 context,
                 module,
                 call.name().substring(separator + 1),
-                call.arguments().size(),
+                call.arguments(),
                 receiverType,
                 call.location(),
                 errors
@@ -853,7 +853,7 @@ public final class NativeCompilerValidator {
             Context context,
             ParsedModule module,
             String methodName,
-            int arity,
+            List<Expression> arguments,
             TypeReference receiverType,
             SourceLocation location,
             List<CompilerError> errors
@@ -862,6 +862,7 @@ public final class NativeCompilerValidator {
                 || unqualified(receiverType.name()).equals("any")) {
             return;
         }
+        var arity = arguments.size();
         var receiverTypes = context.extensionMethodReceiverTypes(module, methodName, arity);
         var receiverName = unqualified(receiverType.name());
         if (receiverTypes.contains(receiverName)) {
@@ -870,7 +871,7 @@ public final class NativeCompilerValidator {
         if (context.objectMethodExists(module, receiverName, methodName, arity)) {
             return;
         }
-        if (BUILTIN_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
+        if (methodName.equals("size") && arity == 0 && SIZE_RECEIVER_TYPES.contains(receiverName)) {
             return;
         }
         if (NATIVE_METHOD_ARITIES
@@ -879,11 +880,16 @@ public final class NativeCompilerValidator {
                 .contains(arity)) {
             return;
         }
-        if (intrinsicCollectionMethod(receiverName, methodName, arity)) {
+        if (intrinsicCollectionMethod(receiverName, methodName, arguments)) {
             return;
         }
         if (receiverName.equals("Assert")
                 && ASSERT_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
+            return;
+        }
+        if (arity == 0
+                && context.primitiveConversionMethod(module, receiverName, methodName)
+                && context.extensionMethodArities(module, receiverName, methodName).isEmpty()) {
             return;
         }
         if (arity == 0
@@ -907,14 +913,14 @@ public final class NativeCompilerValidator {
         }
         if (!expectedArities.isEmpty()) {
             var expected = String.join(" or ", expectedArities.stream().map(Object::toString).toList());
-            var arguments = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
+            var argumentLabel = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
                     ? " argument"
                     : " arguments";
             errors.add(error(
                     module,
                     location,
                     "Method `" + methodName + "` on receiver type `" + displayType(receiverType)
-                            + "` expects " + expected + arguments + ", but received " + arity + "."
+                            + "` expects " + expected + argumentLabel + ", but received " + arity + "."
             ));
             return;
         }
@@ -952,17 +958,32 @@ public final class NativeCompilerValidator {
         }
     }
 
-    private boolean intrinsicCollectionMethod(String receiverName, String methodName, int arity) {
+    private boolean intrinsicCollectionMethod(
+            String receiverName,
+            String methodName,
+            List<Expression> arguments
+    ) {
         if (!COLLECTION_RECEIVER_TYPES.contains(receiverName)) {
             return false;
         }
-        if ((COLLECTION_ONE_ARGUMENT_METHODS.contains(methodName) && arity == 1)
-                || (COLLECTION_TWO_ARGUMENT_METHODS.contains(methodName) && arity == 2)
-                || (methodName.equals("is_empty") && arity == 0)) {
+        var arity = arguments.size();
+        if (COLLECTION_ONE_ARGUMENT_METHODS.contains(methodName)
+                && arity == 1
+                && callableCollectionArgument(arguments.getFirst())) {
+            return true;
+        }
+        if (COLLECTION_TWO_ARGUMENT_METHODS.contains(methodName)
+                && arity == 2
+                && callableCollectionArgument(arguments.get(1))) {
+            return true;
+        }
+        if (methodName.equals("is_empty") && arity == 0) {
             return true;
         }
         if ((receiverName.equals("List") || SEQ_RECEIVER_TYPES.contains(receiverName))
-                && methodName.equals("fold") && arity == 1) {
+                && methodName.equals("fold")
+                && arity == 1
+                && callableCollectionArgument(arguments.getFirst())) {
             return true;
         }
         if (SEQ_RECEIVER_TYPES.contains(receiverName)
@@ -973,6 +994,10 @@ public final class NativeCompilerValidator {
         return receiverName.equals("Set")
                 && ((SET_ZERO_ARGUMENT_METHODS.contains(methodName) && arity == 0)
                 || (SET_ONE_ARGUMENT_METHODS.contains(methodName) && arity == 1));
+    }
+
+    private boolean callableCollectionArgument(Expression argument) {
+        return argument instanceof LambdaExpression || argument instanceof FunctionReferenceExpression;
     }
 
     private Optional<String> wrappedExtensionReceiverType(
@@ -3323,6 +3348,18 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private boolean primitiveConversionMethod(ParsedModule module, String receiverName, String methodName) {
+            var backingType = primitiveBackingType(module, receiverName);
+            if (backingType == null) {
+                return false;
+            }
+            return switch (methodName) {
+                case "to_int" -> Set.of("long", "float", "double").contains(backingType);
+                case "to_long" -> Set.of("float", "double").contains(backingType);
+                default -> false;
+            };
         }
 
         private String primitiveBackingType(ParsedModule module, String name) {
