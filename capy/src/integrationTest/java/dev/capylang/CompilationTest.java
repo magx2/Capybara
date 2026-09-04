@@ -190,6 +190,26 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectSizeExtensionWithWrongArityOnUnsupportedReceiver() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("GameSize", "", """
+                        data Game {}
+
+                        fun Game.size(value: int): int = value
+
+                        fun invalid(game: Game): int = game.size()
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `size` on receiver type `Game` expects 1 argument, but received 0.");
+    }
+
+    @Test
     void shouldPreferNativeMethodOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("StringExtensions", "", """
                 fun String.get(): int = 0
@@ -213,6 +233,24 @@ class CompilationTest {
         assertThat(JavaGenerator.javaGenerator(program).modules())
                 .allSatisfy(module -> assertThat(module.code())
                         .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldRejectCollectionMethodWithNonCallableArgument() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("ListExtensions", "", """
+                        fun List[T].map(): List[T] = []
+
+                        fun invalid(values: List[int]): List[int] = values.map(1)
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `map` on receiver type `List[int]` expects 0 arguments, but received 1.");
     }
 
     @Test
@@ -246,6 +284,21 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferAsyncOperatorAliasOverExtensionMethodWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("AsyncExtensions", "", """
+                from /capy/lang/Async import { Async }
+
+                fun Async[T].`|`(): Async[T] = this
+
+                fun increment(task: Async[int]): Async[int] = task.`|`(value => value + 1)
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldPreferStringCompareOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("StringExtensions", "", """
                 fun String.compare(): int = 0
@@ -271,6 +324,36 @@ class CompilationTest {
                 fun score_text(value: score): String = value.to_string()
                 """)));
 
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldPreferPrimitiveConversionOverBackingExtensionMethodWithDifferentArity() {
+        var backingExtensions = compileProgram(List.of(rawModule("BackingExtensions", "", """
+                data Float {}
+
+                fun Float.to_long(extra: int): long = 0L
+                """)));
+        var backingModuleJson = LinkedJsonCodec.write(backingExtensions.modules().getFirst())
+                .replace("\"Float.to_long\"", "\"float.to_long\"");
+        var backingModule = LinkedJsonCodec.read(backingModuleJson, CompiledModule.class);
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("ScoreExtensions", "", """
+                from /BackingExtensions import { * }
+
+                type score -> float
+
+                fun converted(value: score): long = value.to_long()
+                """)),
+                new LinkedHashSet<>(List.of(backingModule)),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Left.class);
+        var program = (CompiledProgram) ((Either.Left<?, ?>) result).value();
         assertThat(JavaGenerator.javaGenerator(program).modules())
                 .allSatisfy(module -> assertThat(module.code())
                         .doesNotContain("Unsupported CFUN expression at"));
