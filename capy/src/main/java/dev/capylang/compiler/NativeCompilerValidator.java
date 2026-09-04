@@ -143,6 +143,7 @@ public final class NativeCompilerValidator {
             "contains", "is_subset_of", "is_proper_subset_of", "is_superset_of", "is_proper_superset_of",
             "union", "intersection", "difference", "symmetric_difference", "cartesian_product"
     );
+    private static final Set<String> NUMERIC_TYPES = Set.of("byte", "int", "long", "float", "double");
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
                     "map", Set.of(1),
@@ -833,6 +834,12 @@ public final class NativeCompilerValidator {
             return;
         }
         if (intrinsicCollectionMethod(receiverName, methodName, arity)) {
+            return;
+        }
+        if (arity == 0
+                && ((methodName.equals("name") && context.enumType(module, receiverName))
+                || (methodName.equals("to_string")
+                && context.numericPrimitiveBackedType(module, receiverName)))) {
             return;
         }
         var expectedArities = new TreeSet<>(context.extensionMethodArities(module, receiverName, methodName));
@@ -3209,6 +3216,67 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private boolean enumType(ParsedModule module, String name) {
+            var typeName = unqualified(name);
+            if (localEnumType(module, typeName)) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (!importExposes(declaration, typeName)) {
+                    continue;
+                }
+                var parsed = parsedModule(declaration.modulePath());
+                if (parsed != null && localEnumType(parsed, typeName)) {
+                    return true;
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked != null && linkedSchemaValue(linked, "__capy_schema_kind|" + typeName)
+                        .map("enum"::equals)
+                        .orElse(false)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean localEnumType(ParsedModule module, String name) {
+            return module.definitions().stream().anyMatch(definition ->
+                    definition instanceof EnumDeclaration enumDeclaration
+                            && enumDeclaration.name().equals(name));
+        }
+
+        private boolean numericPrimitiveBackedType(ParsedModule module, String name) {
+            var typeName = unqualified(name);
+            var parsed = primitiveBackedTypeDeclaration(module, typeName);
+            if (parsed != null && NUMERIC_TYPES.contains(unqualified(parsed.backingType().name()))) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (!importExposes(declaration, typeName)) {
+                    continue;
+                }
+                var linked = linkedModule(declaration.modulePath());
+                if (linked == null) {
+                    continue;
+                }
+                var primitive = linked.visiblePrimitiveBackedTypes().get(typeName);
+                if (primitive != null && NUMERIC_TYPES.contains(unqualified(primitive.backingType().name()))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private Optional<String> linkedSchemaValue(CompiledModule module, String name) {
+            return module.functions().stream()
+                    .filter(function -> function.name().equals(name))
+                    .map(function -> function.body())
+                    .filter(CompiledExpression.CompiledStringLiteral.class::isInstance)
+                    .map(CompiledExpression.CompiledStringLiteral.class::cast)
+                    .map(CompiledExpression.CompiledStringLiteral::value)
+                    .findFirst();
         }
 
         private boolean moduleHasFunctionOrConstant(ParsedModule module, String name) {

@@ -209,6 +209,24 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferZeroArgumentTypeIntrinsicsOverExtensionMethodsWithDifferentArity() {
+        var program = compileProgram(List.of(rawModule("TypeExtensions", "", """
+                enum Color { RED }
+                type score -> int
+
+                fun Color.name(extra: String): String = extra
+                fun score.to_string(extra: String): String = extra
+
+                fun color_name(value: Color): String = value.name()
+                fun score_text(value: score): String = value.to_string()
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldNotUseUnrelatedObjectMethodToSuppressExtensionArityError() {
         var result = CapybaraCompiler.compile(
                 List.of(
