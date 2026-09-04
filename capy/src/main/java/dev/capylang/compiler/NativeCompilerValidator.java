@@ -754,6 +754,20 @@ public final class NativeCompilerValidator {
         if (standardMethods != null && standardMethods.contains(methodName)) {
             return;
         }
+        var expectedArities = context.extensionMethodArities(module, receiverName, methodName);
+        if (!expectedArities.isEmpty()) {
+            var expected = String.join(" or ", expectedArities.stream().map(Object::toString).toList());
+            var arguments = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
+                    ? " argument"
+                    : " arguments";
+            errors.add(error(
+                    module,
+                    location,
+                    "Method `" + methodName + "` on receiver type `" + displayType(receiverType)
+                            + "` expects " + expected + arguments + ", but received " + arity + "."
+            ));
+            return;
+        }
         if (receiverTypes.isEmpty() && standardMethods != null) {
             errors.add(error(
                     module,
@@ -764,19 +778,6 @@ public final class NativeCompilerValidator {
             return;
         }
         if (receiverTypes.isEmpty()) {
-            var expectedArities = context.extensionMethodArities(module, receiverName, methodName);
-            if (!expectedArities.isEmpty()) {
-                var expected = String.join(" or ", expectedArities.stream().map(Object::toString).toList());
-                var arguments = expectedArities.size() == 1 && expectedArities.iterator().next() == 1
-                        ? " argument"
-                        : " arguments";
-                errors.add(error(
-                        module,
-                        location,
-                        "Method `" + methodName + "` on receiver type `" + displayType(receiverType)
-                                + "` expects " + expected + arguments + ", but received " + arity + "."
-                ));
-            }
             return;
         }
         var wrappedReceiverType = wrappedExtensionReceiverType(receiverType, receiverTypes);

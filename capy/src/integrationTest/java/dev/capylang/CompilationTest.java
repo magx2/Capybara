@@ -38,8 +38,10 @@ class CompilationTest {
                 List.of(rawModule("Game", "paper_soccer", """
                         data Game {}
                         data Point {}
+                        data Player {}
 
                         fun Game.ball_position(game: Game): Point = Point {}
+                        fun Player.ball_position(): Point = Point {}
 
                         fun move(game: Game): Point = game.ball_position()
                         """)),
