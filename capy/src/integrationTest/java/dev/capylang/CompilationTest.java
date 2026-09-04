@@ -286,6 +286,70 @@ class CompilationTest {
     }
 
     @Test
+    void shouldGenerateTopLevelInterfaceParentsFromLegacyModuleOnlyPrograms() {
+        var program = compileProgram(List.of(rawModule("UIContract", "/paper-soccer/ui", """
+                interface UI {
+                    def draw_field(game_field: String): String
+                }
+
+                class ConsoleUI: UI {
+                    override def draw_field(game_field: String): String = game_field
+                }
+                """, SourceKind.OBJECT_ORIENTED)));
+        var module = program.modules().getFirst();
+        assertThat(module.functions().stream()
+                .filter(function -> function.name().equals("__capy_oo_parent|ConsoleUI|0")))
+                .hasSize(1);
+        var legacyFunctions = module.functions().stream()
+                .map(function -> function.name().equals("__capy_oo_parent|ConsoleUI|0")
+                        ? function.with(
+                                function.name(),
+                                function.visibility(),
+                                function.documentation(),
+                                function.parameters(),
+                                function.returnType(),
+                                new dev.capylang.compiler.CompiledExpression.CompiledStringLiteral(
+                                        "UI",
+                                        "\"UI\"",
+                                        function.location()
+                                ),
+                                function.location()
+                        )
+                        : function)
+                .toList();
+        var legacyModule = module.with(
+                module.name(),
+                module.path(),
+                module.types(),
+                module.visiblePrimitiveBackedTypes(),
+                legacyFunctions,
+                module.imports(),
+                module.derivers(),
+                module.annotations(),
+                module.staticImports()
+        );
+        var legacyProgram = new CompiledProgram(
+                List.of(legacyModule),
+                List.of(),
+                program.nativeProviders(),
+                program.nativeProviderCatalog()
+        );
+
+        var generated = JavaGenerator.javaGenerator(legacyProgram);
+        var contract = generated.modules().stream()
+                .filter(generatedModule -> generatedModule.relativePath().equals("paper-soccer/ui/UIContract.java"))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(generated.modules())
+                .extracting(generatedModule -> generatedModule.relativePath())
+                .contains("paper-soccer/ui/UI.java");
+        assertThat(contract.code())
+                .contains("class ConsoleUI implements paper_soccer.ui.UI")
+                .doesNotContain("UIContract.UI");
+    }
+
+    @Test
     void shouldSanitizeLinkedLibraryStaticImportOwners() {
         var libraries = compileProgram(List.of(rawModule("Field", "/paper-soccer", """
                 fun width(): int = 8
