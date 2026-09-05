@@ -416,6 +416,21 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsWrongFunctionArityAndDoesNotWriteJavaOutput() throws Exception {
+        var source = writeSource("sample/FunctionArityFailure.cfun", """
+                fun identity(value: int): int = value
+
+                fun broken(): int = identity()
+                """);
+
+        assertThat(compileGenerateStderr())
+                .contains("Compilation failed with 1 error(s):")
+                .contains("Function `identity` does not accept 0 argument(s).");
+
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
     void doesNotReportImportedConsoleFunctionAsUnresolved() throws Exception {
         var source = writeSource("sample/ImportedConsoleFailure.cfun", """
                 from /capy/io/Console import { println }
@@ -452,6 +467,23 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .doesNotContain("Unresolved function call `println`.");
 
         assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
+    void acceptsUntypedLambdaBindingAsCallableMapper() throws Exception {
+        var source = writeSource("sample/LocalLambdaMapper.cfun", """
+                from /capy/lang/Result import { Result }
+
+                fun map_result(result: Result[int]): Result[int] =
+                    let mapper = value => value + 1
+                    result.map(mapper)
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+        assertThat(generatedPath(source))
+                .exists()
+                .content()
+                .doesNotContain("Unsupported CFUN expression at");
     }
 
     @Test
