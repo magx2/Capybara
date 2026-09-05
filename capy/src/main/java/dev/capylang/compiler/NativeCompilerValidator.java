@@ -73,6 +73,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public final class NativeCompilerValidator {
     private static final ThreadLocal<Map<String, ParsedModule>> VALIDATED_MODULES =
@@ -705,6 +706,8 @@ public final class NativeCompilerValidator {
                     validateNestedLambdaFunctionArguments(context, module, binding.value(), blockTypes, errors);
                     if (!binding.typeReference().name().isBlank()) {
                         blockTypes.put(binding.name(), binding.typeReference());
+                    } else if (binding.value() instanceof LambdaExpression lambda) {
+                        blockTypes.put(binding.name(), validationLambdaType(context, module, lambda, blockTypes));
                     }
                 }
                 validateNestedLambdaFunctionArguments(context, module, block.result(), blockTypes, errors);
@@ -1698,6 +1701,39 @@ public final class NativeCompilerValidator {
         };
     }
 
+    private TypeReference validationLambdaType(
+            Context context,
+            ParsedModule module,
+            LambdaExpression lambda,
+            Map<String, TypeReference> types
+    ) {
+        var lambdaTypes = new LinkedHashMap<>(types);
+        var parameterTypes = new ArrayList<TypeReference>();
+        for (var parameter : lambda.parameters()) {
+            var declaredType = decodedLambdaParameterType(parameter);
+            var parameterType = declaredType == null
+                    ? new TypeReference("any", List.of())
+                    : declaredType;
+            parameterTypes.add(parameterType);
+            var name = decodedLambdaParameterName(parameter);
+            if (!name.equals("_")) {
+                lambdaTypes.put(name, parameterType);
+            }
+        }
+        var returnType = validationExpressionType(context, module, lambda.body(), lambdaTypes);
+        if (returnType == null) {
+            returnType = new TypeReference("any", List.of());
+        }
+        var parameters = parameterTypes.isEmpty()
+                ? "()"
+                : parameterTypes.size() == 1
+                ? displayType(parameterTypes.getFirst())
+                : "(" + parameterTypes.stream()
+                .map(this::displayType)
+                .collect(Collectors.joining(", ")) + ")";
+        return new TypeReference(parameters + " => " + displayType(returnType), List.of());
+    }
+
     private TypeReference validationFieldAccessType(
             Context context,
             ParsedModule module,
@@ -1991,6 +2027,16 @@ public final class NativeCompilerValidator {
             var callableType = types.get(call.name());
             if (callableType != null && functionTypeName(callableType.name())) {
                 validateFunctionValueCall(context, module, call, callableType, types, errors);
+                return;
+            }
+            var declaredArities = context.functionArities(module, call.name());
+            if (!declaredArities.isEmpty() && !declaredArities.contains(call.arguments().size())) {
+                errors.add(error(
+                        module,
+                        call.location(),
+                        "Function `" + call.name() + "` does not accept "
+                                + call.arguments().size() + " argument(s)."
+                ));
             }
             return;
         }
@@ -3669,6 +3715,47 @@ public final class NativeCompilerValidator {
                 match = imported;
             }
             return match;
+        }
+
+        private Set<Integer> functionArities(ParsedModule module, String name) {
+            var arities = new LinkedHashSet<Integer>();
+            collectParsedFunctionArities(module, null, name, arities);
+            for (var declaration : module.imports()) {
+                if (declaration.qualified()
+                        || declaration.excludedNames().contains(name)
+                        || (!declaration.wildcard() && !declaration.importedNames().contains(name))) {
+                    continue;
+                }
+                var importedModule = parsedModule(declaration.modulePath());
+                if (importedModule != null) {
+                    collectParsedFunctionArities(importedModule, declaration, name, arities);
+                }
+                var linkedModule = linkedModule(declaration.modulePath());
+                if (linkedModule != null) {
+                    linkedModule.functions().stream()
+                            .filter(function -> function.name().equals(name))
+                            .filter(function -> !function.visibility().equals("private"))
+                            .map(function -> function.parameters().size())
+                            .forEach(arities::add);
+                }
+            }
+            return arities;
+        }
+
+        private void collectParsedFunctionArities(
+                ParsedModule module,
+                ImportDeclaration declaration,
+                String name,
+                Set<Integer> arities
+        ) {
+            module.definitions().stream()
+                    .filter(FunctionDefinition.class::isInstance)
+                    .map(FunctionDefinition.class::cast)
+                    .map(FunctionDefinition::function)
+                    .filter(function -> function.name().equals(name))
+                    .filter(function -> declaration == null || !function.visibility().equals("private"))
+                    .map(function -> function.parameters().size())
+                    .forEach(arities::add);
         }
 
         private Set<String> extensionMethodReceiverTypes(
