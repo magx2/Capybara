@@ -196,7 +196,7 @@ private fun java_module_for_module(module: CompiledModule, allModules: List[Comp
 
 /// Checks whether a compiled module has content beyond top-level object-interface metadata.
 private fun java_module_class_required(module: CompiledModule, objects: JavaCompiledObjects): bool =
-    if !module.types.is_empty() | !module.derivers.is_empty() | !module.annotations.is_empty() | !objects.classes.is_empty()
+    if objects.interfaces.is_empty() | !module.types.is_empty() | !module.derivers.is_empty() | !module.annotations.is_empty() | !objects.classes.is_empty()
     then true
     else java_module_function_requires_class(module.functions)
 
@@ -205,9 +205,17 @@ private fun java_module_function_requires_class(functions: List[CompiledFunction
     match functions[0] with
     case None -> false
     case Some { function } ->
-        if compiled_schema(function) | compiled_object_interface_method_function(function)
+        if compiled_object_interface_metadata_function(function)
         then java_module_function_requires_class(functions[1:])
         else true
+
+/// Checks whether a compiled function carries metadata emitted directly in a top-level Java interface.
+private fun compiled_object_interface_metadata_function(function: CompiledFunction): bool =
+    compiled_object_interface_schema(function)
+        | compiled_object_interface_method_function(function)
+        | java_generator_string_has_prefix(function.name, "__capy_oo_interface_kind|")
+        | java_generator_string_has_prefix(function.name, "__capy_oo_interface_parent|")
+        | java_generator_string_has_prefix(function.name, "__capy_oo_annotation|")
 
 /// Returns object metadata carried by linked programs, falling back to schema decoding for legacy module-only linked input.
 private fun java_compiled_objects_for_module(module: CompiledModule, objectOrientedUnitIndex: JavaObjectOrientedUnitIndex): JavaCompiledObjects =

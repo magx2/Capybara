@@ -49,6 +49,23 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesModuleClassForDataDeclarationOnlySource() throws Exception {
+        writeSource("sample/Models.cfun", """
+                data User { name: String }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var models = outputDir().resolve("sample/Models.java");
+        assertThat(models)
+                .exists()
+                .content()
+                .contains("public final class Models")
+                .contains("record User(");
+        assertJavaCompiles(models);
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
