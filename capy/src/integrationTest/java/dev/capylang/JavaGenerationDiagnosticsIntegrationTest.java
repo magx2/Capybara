@@ -29,6 +29,26 @@ class JavaGenerationDiagnosticsIntegrationTest {
     Path tempDir;
 
     @Test
+    void doesNotGenerateModuleClassForInterfaceOnlySource() throws Exception {
+        writeSource("paper-soccer/ui/UI.coo", """
+                interface UI {
+                    def draw_field(game_field: String): String
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var ui = outputDir().resolve("paper_soccer/ui/UI.java");
+        var uiModule = outputDir().resolve("paper_soccer/ui/UI_.java");
+        assertThat(ui)
+                .exists()
+                .content()
+                .contains("public interface UI {");
+        assertThat(uiModule).doesNotExist();
+        assertJavaCompiles(ui);
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {

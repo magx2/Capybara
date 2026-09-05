@@ -181,11 +181,33 @@ private fun java_generated_modules(modules: List[CompiledModule], allModules: Li
         JavaGeneratedModules {
             objectInterfaceModules: java_object_interface_modules_for_module(objects.interfaces, module, allModules)
                 + rest.objectInterfaceModules,
-            javaModules: [GeneratedModule {
-                relativePath: java_module_relative_path(module, ".java"),
-                code: java_module_code_with_objects(module, allModules, nativeProviderIndex, objects)
-            }] + rest.javaModules
+            javaModules: java_module_for_module(module, allModules, nativeProviderIndex, objects)
+                + rest.javaModules
         }
+
+/// Creates a Java module class only when the source contains declarations that need a module container.
+private fun java_module_for_module(module: CompiledModule, allModules: List[CompiledModule], nativeProviderIndex: JavaNativeProviderIndex, objects: JavaCompiledObjects): List[GeneratedModule] =
+    if java_module_class_required(module, objects)
+    then [GeneratedModule {
+        relativePath: java_module_relative_path(module, ".java"),
+        code: java_module_code_with_objects(module, allModules, nativeProviderIndex, objects)
+    }]
+    else []
+
+/// Checks whether a compiled module has content beyond top-level object-interface metadata.
+private fun java_module_class_required(module: CompiledModule, objects: JavaCompiledObjects): bool =
+    if !module.types.is_empty() | !module.derivers.is_empty() | !module.annotations.is_empty() | !objects.classes.is_empty()
+    then true
+    else java_module_function_requires_class(module.functions)
+
+/// Checks whether any compiled function needs emission inside the Java module class.
+private fun java_module_function_requires_class(functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        if compiled_schema(function) | compiled_object_interface_method_function(function)
+        then java_module_function_requires_class(functions[1:])
+        else true
 
 /// Returns object metadata carried by linked programs, falling back to schema decoding for legacy module-only linked input.
 private fun java_compiled_objects_for_module(module: CompiledModule, objectOrientedUnitIndex: JavaObjectOrientedUnitIndex): JavaCompiledObjects =
