@@ -3335,6 +3335,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
         if (ctx.typedPattern() != null) {
             return ctx.typedPattern().patternType().getText();
         }
+        if (ctx.patternType() != null) {
+            return ctx.patternType().getText();
+        }
         if (ctx.TYPE() != null) {
             return ctx.TYPE().getText();
         }
