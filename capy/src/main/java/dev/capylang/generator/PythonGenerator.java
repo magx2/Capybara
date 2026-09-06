@@ -39,6 +39,7 @@ public final class PythonGenerator {
             CompiledProgram source,
             CompiledProgram lookup
     ) {
+        JavaGenerator.validateNativeProviderBindings(source, "python");
         var sameProgram = source == lookup;
         source = JavaGenerator.deduplicateProgram(source);
         lookup = sameProgram ? source : JavaGenerator.deduplicateProgram(lookup);

@@ -456,13 +456,77 @@ private fun validate_program(
 /// Validates a compiled program against capabilities of the selected output backend.
 fun validate_backend(program: CompiledProgram, outputType: String): Effect[List[CompilerError]] =
     pure(
-        if outputType == "java" | outputType == "JAVA"
+        native_provider_backend_errors(
+            program.nativeProviderCatalog.declarations,
+            program.nativeProviderCatalog.bindings,
+            outputType
+        ) + (if outputType == "java" | outputType == "JAVA"
         then backend_java_module_errors(
             program.modules,
             backend_known_function_names(program.modules, {:})
         )
-        else []
+        else [])
     )
+
+/// Reports native-provider declarations that have no implementation for the selected backend.
+private fun native_provider_backend_errors(
+    declarations: List[CompiledNativeProviderDeclaration],
+    bindings: List[CompiledNativeProviderBinding],
+    outputType: String
+): List[CompilerError] =
+    match declarations[0] with
+    case None -> []
+    case Some { declaration } ->
+        (if native_provider_backend_binding_present(declaration, bindings, outputType)
+        then []
+        else [CompilerError {
+            message: "NotWired: No native provider registered for interface `" + declaration.interfaceId
+                + "` with qualifier `" + declaration.qualifier + "` for backend `"
+                + native_provider_backend_name(outputType) + "` (provider `" + declaration.providerName + "`).",
+            moduleName: declaration.sourceFile,
+            line: 0,
+            column: 0
+        }]) + native_provider_backend_errors(declarations[1:], bindings, outputType)
+
+/// Checks all matching provider entries because backend discovery records one entry per implementation language.
+private fun native_provider_backend_binding_present(
+    declaration: CompiledNativeProviderDeclaration,
+    bindings: List[CompiledNativeProviderBinding],
+    outputType: String
+): bool =
+    match bindings[0] with
+    case None -> false
+    case Some { binding } ->
+        if binding.interfaceId == declaration.interfaceId & binding.qualifier == declaration.qualifier
+            & native_provider_binding_supports_backend(binding, outputType)
+        then true
+        else native_provider_backend_binding_present(declaration, bindings[1:], outputType)
+
+/// Checks whether one provider entry supplies the requested backend implementation.
+private fun native_provider_binding_supports_backend(binding: CompiledNativeProviderBinding, outputType: String): bool =
+    if outputType == "java" | outputType == "JAVA"
+    then match binding.javaBinding with
+        case Some _ -> true
+        case None -> false
+    else if outputType == "javascript" | outputType == "JAVASCRIPT" | outputType == "js" | outputType == "JS"
+    then match binding.javascriptBinding with
+        case Some _ -> true
+        case None -> false
+    else if outputType == "python" | outputType == "PYTHON" | outputType == "py" | outputType == "PY"
+    then match binding.pythonBinding with
+        case Some _ -> true
+        case None -> false
+    else true
+
+/// Formats the selected backend name consistently in native-provider diagnostics.
+private fun native_provider_backend_name(outputType: String): String =
+    if outputType == "java" | outputType == "JAVA"
+    then "java"
+    else if outputType == "javascript" | outputType == "JAVASCRIPT" | outputType == "js" | outputType == "JS"
+    then "javascript"
+    else if outputType == "python" | outputType == "PYTHON" | outputType == "py" | outputType == "PY"
+    then "python"
+    else outputType
 
 /// Collects function and imported symbol names available to backend validation.
 private fun backend_known_function_names(modules: List[CompiledModule], names: Dict[bool]): Dict[bool] =
