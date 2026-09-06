@@ -270,7 +270,7 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     java_package(module)
     + java_imports(module, allModules)
     + java_module_declaration(module, allModules) + newline()
-    + java_module_constructor(module)
+    + java_module_constructor(module, allModules)
     + java_function_type_interfaces()
     + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
     + java_imported_primitive_constructor_adapters(allModules, module, allModules)
@@ -282,25 +282,30 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
 
 /// Emits a module as its same-named data record when possible, retaining module functions as static members.
 private fun java_module_declaration(module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_top_level_record_module(module)
+    if java_top_level_record_module(module, allModules)
     then "public record " + java_data_type_declaration_name(module.name, module, allModules)
         + "(" + java_data_record_components(java_data_record_fields(module.name, module, allModules), module, allModules) + ")"
         + java_data_record_parent_clause(module.name, module, allModules) + " {"
     else "public final class " + java_module_class_name(module) + " {"
 
 /// Emits the non-instantiable constructor used by ordinary Java module classes.
-private fun java_module_constructor(module: CompiledModule): String =
-    if java_top_level_record_module(module)
+private fun java_module_constructor(module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_top_level_record_module(module, allModules)
     then ""
     else "    private " + java_module_class_name(module) + "() " + "{" + "}" + newline() + newline()
 
 /// Checks whether a same-named functional data declaration can serve as the top-level Java module.
-private fun java_top_level_record_module(module: CompiledModule): bool =
+private fun java_top_level_record_module(module: CompiledModule, allModules: List[CompiledModule]): bool =
     schema_type_exists(module.name, module.functions)
         & java_data_type_kind(module.name, module.functions) == "data"
         & data_type_visibility(module.name, module.functions) == "public"
         & java_module_class_name(module) == java_identifier(module.name)
-        & java_record_component_names_legal(schema_values("__capy_schema_field|" + module.name + "|", module.functions))
+        & java_data_record_union_parents(data_type_parent_types(module.name, module, allModules), module, allModules).is_empty()
+        & java_record_component_names_legal(java_data_record_fields(module.name, module, allModules))
+        & !java_record_component_constant_collision(
+            java_data_record_fields(module.name, module, allModules),
+            constant_functions(module.functions)
+        )
 
 /// Checks whether fields avoid names forbidden for Java record components.
 private fun java_record_component_names_legal(fields: List[String]): bool =
@@ -320,6 +325,21 @@ private fun java_record_component_name_legal(name: String): bool =
         & name != "notifyAll"
         & name != "toString"
         & name != "wait"
+
+/// Checks whether a generated record component would collide with a static module constant.
+private fun java_record_component_constant_collision(fields: List[String], constants: List[CompiledFunction]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } ->
+        java_constant_named(java_identifier(schema_field_name(field)), constants)
+            | java_record_component_constant_collision(fields[1:], constants)
+
+/// Checks whether constants contain the requested emitted Java field name.
+private fun java_constant_named(name: String, constants: List[CompiledFunction]): bool =
+    match constants[0] with
+    case None -> false
+    case Some { constant } ->
+        java_identifier(constant.name) == name | java_constant_named(name, constants[1:])
 
 private fun java_effect_module_code(module: CompiledModule): String =
     java_package(module)
@@ -500,9 +520,9 @@ private fun java_data_type_emittable(typeName: String, module: CompiledModule): 
         & java_data_type_kind(typeName, module.functions) != "primitive"
 
 /// Checks whether a data type has a generated Java representation.
-private fun java_data_type_generated(typeName: String, module: CompiledModule): bool =
+private fun java_data_type_generated(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     java_data_type_emittable(typeName, module)
-        | (typeName == module.name & java_top_level_record_module(module))
+        | (typeName == module.name & java_top_level_record_module(module, allModules))
 
 /// Formats Java source text for one functional data or union declaration.
 private fun java_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -536,12 +556,12 @@ private fun java_data_type_kind_in_scope(typeName: String, module: CompiledModul
 /// Checks whether a data type visible from a module can be referenced as generated Java.
 private fun java_data_type_generated_in_scope(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
     match data_type_owner_module(typeName, module, allModules) with
-    case Some { owner } -> java_data_type_generated(typeName, owner)
+    case Some { owner } -> java_data_type_generated(typeName, owner, allModules)
     case None -> false
 
 /// Formats Java source text for a functional union declaration.
 private fun java_union_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let variants = java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", module.functions), module)
+    let variants = java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", module.functions), module, allModules)
     let externalVariants = java_data_type_has_external_variants(typeName, module, allModules)
     let parentClause = java_union_data_type_parent_clause(typeName, module, allModules)
     "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + java_union_modifier(variants, externalVariants)
@@ -562,7 +582,7 @@ private fun java_data_type_has_external_variants(typeName: String, module: Compi
     case Some { candidateModule } ->
         if java_same_module(candidateModule, module)
         then java_data_type_has_external_variants(typeName, module, allModules[1:])
-        else if !java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", candidateModule.functions), candidateModule).is_empty()
+        else if !java_data_type_variant_names(typeName, schema_values("__capy_schema_type|", candidateModule.functions), candidateModule, allModules).is_empty()
         then true
         else java_data_type_has_external_variants(typeName, module, allModules[1:])
 
@@ -706,14 +726,14 @@ private fun java_data_type_parameter_tail(parameters: List[String]): String =
     case Some _ -> ", " + java_data_type_parameter_list(parameters)
 
 /// Collects data type variants from schema parent metadata.
-private fun java_data_type_variant_names(typeName: String, candidates: List[String], module: CompiledModule): List[String] =
+private fun java_data_type_variant_names(typeName: String, candidates: List[String], module: CompiledModule, allModules: List[CompiledModule]): List[String] =
     match candidates[0] with
     case None -> []
     case Some { candidate } ->
         if java_data_type_has_parent(candidate, typeName, module.functions)
-            & java_data_type_generated(candidate, module)
-        then [candidate] + java_data_type_variant_names(typeName, candidates[1:], module)
-        else java_data_type_variant_names(typeName, candidates[1:], module)
+            & java_data_type_generated(candidate, module, allModules)
+        then [candidate] + java_data_type_variant_names(typeName, candidates[1:], module, allModules)
+        else java_data_type_variant_names(typeName, candidates[1:], module, allModules)
 
 /// Checks whether a candidate data type has the expected parent.
 private fun java_data_type_has_parent(candidate: String, parentName: String, functions: List[CompiledFunction]): bool =
@@ -777,7 +797,7 @@ private fun java_data_type_boxed_non_primitive_java_type(type: CompiledTypeRefer
     then simpleType
     else match data_type_owner_module(dataTypeName, module, allModules) with
         case Some { owner } ->
-            if java_data_type_generated(dataTypeName, owner)
+            if java_data_type_generated(dataTypeName, owner, allModules)
             then java_data_type_reference_java_type(type, module, allModules)
             else "java.lang.Object"
         case None -> "java.lang.Object"

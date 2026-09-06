@@ -235,6 +235,61 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void retainsModuleClassWhenSameNamedDataImplementsLocalUnion() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                union Parent = Foo
+                data Foo { value: int }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .contains("interface Parent")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void validatesInheritedFieldsBeforeTopLevelRecordPromotion() throws Exception {
+        var base = writeSource("sample/Base.cfun", """
+                data Base { wait: int }
+                """);
+        var source = writeSource("sample/Foo.cfun", """
+                from /sample/Base import { Base }
+
+                data Foo = { ...Base }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(base), generatedPath(source));
+    }
+
+    @Test
+    void retainsModuleClassWhenQuotedDataFieldCollidesWithConstant() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { "VALUE": int }
+
+                const VALUE: int = 1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .contains("static final int VALUE = 1;")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
