@@ -57,17 +57,28 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 interface UI {
                     def draw_field(game_field: Field): Unit
                 }
+
+                class ConsoleUI: UI {
+                    override def draw_field(game_field: Field): Unit = this.consume(game_field)
+
+                    private def consume(game_field: Field): Field = game_field
+                }
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
 
         var field = outputDir().resolve("paper_soccer/Field.java");
         var ui = outputDir().resolve("paper_soccer/ui/UI.java");
+        var uiModule = outputDir().resolve("paper_soccer/ui/UI_.java");
         assertThat(ui)
                 .exists()
                 .content()
                 .contains("void draw_field(paper_soccer.Field gameField);")
                 .doesNotContain("java.lang.Object draw_field(java.lang.Object game_field)");
+        assertThat(uiModule)
+                .exists()
+                .content()
+                .contains("void draw_field(paper_soccer.Field gameField)");
 
         var implementation = tempDir.resolve("implementation/paper_soccer/ui/JavaUI.java");
         Files.createDirectories(implementation.getParent());
@@ -80,7 +91,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     }
                 }
                 """);
-        assertJavaCompiles(field, ui, implementation);
+        assertJavaCompiles(field, ui, uiModule, implementation);
     }
 
     @Test
