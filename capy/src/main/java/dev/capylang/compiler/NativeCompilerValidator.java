@@ -837,6 +837,11 @@ public final class NativeCompilerValidator {
                         blockTypes.put(binding.name(), binding.typeReference());
                     } else if (binding.value() instanceof LambdaExpression lambda) {
                         blockTypes.put(binding.name(), validationLambdaType(context, module, lambda, blockTypes));
+                    } else {
+                        var inferredType = validationTupleReceiverType(context, module, binding.value(), blockTypes);
+                        if (inferredType != null && unqualified(inferredType.name()).equals("Tuple")) {
+                            blockTypes.put(binding.name(), inferredType);
+                        }
                     }
                 }
                 validateNestedLambdaFunctionArguments(context, module, block.result(), blockTypes, errors);
@@ -865,6 +870,7 @@ public final class NativeCompilerValidator {
             }
             case IndexExpression index -> {
                 validateIndexReceiver(context, module, index, types, errors);
+                validateTupleIndexExpression(context, module, index, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, index.receiver(), types, errors);
                 validateNestedLambdaFunctionArguments(context, module, index.index(), types, errors);
                 if (index.hasEndIndex()) {
@@ -894,6 +900,7 @@ public final class NativeCompilerValidator {
                 }
             }
             case MethodCallExpression call -> {
+                validateTupleGetCall(context, module, call, types, errors);
                 validateKnownExtensionMethodReceiver(context, module, call, types, errors);
                 validateResultFlatMapMapper(context, module, call, types, errors);
                 validateCallableMethodArgument(context, module, call, types, errors);
@@ -1859,6 +1866,7 @@ public final class NativeCompilerValidator {
             case BinaryExpression binary -> validationBinaryType(context, module, binary, types);
             case DataLiteral literal -> validationDataLiteralType(context, module, literal, types);
             case ListLiteral literal -> validationListLiteralType(context, module, literal, types);
+            case IndexExpression index -> validationIndexType(context, module, index, types);
             case BlockExpression block -> validationBlockType(context, module, block, types);
             case MethodCallExpression call -> validationMethodCallType(context, module, call, types);
             case ReduceExpression reduce -> validationExpressionType(context, module, reduce.initial(), types);
@@ -2052,11 +2060,18 @@ public final class NativeCompilerValidator {
             MethodCallExpression call,
             Map<String, TypeReference> types
     ) {
-        var receiverType = validationExpressionType(context, module, call.receiver(), types);
+        var receiverType = validationTupleReceiverType(context, module, call.receiver(), types);
         if (receiverType == null) {
             return null;
         }
         var receiverName = unqualified(receiverType.name());
+        if (receiverName.equals("Tuple") && call.name().equals("get") && call.arguments().size() == 1) {
+            var index = tupleLiteralIndex(call.arguments().getFirst());
+            if (index != null && index >= 0 && index < receiverType.arguments().size()) {
+                return receiverType.arguments().get(index);
+            }
+            return null;
+        }
         if (receiverName.equals("String") && call.name().equals("to_int") && call.arguments().isEmpty()) {
             return new TypeReference("Result", List.of(new TypeReference("int", List.of())));
         }
@@ -2095,6 +2110,143 @@ public final class NativeCompilerValidator {
             return new TypeReference("Seq", List.of(mapperReturnType));
         }
         return null;
+    }
+
+    private TypeReference validationIndexType(
+            Context context,
+            ParsedModule module,
+            IndexExpression index,
+            Map<String, TypeReference> types
+    ) {
+        var receiverType = validationTupleReceiverType(context, module, index.receiver(), types);
+        if (receiverType == null || !unqualified(receiverType.name()).equals("Tuple") || receiverType.arguments().isEmpty()) {
+            return null;
+        }
+        if (!index.hasEndIndex()) {
+            var literalIndex = tupleLiteralIndex(index.index());
+            return literalIndex != null && literalIndex >= 0 && literalIndex < receiverType.arguments().size()
+                    ? receiverType.arguments().get(literalIndex)
+                    : null;
+        }
+        var start = tupleSliceBound(index.index(), 0, true);
+        var end = tupleSliceBound(index.endIndex(), receiverType.arguments().size() - 1, false);
+        if (start == null || end == null || start < 0 || end >= receiverType.arguments().size() || start > end) {
+            return null;
+        }
+        return new TypeReference("Tuple", List.copyOf(receiverType.arguments().subList(start, end + 1)));
+    }
+
+    private void validateTupleIndexExpression(
+            Context context,
+            ParsedModule module,
+            IndexExpression index,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var receiverType = validationTupleReceiverType(context, module, index.receiver(), types);
+        if (receiverType == null || !unqualified(receiverType.name()).equals("Tuple")) {
+            return;
+        }
+        validateTupleAccess(module, receiverType, index.index(), index.endIndex(), index.hasEndIndex(), index.location(), errors);
+    }
+
+    private void validateTupleGetCall(
+            Context context,
+            ParsedModule module,
+            MethodCallExpression call,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        if (!call.name().equals("get") || call.arguments().size() != 1) {
+            return;
+        }
+        var receiverType = validationTupleReceiverType(context, module, call.receiver(), types);
+        if (receiverType == null || !unqualified(receiverType.name()).equals("Tuple")) {
+            return;
+        }
+        validateTupleAccess(module, receiverType, call.arguments().getFirst(), null, false, call.location(), errors);
+    }
+
+    private TypeReference validationTupleReceiverType(
+            Context context,
+            ParsedModule module,
+            Expression expression,
+            Map<String, TypeReference> types
+    ) {
+        if (expression instanceof TupleLiteral literal) {
+            return new TypeReference("Tuple", literal.values().stream()
+                    .map(value -> validationExpressionType(context, module, value, types))
+                    .map(type -> type == null ? new TypeReference("any", List.of()) : type)
+                    .toList());
+        }
+        return validationExpressionType(context, module, expression, types);
+    }
+
+    private void validateTupleAccess(
+            ParsedModule module,
+            TypeReference receiverType,
+            Expression startExpression,
+            Expression endExpression,
+            boolean slice,
+            SourceLocation location,
+            List<CompilerError> errors
+    ) {
+        var arity = receiverType.arguments().size();
+        if (arity == 0) {
+            errors.add(error(module, location, "Tuple access requires a statically known Tuple[...] type."));
+            return;
+        }
+        if (!slice) {
+            var index = tupleLiteralIndex(startExpression);
+            if (index == null) {
+                errors.add(error(module, location, "Tuple index must be an integer literal."));
+            } else if (index < 0 || index >= arity) {
+                errors.add(error(module, location, tupleIndexOutOfBounds(index, arity)));
+            }
+            return;
+        }
+        var start = tupleSliceBound(startExpression, 0, true);
+        var end = tupleSliceBound(endExpression, arity - 1, false);
+        if (start == null || end == null) {
+            errors.add(error(module, location, "Tuple index must be an integer literal."));
+        } else if (start < 0 || start >= arity) {
+            errors.add(error(module, location, tupleSliceOutOfBounds("start", start, arity)));
+        } else if (end < 0 || end >= arity) {
+            errors.add(error(module, location, tupleSliceOutOfBounds("end", end, arity)));
+        } else if (start > end) {
+            errors.add(error(module, location,
+                    "Tuple slice range " + start + ".." + end + " is reversed; expected start <= end."));
+        }
+    }
+
+    private Integer tupleLiteralIndex(Expression expression) {
+        if (expression instanceof IntLiteral literal) {
+            return literal.value();
+        }
+        if (expression instanceof UnaryExpression unary
+                && unary.operator().equals("-")
+                && unary.expression() instanceof IntLiteral literal) {
+            return -literal.value();
+        }
+        return null;
+    }
+
+    private Integer tupleSliceBound(Expression expression, int omittedValue, boolean start) {
+        if (expression instanceof IntLiteral literal) {
+            var marker = start ? "__capy_slice_start__" : "__capy_slice_end__";
+            return literal.source().equals(marker) ? omittedValue : literal.value();
+        }
+        return tupleLiteralIndex(expression);
+    }
+
+    private String tupleIndexOutOfBounds(int index, int arity) {
+        return "Tuple index " + index + " is out of bounds for Tuple of size " + arity
+                + "; expected 0.." + (arity - 1) + ".";
+    }
+
+    private String tupleSliceOutOfBounds(String bound, int index, int arity) {
+        return "Tuple slice " + bound + " " + index + " is out of bounds for Tuple of size " + arity
+                + "; expected 0.." + (arity - 1) + ".";
     }
 
     private TypeReference validationIterableElementType(TypeReference receiverType) {

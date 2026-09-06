@@ -7,13 +7,25 @@ fun tuple_if(x: int): Tuple[int, String, float, String] =
 
 fun tuple_index_1(): String = (1, "foo", 5.0)[1]
 
-fun tuple_index_minus_1(): double = (1, "foo", 5.0)[-1]
+fun tuple_index_first(): int = (1, "foo", 5.0)[0]
+
+fun tuple_index_last(): double = (1, "foo", 5.0)[2]
+
+fun tuple_get_first(): int = (1, "foo", 5.0).get(0)
+
+fun tuple_get_last(): double = (1, "foo", 5.0).get(2)
 
 fun tuple_index_on_var(t: Tuple[int, String, double]): String = t[1]
 
 fun tuple_slice_from_1(): Tuple[String, double] = (1, "foo", 5.0)[1:]
 
-fun tuple_slice_to_minus_1(): Tuple[int, String] = (1, "foo", 5.0)[:-1]
+fun tuple_slice_first_two(): Tuple[int, String] = (1, "foo", 5.0)[0:1]
+
+fun tuple_slice_to_1(): Tuple[int, String] = (1, "foo", 5.0)[:1]
+
+fun tuple_slice_all(): Tuple[int, String, double] = (1, "foo", 5.0)[:]
+
+fun tuple_slice_single(): Tuple[String] = (1, "foo", 5.0)[1:1]
 
 fun tuple_slice_on_var(t: Tuple[int, String, double]): Tuple[String, double] = t[1:]
 
@@ -32,4 +44,3 @@ fun tuple_with_functions_apply_second(x: int): int =
     let funs: Tuple[int => int, int => int] = tuple_with_functions()
     let f: int => int = funs[1]
     f(x)
-
