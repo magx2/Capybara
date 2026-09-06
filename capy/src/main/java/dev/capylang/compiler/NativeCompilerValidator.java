@@ -295,17 +295,40 @@ public final class NativeCompilerValidator {
             }
         }
 
-        var aliasOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
-        for (var entry : fragmentsBySourcePath.entrySet()) {
-            var module = entry.getValue().getFirst();
-            validateGeneratedPath(
-                    entry.getKey().replace('/', '_'),
-                    new GeneratedPathOwner("module `" + entry.getKey() + "`", module),
-                    aliasOwnersByGeneratedPath,
-                    reportedCollisions,
-                    errors
-            );
+        for (var fragments : fragmentsBySourcePath.values()) {
+            var aliasOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
+            var importedSourcePaths = new LinkedHashSet<String>();
+            for (var fragment : fragments) {
+                for (var declaration : fragment.imports()) {
+                    importedSourcePaths.add(importedModulePath(fragment, declaration.modulePath()));
+                }
+            }
+            for (var importedSourcePath : importedSourcePaths) {
+                var importedFragments = fragmentsBySourcePath.get(importedSourcePath);
+                if (importedFragments == null) {
+                    continue;
+                }
+                validateGeneratedPath(
+                        importedSourcePath.replace('/', '_'),
+                        new GeneratedPathOwner(
+                                "module `" + importedSourcePath + "`",
+                                importedFragments.getFirst()
+                        ),
+                        aliasOwnersByGeneratedPath,
+                        reportedCollisions,
+                        errors
+                );
+            }
         }
+    }
+
+    private String importedModulePath(ParsedModule module, String modulePath) {
+        var normalizedImportPath = normalizeModulePath(modulePath);
+        if (modulePath.startsWith("/") || modulePath.contains("/")) {
+            return normalizedImportPath;
+        }
+        var currentPath = normalizeModulePath(module.path());
+        return currentPath.isBlank() ? normalizedImportPath : currentPath + "/" + normalizedImportPath;
     }
 
     private String generatedModuleContainerPath(List<ParsedModule> fragments) {
