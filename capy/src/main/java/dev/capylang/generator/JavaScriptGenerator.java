@@ -39,7 +39,7 @@ public final class JavaScriptGenerator {
             CompiledProgram source,
             CompiledProgram lookup
     ) {
-        JavaGenerator.validateNativeProviderBindings(source, "javascript");
+        JavaGenerator.validateNativeProviderBindings(source, lookup, "javascript");
         var sameProgram = source == lookup;
         source = JavaGenerator.deduplicateProgram(source);
         lookup = sameProgram ? source : JavaGenerator.deduplicateProgram(lookup);

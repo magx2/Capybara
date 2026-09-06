@@ -29,6 +29,7 @@ from /dev/capylang/compiler/CapybaraValidator import { CapybaraValidator }
 from /dev/capylang/compiler/CapybaraValidatorProvider import { validator }
 from /dev/capylang/compiler/CompilerError import { CompilerError }
 from /dev/capylang/compiler/NativeProviderBinding import { NativeProviderBinding }
+from /dev/capylang/compiler/NativeProviderBackendBinding import { NativeProviderBackendBinding }
 from /dev/capylang/compiler/NativeProviderCatalog import { NativeProviderCatalog }
 from /dev/capylang/compiler/NativeProviderManifest import { NativeProviderManifest }
 from /dev/capylang/compiler/StaticImport import { StaticImport }
@@ -506,17 +507,50 @@ private fun native_provider_backend_binding_present(
 private fun native_provider_binding_supports_backend(binding: CompiledNativeProviderBinding, outputType: String): bool =
     if outputType == "java" | outputType == "JAVA"
     then match binding.javaBinding with
-        case Some _ -> true
+        case Some { backend } -> native_provider_backend_class_present(backend)
         case None -> false
     else if outputType == "javascript" | outputType == "JAVASCRIPT" | outputType == "js" | outputType == "JS"
     then match binding.javascriptBinding with
-        case Some _ -> true
+        case Some { backend } -> native_provider_backend_factory_present(backend)
+            | native_provider_backend_module_export_present(backend)
+            | native_provider_backend_class_present(backend)
         case None -> false
     else if outputType == "python" | outputType == "PYTHON" | outputType == "py" | outputType == "PY"
     then match binding.pythonBinding with
-        case Some _ -> true
+        case Some { backend } -> native_provider_backend_factory_present(backend)
+            | native_provider_backend_module_export_present(backend)
+            | native_provider_backend_qualified_class_present(backend)
         case None -> false
     else true
+
+/// Checks whether a native backend binding names a constructible class.
+private fun native_provider_backend_class_present(backend: NativeProviderBackendBinding): bool =
+    match backend.className with
+    case Some { className } -> !className.is_empty()
+    case None -> false
+
+/// Checks whether a Python class binding contains the module separator required by its generator.
+private fun native_provider_backend_qualified_class_present(backend: NativeProviderBackendBinding): bool =
+    match backend.className with
+    case Some { className } -> !className.is_empty() & (className ? ".")
+    case None -> false
+
+/// Checks whether a native backend binding supplies a callable factory expression.
+private fun native_provider_backend_factory_present(backend: NativeProviderBackendBinding): bool =
+    match backend.factory with
+    case Some { factory } -> !factory.is_empty()
+    case None -> false
+
+/// Checks whether a native backend binding supplies both sides of a module export reference.
+private fun native_provider_backend_module_export_present(backend: NativeProviderBackendBinding): bool =
+    match backend.moduleName with
+    case Some { moduleName } ->
+        if moduleName.is_empty()
+        then false
+        else match backend.exportName with
+            case Some { exportName } -> !exportName.is_empty()
+            case None -> false
+    case None -> false
 
 /// Formats the selected backend name consistently in native-provider diagnostics.
 private fun native_provider_backend_name(outputType: String): String =
