@@ -779,8 +779,26 @@ class CompilationTest {
 
         assertThat(result).isInstanceOf(Either.Right.class);
         assertThat(((Either.Right<?, ?>) result).value().toString())
-                .contains("Module paths `sample/shared-code/Support` and `sample/shared_code/Support` "
-                        + "generate the same backend path `sample/shared_code/Support`.");
+                .contains("Generated backend path `sample/shared_code/Support` collides between "
+                        + "module `sample/shared-code/Support` and module `sample/shared_code/Support`.");
+    }
+
+    @Test
+    void shouldRejectObjectInterfaceAndModuleGeneratedPathCollisions() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Defs", "/foo-bar", "interface Api {}", SourceKind.OBJECT_ORIENTED),
+                        rawModule("Api", "/foo_bar", "fun value(): int = 42")
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Generated backend path `foo_bar/Api` collides between interface `Api` "
+                        + "from module `foo-bar/Defs` and module `foo_bar/Api`.");
     }
 
     @Test
