@@ -148,6 +148,61 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void retainsRenamedModuleClassWhenSameNamedObjectInterfaceExists() throws Exception {
+        writeSource("sample/Foo.cfun", """
+                data Foo { value: int }
+                """);
+        writeSource("sample/Foo.coo", """
+                interface Foo {
+                    def value(): int
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var objectInterface = outputDir().resolve("sample/Foo.java");
+        var module = outputDir().resolve("sample/Foo_.java");
+        assertThat(objectInterface)
+                .content()
+                .contains("public interface Foo");
+        assertThat(module)
+                .content()
+                .contains("public final class Foo_")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(objectInterface, module);
+    }
+
+    @Test
+    void preservesNominalTypeInSelfReferentialTopLevelRecord() throws Exception {
+        var source = writeSource("sample/Node.cfun", """
+                data Node { children: List[Node] }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public record Node(java.util.List<Node> children) {")
+                .doesNotContain("java.util.List<java.lang.Object> children");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void retainsModuleClassForPrivateSameNamedData() throws Exception {
+        var source = writeSource("sample/Secret.cfun", """
+                private data Secret { value: int }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Secret")
+                .doesNotContain("public record Secret(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
