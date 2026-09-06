@@ -298,6 +298,8 @@ private fun java_module_constructor(module: CompiledModule): String =
 private fun java_top_level_record_module(module: CompiledModule): bool =
     schema_type_exists(module.name, module.functions)
         & java_data_type_kind(module.name, module.functions) == "data"
+        & data_type_visibility(module.name, module.functions) == "public"
+        & java_module_class_name(module) == java_identifier(module.name)
 
 private fun java_effect_module_code(module: CompiledModule): String =
     java_package(module)
@@ -755,7 +757,7 @@ private fun java_data_type_boxed_non_primitive_java_type(type: CompiledTypeRefer
     then simpleType
     else match data_type_owner_module(dataTypeName, module, allModules) with
         case Some { owner } ->
-            if java_data_type_emittable(dataTypeName, owner)
+            if java_data_type_generated(dataTypeName, owner)
             then java_data_type_reference_java_type(type, module, allModules)
             else "java.lang.Object"
         case None -> "java.lang.Object"
