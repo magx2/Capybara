@@ -95,6 +95,7 @@ final class GeneratedJavaPruner {
         var members = new ArrayList<Member>();
         var state = new ScanState();
         var depth = 1;
+        var parentheses = 0;
         var memberStart = classBody + 1;
         var blockStart = -1;
         for (var index = classBody + 1; index < source.length(); index++) {
@@ -103,7 +104,7 @@ final class GeneratedJavaPruner {
                 continue;
             }
             if (character == '{') {
-                if (depth == 1) {
+                if (depth == 1 && parentheses == 0) {
                     blockStart = index;
                 }
                 depth++;
@@ -118,6 +119,10 @@ final class GeneratedJavaPruner {
                 }
             } else if (character == ';' && depth == 1) {
                 memberStart = index + 1;
+            } else if (character == '(' && depth == 1) {
+                parentheses++;
+            } else if (character == ')' && depth == 1 && parentheses > 0) {
+                parentheses--;
             }
         }
         return members;

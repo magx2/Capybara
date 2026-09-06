@@ -20,6 +20,7 @@ class GeneratedJavaPrunerTest {
                         return "{ __capy_pow_int }";
                     }
 
+                    @SuppressWarnings({"unchecked", "rawtypes"})
                     private static int __capy_pow_int(int base, int exponent) {
                         return base;
                     }
@@ -33,7 +34,11 @@ class GeneratedJavaPrunerTest {
 
         assertThat(generated.code())
                 .contains("build_ui__5_0", "{ __capy_pow_int }")
-                .doesNotContain("__CapyFunction3", "private static int __capy_pow_int");
+                .doesNotContain(
+                        "__CapyFunction3",
+                        "private static int __capy_pow_int",
+                        "@SuppressWarnings"
+                );
     }
 
     @Test
