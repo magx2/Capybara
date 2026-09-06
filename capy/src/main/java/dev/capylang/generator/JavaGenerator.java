@@ -6,6 +6,7 @@ import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledNativeProviderBinding;
 import dev.capylang.compiler.LinkedJsonCodec;
+import dev.capylang.compiler.NativeProviderBackendBinding;
 import dev.capylang.compiler.parser.ParserException;
 import dev.capylang.generator.internal.GeneratedJavaGenerator;
 
@@ -59,7 +60,7 @@ public final class JavaGenerator {
             CompiledProgram source,
             CompiledProgram lookup
     ) {
-        validateNativeProviderBindings(source, "java");
+        validateNativeProviderBindings(source, lookup, "java");
         var sameProgram = source == lookup;
         source = deduplicateProgram(source);
         lookup = sameProgram ? source : deduplicateProgram(lookup);
@@ -101,9 +102,9 @@ public final class JavaGenerator {
         return result;
     }
 
-    static void validateNativeProviderBindings(CompiledProgram program, String backend) {
-        for (var declaration : program.nativeProviderCatalog().declarations()) {
-            var wired = program.nativeProviderCatalog().bindings().stream()
+    static void validateNativeProviderBindings(CompiledProgram source, CompiledProgram lookup, String backend) {
+        for (var declaration : source.nativeProviderCatalog().declarations()) {
+            var wired = lookup.nativeProviderCatalog().bindings().stream()
                     .filter(binding -> binding.interfaceId().equals(declaration.interfaceId()))
                     .filter(binding -> binding.qualifier().equals(declaration.qualifier()))
                     .anyMatch(binding -> supportsBackend(binding, backend));
@@ -119,11 +120,49 @@ public final class JavaGenerator {
 
     private static boolean supportsBackend(CompiledNativeProviderBinding binding, String backend) {
         return switch (backend) {
-            case "java" -> binding.javaBinding().isPresent();
-            case "javascript" -> binding.javascriptBinding().isPresent();
-            case "python" -> binding.pythonBinding().isPresent();
+            case "java" -> hasClass(backendBinding(binding.javaBinding()));
+            case "javascript" -> hasJavaScriptValue(backendBinding(binding.javascriptBinding()));
+            case "python" -> hasPythonValue(backendBinding(binding.pythonBinding()));
             default -> true;
         };
+    }
+
+    private static boolean hasClass(NativeProviderBackendBinding binding) {
+        return binding != null && !optionalString(binding.className()).isBlank();
+    }
+
+    private static boolean hasJavaScriptValue(NativeProviderBackendBinding binding) {
+        return binding != null && (hasFactory(binding) || hasModuleExport(binding) || hasClass(binding));
+    }
+
+    private static boolean hasPythonValue(NativeProviderBackendBinding binding) {
+        return binding != null && (hasFactory(binding)
+                || hasModuleExport(binding)
+                || isQualifiedClassName(optionalString(binding.className())));
+    }
+
+    private static boolean hasFactory(NativeProviderBackendBinding binding) {
+        return !optionalString(binding.factory()).isBlank();
+    }
+
+    private static boolean hasModuleExport(NativeProviderBackendBinding binding) {
+        return !optionalString(binding.moduleName()).isBlank()
+                && !optionalString(binding.exportName()).isBlank();
+    }
+
+    private static NativeProviderBackendBinding backendBinding(Optional<?> value) {
+        var backend = value.orElse(null);
+        return backend instanceof NativeProviderBackendBinding binding ? binding : null;
+    }
+
+    private static String optionalString(Optional<?> value) {
+        var item = value.orElse(null);
+        return item instanceof String text ? text : "";
+    }
+
+    private static boolean isQualifiedClassName(String className) {
+        var separator = className.lastIndexOf('.');
+        return separator > 0 && separator < className.length() - 1;
     }
 
     static CompiledProgram deduplicateProgram(CompiledProgram program) {
