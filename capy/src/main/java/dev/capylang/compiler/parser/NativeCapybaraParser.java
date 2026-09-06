@@ -27,8 +27,10 @@ import java.util.regex.Pattern;
 public final class NativeCapybaraParser implements CapybaraParser, CapybaraValidator {
     private final NativeCompilerValidator validator = new NativeCompilerValidator();
 
-    private static final String MODULE_NAME_PATTERN =
-            "[A-Za-z_][A-Za-z0-9_]*|/[A-Za-z_][a-zA-Z0-9_]*(?:/[A-Za-z_][a-zA-Z0-9_]*)*";
+    private static final String MODULE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_]*";
+    private static final String PACKAGE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_-]*";
+    private static final String MODULE_NAME_PATTERN = MODULE_SEGMENT_PATTERN
+            + "|/(?:" + PACKAGE_SEGMENT_PATTERN + "/)*" + MODULE_SEGMENT_PATTERN;
     private static final Pattern FROM_IMPORT_PATTERN = Pattern.compile(
             "^\\s*from\\s+(" + MODULE_NAME_PATTERN + ")\\s+import\\s*\\{\\s*([^}]*)\\s*}(?:\\s+except\\s*\\{\\s*([^}]*)\\s*})?\\s*$"
     );
