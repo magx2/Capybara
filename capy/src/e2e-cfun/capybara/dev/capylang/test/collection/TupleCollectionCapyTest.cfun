@@ -45,19 +45,29 @@ private fun tuple_if_returns_conditional_tuple_value(): Assert =
 private fun tuple_indexes_return_expected_values(): Assert =
     assert_all([
         assert_that(tuple_index_1()).is_equal_to("foo"),
-        assert_that(tuple_index_minus_1()).is_equal_to(5.0),
+        assert_that(tuple_index_first()).is_equal_to(1),
+        assert_that(tuple_index_last()).is_equal_to(5.0),
+        assert_that(tuple_get_first()).is_equal_to(1),
+        assert_that(tuple_get_last()).is_equal_to(5.0),
         assert_that(tuple_index_on_var((1, "bar", 9.0))).is_equal_to("bar"),
     ])
 
 private fun tuple_slices_return_expected_values(): Assert =
     let from_one = tuple_slice_from_1()
-    let to_minus_one = tuple_slice_to_minus_1()
+    let first_two = tuple_slice_first_two()
+    let to_one = tuple_slice_to_1()
+    let all = tuple_slice_all()
+    let single = tuple_slice_single()
     let on_var = tuple_slice_on_var((2, "bar", 9.0))
     assert_all([
         assert_that(from_one[0]).is_equal_to("foo"),
         assert_that(from_one[1]).is_equal_to(5.0),
-        assert_that(to_minus_one[0]).is_equal_to(1),
-        assert_that(to_minus_one[1]).is_equal_to("foo"),
+        assert_that(first_two[0]).is_equal_to(1),
+        assert_that(first_two[1]).is_equal_to("foo"),
+        assert_that(to_one[0]).is_equal_to(1),
+        assert_that(to_one[1]).is_equal_to("foo"),
+        assert_that(all[2]).is_equal_to(5.0),
+        assert_that(single[0]).is_equal_to("foo"),
         assert_that(on_var[0]).is_equal_to("bar"),
         assert_that(on_var[1]).is_equal_to(9.0),
     ])

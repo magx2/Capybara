@@ -1579,6 +1579,8 @@ private fun python_method_call_code(call: CompiledMethodCallExpression, env: Lis
         let receiver = python_expression_code(call.receiver, env, module, allModules)
         if python_builtin_size_method_call(call, receiverType)
         then "__capy_size(" + receiver + ")"
+        else if call.name == "get" & call.arguments.size().value == 1 & receiverType == python_tuple_type()
+        then "__capy_index(" + receiver + ", " + python_expression_list_code(call.arguments, env, module, allModules) + ")"
         else if call.name == "rest" & call.arguments.is_empty() & python_seq_node_type(python_type_unqualified_name(receiverType))
         then "__capy_seq_rest(" + receiver + ")"
         else if python_effect_method_call(call, receiverType)
@@ -3374,20 +3376,25 @@ private fun python_index_expression_code(index: CompiledIndexExpression, env: Li
     else if index.hasEndIndex
     then receiver
         + "["
-        + python_slice_bound_code(index.index, true, env, module, allModules)
+        + python_slice_bound_code(index.index, true, receiverType, env, module, allModules)
         + ":"
-        + python_slice_bound_code(index.endIndex, false, env, module, allModules)
+        + python_slice_bound_code(index.endIndex, false, receiverType, env, module, allModules)
         + "]"
     else "__capy_index(" + receiver + ", " + python_expression_code(index.index, env, module, allModules) + ")"
 
 /// Emits Python code for slice bound.
-private fun python_slice_bound_code(expression: CompiledExpression, start: bool, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun python_slice_bound_code(expression: CompiledExpression, start: bool, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
     case CompiledIntLiteral literal ->
         if python_omitted_slice_bound(literal, start)
         then ""
-        else python_expression_code(expression, env, module, allModules)
-    case _ -> python_expression_code(expression, env, module, allModules)
+        else python_explicit_slice_bound_code(expression, start, receiverType, env, module, allModules)
+    case _ -> python_explicit_slice_bound_code(expression, start, receiverType, env, module, allModules)
+
+/// Converts only Tuple slice ends from inclusive source bounds to exclusive Python bounds.
+private fun python_explicit_slice_bound_code(expression: CompiledExpression, start: bool, receiverType: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = python_expression_code(expression, env, module, allModules)
+    if !start & receiverType == python_tuple_type() then "(" + code + " + 1)" else code
 
 /// Checks whether the current value satisfies the omitted slice bound rule for Python processing.
 private fun python_omitted_slice_bound(literal: CompiledIntLiteral, start: bool): bool =
@@ -3803,7 +3810,7 @@ private fun python_expression_type(expression: CompiledExpression, env: List[Pyt
     case CompiledListLiteral _ -> python_list_type()
     case CompiledSetLiteral _ -> python_set_type()
     case CompiledDictLiteral _ -> python_dict_type()
-    case CompiledTupleLiteral _ -> python_unknown_type()
+    case CompiledTupleLiteral _ -> python_tuple_type()
     case CompiledIndexExpression index -> python_index_expression_type(index, env, module, allModules)
     case CompiledDataLiteral literal -> python_data_literal_expression_type(literal, env, module, allModules)
     case CompiledFieldAccessExpression access -> python_field_access_type(access, env, module, allModules)

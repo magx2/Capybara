@@ -194,7 +194,9 @@ private fun compiler_expression_type_errors(expression: CompiledExpression, cont
     case CompiledUnaryExpression value -> compiler_expression_type_errors(value.expression, context)
     case CompiledFunctionCallExpression value -> compiler_expression_list_type_errors(value.arguments, context)
     case CompiledMethodCallExpression value ->
-        compiler_expression_type_errors(value.receiver, context) + compiler_expression_list_type_errors(value.arguments, context)
+        compiler_tuple_get_errors(value, context)
+            + compiler_expression_type_errors(value.receiver, context)
+            + compiler_expression_list_type_errors(value.arguments, context)
     case CompiledWithExpression value ->
         compiler_expression_type_errors(value.receiver, context) + compiler_data_field_value_type_errors(value.fields, context)
     case CompiledLambdaExpression value -> compiler_expression_type_errors(
@@ -206,7 +208,8 @@ private fun compiler_expression_type_errors(expression: CompiledExpression, cont
     case CompiledDictLiteral value -> compiler_dict_entry_type_errors(value.entries, context)
     case CompiledTupleLiteral value -> compiler_expression_list_type_errors(value.values, context)
     case CompiledIndexExpression value ->
-        compiler_expression_type_errors(value.receiver, context)
+        compiler_tuple_index_errors(value, context)
+            + compiler_expression_type_errors(value.receiver, context)
             + compiler_expression_type_errors(value.index, context)
             + (if value.hasEndIndex then compiler_expression_type_errors(value.endIndex, context) else [])
     case CompiledDataLiteral value ->
@@ -254,7 +257,14 @@ private fun compiler_block_type_errors(bindings: List[CompiledLetBinding], resul
     match bindings[0] with
     case None -> compiler_expression_type_errors(result, context)
     case Some { binding } ->
-        let bindingType = if binding.typeReference.name.is_empty() then CompiledTypeReference { name: "any", arguments: [] } else binding.typeReference
+        let bindingType = if binding.typeReference.name.is_empty()
+            then match compiler_expression_type(binding.value, context.variableTypes) with
+                case Some { inferred } ->
+                    if compiler_unqualified_type_name(inferred.name) == "Tuple"
+                    then inferred
+                    else CompiledTypeReference { name: "any", arguments: [] }
+                case None -> CompiledTypeReference { name: "any", arguments: [] }
+            else binding.typeReference
         compiler_expression_type_errors(binding.value, context)
             + compiler_block_type_errors(
                 bindings[1:],
@@ -425,7 +435,151 @@ private fun compiler_expression_type(expression: CompiledExpression, types: Dict
     case CompiledBoolLiteral _ -> Some { CompiledTypeReference { name: "bool", arguments: [] } }
     case CompiledStringLiteral _ -> Some { CompiledTypeReference { name: "String", arguments: [] } }
     case CompiledDataLiteral literal -> Some { CompiledTypeReference { name: literal.typeName, arguments: [] } }
+    case CompiledTupleLiteral literal -> Some { CompiledTypeReference { name: "Tuple", arguments: compiler_compiled_expression_types(literal.values, types) } }
+    case CompiledIndexExpression index -> compiler_tuple_index_type(index, types)
+    case CompiledMethodCallExpression call -> compiler_tuple_get_type(call, types)
     case _ -> None {}
+
+/// Validates bracket access when its receiver is a statically identifiable Tuple.
+private fun compiler_tuple_index_errors(index: CompiledIndexExpression, context: CompilerTypeValidationContext): List[CompilerError] =
+    match compiler_expression_type(index.receiver, context.variableTypes) with
+    case Some { receiverType } ->
+        if compiler_unqualified_type_name(receiverType.name) == "Tuple"
+        then compiler_tuple_access_errors(receiverType, index.index, index.endIndex, index.hasEndIndex, index.location, context)
+        else []
+    case None -> []
+
+/// Validates Tuple.get with the same literal-only contract as bracket access.
+private fun compiler_tuple_get_errors(call: CompiledMethodCallExpression, context: CompilerTypeValidationContext): List[CompilerError] =
+    if call.name != "get" | call.arguments.size().value != 1
+    then []
+    else match compiler_expression_type(call.receiver, context.variableTypes) with
+        case Some { receiverType } ->
+            if compiler_unqualified_type_name(receiverType.name) == "Tuple"
+            then match call.arguments[0] with
+                case Some { index } -> compiler_tuple_access_errors(receiverType, index, index, false, call.location, context)
+                case None -> []
+            else []
+        case None -> []
+
+/// Applies Tuple arity, literal, and inclusive-slice validation.
+private fun compiler_tuple_access_errors(receiverType: CompiledTypeReference, startExpression: CompiledExpression, endExpression: CompiledExpression, slice: bool, location: CompiledSourceLocation, context: CompilerTypeValidationContext): List[CompilerError] =
+    let arity = receiverType.arguments.size().value
+    if arity == 0
+    then [compiler_tuple_error("Tuple access requires a statically known Tuple[...] type.", location, context)]
+    else if !slice
+    then match compiler_tuple_literal_index(startExpression) with
+        case None -> [compiler_tuple_error("Tuple index must be an integer literal.", location, context)]
+        case Some { index } ->
+            if index < 0 | index >= arity
+            then [compiler_tuple_error(compiler_tuple_index_out_of_bounds(index, arity), location, context)]
+            else []
+    else
+        match compiler_tuple_slice_bound(startExpression, 0, true) with
+        case None -> [compiler_tuple_error("Tuple index must be an integer literal.", location, context)]
+        case Some { start } ->
+            match compiler_tuple_slice_bound(endExpression, arity - 1, false) with
+            case None -> [compiler_tuple_error("Tuple index must be an integer literal.", location, context)]
+            case Some { end } ->
+                if start < 0 | start >= arity
+                then [compiler_tuple_error(compiler_tuple_slice_out_of_bounds("start", start, arity), location, context)]
+                else if end < 0 | end >= arity
+                then [compiler_tuple_error(compiler_tuple_slice_out_of_bounds("end", end, arity), location, context)]
+                else if start > end
+                then [compiler_tuple_error("Tuple slice range " + start + ".." + end + " is reversed; expected start <= end.", location, context)]
+                else []
+
+private fun compiler_tuple_error(message: String, location: CompiledSourceLocation, context: CompilerTypeValidationContext): CompilerError =
+    CompilerError {
+        message: message,
+        moduleName: backend_module_file_name(context.module),
+        line: location.line,
+        column: location.column
+    }
+
+private fun compiler_tuple_index_out_of_bounds(index: int, arity: int): String =
+    "Tuple index " + index + " is out of bounds for Tuple of size " + arity + "; expected 0.." + (arity - 1) + "."
+
+private fun compiler_tuple_slice_out_of_bounds(bound: String, index: int, arity: int): String =
+    "Tuple slice " + bound + " " + index + " is out of bounds for Tuple of size " + arity + "; expected 0.." + (arity - 1) + "."
+
+/// Extracts a signed integer literal without accepting dynamic or constructed index values.
+private fun compiler_tuple_literal_index(expression: CompiledExpression): Option[int] =
+    match expression with
+    case CompiledIntLiteral literal -> Some { literal.value }
+    case CompiledUnaryExpression unary ->
+        if unary.operator == "-"
+        then match unary.expression with
+            case CompiledIntLiteral literal -> Some { 0 - literal.value }
+            case _ -> None {}
+        else None {}
+    case _ -> None {}
+
+private fun compiler_tuple_slice_bound(expression: CompiledExpression, omitted: int, start: bool): Option[int] =
+    match expression with
+    case CompiledIntLiteral literal ->
+        if (start & literal.source == "__capy_slice_start__") | (!start & literal.source == "__capy_slice_end__")
+        then Some { omitted }
+        else Some { literal.value }
+    case _ -> compiler_tuple_literal_index(expression)
+
+/// Infers an exact element or inclusive-slice Tuple type after validation.
+private fun compiler_tuple_index_type(index: CompiledIndexExpression, types: Dict[CompiledTypeReference]): Option[CompiledTypeReference] =
+    match compiler_expression_type(index.receiver, types) with
+    case Some { receiverType } ->
+        let arity = receiverType.arguments.size().value
+        if compiler_unqualified_type_name(receiverType.name) != "Tuple" | arity == 0
+        then None {}
+        else if !index.hasEndIndex
+        then match compiler_tuple_literal_index(index.index) with
+            case Some { value } -> compiler_compiled_type_at(receiverType.arguments, value)
+            case None -> None {}
+        else match compiler_tuple_slice_bound(index.index, 0, true) with
+            case None -> None {}
+            case Some { start } ->
+                match compiler_tuple_slice_bound(index.endIndex, arity - 1, false) with
+                case None -> None {}
+                case Some { end } ->
+                    if start < 0 | end >= arity | start > end
+                    then None {}
+                    else Some { CompiledTypeReference { name: "Tuple", arguments: compiler_compiled_tuple_slice(receiverType.arguments, start, end, 0) } }
+    case None -> None {}
+
+private fun compiler_tuple_get_type(call: CompiledMethodCallExpression, types: Dict[CompiledTypeReference]): Option[CompiledTypeReference] =
+    if call.name != "get" | call.arguments.size().value != 1
+    then None {}
+    else match call.arguments[0] with
+        case Some { index } -> compiler_tuple_index_type(CompiledIndexExpression {
+            receiver: call.receiver,
+            index: index,
+            endIndex: index,
+            hasEndIndex: false,
+            location: call.location
+        }, types)
+        case None -> None {}
+
+private fun compiler_compiled_expression_types(expressions: List[CompiledExpression], types: Dict[CompiledTypeReference]): List[CompiledTypeReference] =
+    match expressions[0] with
+    case None -> []
+    case Some { expression } ->
+        let valueType = match compiler_expression_type(expression, types) with
+            case Some { inferred } -> inferred
+            case None -> CompiledTypeReference { name: "any", arguments: [] }
+        [valueType] + compiler_compiled_expression_types(expressions[1:], types)
+
+private fun compiler_compiled_type_at(types: List[CompiledTypeReference], index: int): Option[CompiledTypeReference] =
+    if index < 0
+    then None {}
+    else match types[0] with
+        case None -> None {}
+        case Some { typeReference } -> if index == 0 then Some { typeReference } else compiler_compiled_type_at(types[1:], index - 1)
+
+private fun compiler_compiled_tuple_slice(types: List[CompiledTypeReference], start: int, end: int, index: int): List[CompiledTypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { typeReference } ->
+        let rest = compiler_compiled_tuple_slice(types[1:], start, end, index + 1)
+        if index >= start & index <= end then [typeReference] + rest else rest
 
 /// Removes qualification and explicit raw-literal metadata from a nominal type name.
 private fun compiler_nominal_type_name(name: String): String =
@@ -2520,7 +2674,7 @@ private fun infer_return_type(expression: Expression, env: List[FunctionParamete
     case SetLiteral literal -> compiler_set_type(compiler_first_expression_type(literal.values, env, depth + 1))
     case DictLiteral literal -> compiler_dict_type(compiler_first_dict_value_type(literal.entries, env, depth + 1))
     case TupleLiteral literal -> compiler_tuple_type(compiler_expression_types(literal.values, env, depth + 1))
-    case IndexExpression _ -> missing_type()
+    case IndexExpression index -> infer_tuple_index_type(index, env, depth + 1)
     case DataLiteral literal -> TypeReference { name: literal.typeName, arguments: [] }
     case FieldAccessExpression _ -> missing_type()
     case ReduceExpression reduce -> infer_return_type(reduce.initial, env, depth + 1)
@@ -2708,7 +2862,70 @@ private fun infer_unary_type(unary: UnaryExpression, env: List[FunctionParameter
 private fun infer_method_call_type(call: MethodCallExpression, env: List[FunctionParameter], depth: int): TypeReference =
     if call.name == "size"
     then compiler_int_type()
+    else if call.name == "get" & call.arguments.size().value == 1
+    then match call.arguments[0] with
+        case Some { index } -> infer_tuple_index_type(IndexExpression {
+            receiver: call.receiver,
+            index: index,
+            endIndex: index,
+            hasEndIndex: false,
+            location: call.location
+        }, env, depth + 1)
+        case None -> missing_type()
     else missing_type()
+
+/// Infers an exact Tuple element or inclusive-slice type from parsed expressions.
+private fun infer_tuple_index_type(index: IndexExpression, env: List[FunctionParameter], depth: int): TypeReference =
+    let receiverType = infer_return_type(index.receiver, env, depth + 1)
+    let arity = receiverType.arguments.size().value
+    if compiler_unqualified_type_name(receiverType.name) != "Tuple" | arity == 0
+    then missing_type()
+    else if !index.hasEndIndex
+    then match compiler_parsed_tuple_literal_index(index.index) with
+        case Some { value } -> compiler_type_at(receiverType.arguments, value)
+        case None -> missing_type()
+    else match compiler_parsed_tuple_slice_bound(index.index, 0, true) with
+        case None -> missing_type()
+        case Some { start } ->
+            match compiler_parsed_tuple_slice_bound(index.endIndex, arity - 1, false) with
+            case None -> missing_type()
+            case Some { end } ->
+                if start < 0 | end >= arity | start > end
+                then missing_type()
+                else compiler_tuple_type(compiler_tuple_type_slice(receiverType.arguments, start, end, 0))
+
+private fun compiler_parsed_tuple_literal_index(expression: Expression): Option[int] =
+    match expression with
+    case IntLiteral literal -> Some { literal.value }
+    case UnaryExpression unary ->
+        if unary.operator == "-"
+        then match unary.expression with
+            case IntLiteral literal -> Some { 0 - literal.value }
+            case _ -> None {}
+        else None {}
+    case _ -> None {}
+
+private fun compiler_parsed_tuple_slice_bound(expression: Expression, omitted: int, start: bool): Option[int] =
+    match expression with
+    case IntLiteral literal ->
+        if (start & literal.source == "__capy_slice_start__") | (!start & literal.source == "__capy_slice_end__")
+        then Some { omitted }
+        else Some { literal.value }
+    case _ -> compiler_parsed_tuple_literal_index(expression)
+
+private fun compiler_type_at(types: List[TypeReference], index: int): TypeReference =
+    if index < 0
+    then missing_type()
+    else match types[0] with
+        case None -> missing_type()
+        case Some { typeReference } -> if index == 0 then typeReference else compiler_type_at(types[1:], index - 1)
+
+private fun compiler_tuple_type_slice(types: List[TypeReference], start: int, end: int, index: int): List[TypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { typeReference } ->
+        let rest = compiler_tuple_type_slice(types[1:], start, end, index + 1)
+        if index >= start & index <= end then [typeReference] + rest else rest
 
 /// Infers the expression type for first.
 private fun compiler_first_expression_type(expressions: List[Expression], env: List[FunctionParameter], depth: int): TypeReference =

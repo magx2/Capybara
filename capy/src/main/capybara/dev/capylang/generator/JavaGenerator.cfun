@@ -6435,11 +6435,9 @@ private fun tuple_get_method_code(call: CompiledMethodCallExpression, receiverCo
     let resultType = if expectedType.name.is_empty() | expectedType.name == "any" then methodType else expectedType
     "((" + boxed_java_type(resultType) + ") "
         + receiverCode
-        + ".get(__capy_normalized_index("
-        + receiverCode
-        + ", "
+        + ".get("
         + index_argument_code(argument(call.arguments, 0), env, module, allModules)
-        + ")))"
+        + "))"
 
 /// Checks whether method metadata matches the one method argument rule.
 private fun one_method_argument(arguments: List[CompiledExpression]): bool =
@@ -7258,9 +7256,17 @@ private fun index_code(index: CompiledIndexExpression, env: List[JavaBinding], e
     else if receiverType.name == "String"
     then string_optional_index_code(receiverCode, indexCode)
     else if receiverType.name == "Tuple" & !index.hasEndIndex
-    then "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(__capy_normalized_index(" + receiverCode + ", " + indexCode + ")))"
+    then "((" + boxed_java_type(resultType) + ") " + receiverCode + ".get(" + indexCode + "))"
     else if receiverType.name == "Dict" & !index.hasEndIndex
     then dict_optional_index_code(receiverCode, expression_code(index.index, env, string_type(), module, allModules))
+    else if receiverType.name == "Tuple" & index.hasEndIndex
+    then "__capy_list_slice("
+        + receiverCode
+        + ", "
+        + list_slice_start_index_code(index.index, env, module, allModules)
+        + ", "
+        + tuple_slice_end_index_code(receiverCode, index.endIndex, env, module, allModules)
+        + ")"
     else if index.hasEndIndex
     then "__capy_list_slice("
         + receiverCode
@@ -7318,6 +7324,15 @@ private fun list_slice_end_index_code(receiverCode: String, expression: Compiled
         then receiverCode + ".size()"
         else index_argument_code(expression, env, module, allModules)
     case _ -> index_argument_code(expression, env, module, allModules)
+
+/// Emits the backend-exclusive end for a source-inclusive Tuple slice.
+private fun tuple_slice_end_index_code(receiverCode: String, expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match expression with
+    case CompiledIntLiteral literal ->
+        if omitted_slice_end(literal)
+        then receiverCode + ".size()"
+        else "(" + index_argument_code(expression, env, module, allModules) + " + 1)"
+    case _ -> "(" + index_argument_code(expression, env, module, allModules) + " + 1)"
 
 /// Checks whether the current value satisfies the omitted slice end rule for compiler processing.
 private fun omitted_slice_end(literal: CompiledIntLiteral): bool =
@@ -10606,24 +10621,14 @@ private fun normalized_tuple_slice_end_index(arguments: List[CompiledTypeReferen
     case CompiledIntLiteral literal ->
         if omitted_slice_end(literal)
         then arguments.size().value
-        else normalized_tuple_type_index(arguments, expression, arguments.size().value)
+        else normalized_tuple_type_index(arguments, expression, arguments.size().value) + 1
     case _ -> arguments.size().value
 
 /// Computes the index used to split or rank normalized tuple type index.
 private fun normalized_tuple_type_index(arguments: List[CompiledTypeReference], expression: CompiledExpression, fallback: int): int =
     match expression with
-    case CompiledIntLiteral literal -> normalize_tuple_index(arguments, literal.value)
-    case CompiledUnaryExpression unary ->
-        if unary.operator == "-"
-        then match unary.expression with
-            case CompiledIntLiteral literal -> normalize_tuple_index(arguments, 0 - literal.value)
-            case _ -> fallback
-        else fallback
+    case CompiledIntLiteral literal -> literal.value
     case _ -> fallback
-
-/// Normalizes tuple index into the path or name form expected by later compiler stages.
-private fun normalize_tuple_index(arguments: List[CompiledTypeReference], index: int): int =
-    if index < 0 then arguments.size().value + index else index
 
 /// Formats tuple slice arguments for generated emission.
 private fun tuple_slice_arguments(arguments: List[CompiledTypeReference], start: int, end: int): List[CompiledTypeReference] =

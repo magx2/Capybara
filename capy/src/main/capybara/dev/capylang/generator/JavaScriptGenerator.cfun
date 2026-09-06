@@ -4595,7 +4595,7 @@ private fun java_script_index_expression_code(index: CompiledIndexExpression, en
         + ", "
         + java_script_slice_start_code(index.index, env, module, allModules)
         + ", "
-        + java_script_slice_end_code(index.endIndex, env, module, allModules)
+        + java_script_slice_end_code(index.endIndex, receiverType, env, module, allModules)
         + ", "
         + java_script_string_literal(receiverType)
         + ")"
@@ -4665,13 +4665,18 @@ private fun java_script_slice_start_code(expression: CompiledExpression, env: Li
     case _ -> java_script_expression_code(expression, env, module, allModules)
 
 /// Emits JavaScript code for slice end.
-private fun java_script_slice_end_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_script_slice_end_code(expression: CompiledExpression, receiverType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
     case CompiledIntLiteral literal ->
         if literal.source == "__capy_slice_end__"
         then "undefined"
-        else java_script_expression_code(expression, env, module, allModules)
-    case _ -> java_script_expression_code(expression, env, module, allModules)
+        else java_script_slice_explicit_end_code(expression, receiverType, env, module, allModules)
+    case _ -> java_script_slice_explicit_end_code(expression, receiverType, env, module, allModules)
+
+/// Converts only Tuple slice ends from inclusive source bounds to exclusive JavaScript bounds.
+private fun java_script_slice_explicit_end_code(expression: CompiledExpression, receiverType: String, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = java_script_expression_code(expression, env, module, allModules)
+    if java_script_type_unqualified_name(receiverType) == "Tuple" then "(" + code + " + 1)" else code
 
 /// Emits JavaScript code for reduce expression.
 private fun java_script_reduce_expression_code(reduce: CompiledReduceExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =

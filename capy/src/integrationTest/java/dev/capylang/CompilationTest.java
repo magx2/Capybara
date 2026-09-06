@@ -3125,6 +3125,78 @@ class CompilationTest {
         assertThat(errors.toString()).contains("Unsupported object-oriented construct");
     }
 
+    @Test
+    void shouldRejectInvalidTupleIndexesSlicesAndGetCalls() {
+        var source = """
+                fun out_of_bounds(args: Tuple[int, String, double]): any = args[4]
+                fun negative(args: Tuple[int, String, double]): any = args[-1]
+                fun dynamic(args: Tuple[int, String, double], idx: int): any = args[idx]
+                fun constructed(args: Tuple[int, String, double]): any = args[index! { 1 }]
+                fun non_integer(args: Tuple[int, String, double]): any = args["one"]
+                fun raw(args: Tuple): any = args[0]
+                fun slice_start(args: Tuple[int, String, double]): any = args[3:]
+                fun slice_end(args: Tuple[int, String, double]): any = args[:3]
+                fun slice_negative(args: Tuple[int, String, double]): any = args[-1:1]
+                fun slice_reversed(args: Tuple[int, String, double]): any = args[2:1]
+                fun get_out_of_bounds(args: Tuple[int, String, double]): any = args.get(4)
+                fun get_negative(args: Tuple[int, String, double]): any = args.get(-1)
+                fun get_dynamic(args: Tuple[int, String, double], idx: int): any = args.get(idx)
+                fun get_constructed(args: Tuple[int, String, double]): any = args.get(index! { 1 })
+                fun get_non_integer(args: Tuple[int, String, double]): any = args.get("one")
+                fun get_raw(args: Tuple): any = args.get(0)
+                """;
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("TupleDiagnostics", "/sample/app", source)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = ((Either.Right<?, ?>) result).value().toString();
+        assertThat(errors)
+                .contains("Tuple index 4 is out of bounds for Tuple of size 3; expected 0..2.")
+                .contains("Tuple index -1 is out of bounds for Tuple of size 3; expected 0..2.")
+                .contains("Tuple index must be an integer literal.")
+                .contains("Tuple access requires a statically known Tuple[...] type.")
+                .contains("Tuple slice start 3 is out of bounds for Tuple of size 3; expected 0..2.")
+                .contains("Tuple slice end 3 is out of bounds for Tuple of size 3; expected 0..2.")
+                .contains("Tuple slice start -1 is out of bounds for Tuple of size 3; expected 0..2.")
+                .contains("Tuple slice range 2..1 is reversed; expected start <= end.");
+    }
+
+    @Test
+    void shouldInferExactTupleAccessTypesAndGenerateInclusiveSlices() {
+        var tupleSource = """
+                fun first(args: Tuple[int, String, double]): int = args[0]
+                fun last(args: Tuple[int, String, double]): double = args[2]
+                fun middle(args: Tuple[int, String, double]): String = args.get(1)
+                fun first_two(args: Tuple[int, String, double]): Tuple[int, String] = args[0:1]
+                fun all(args: Tuple[int, String, double]): Tuple[int, String, double] = args[:]
+                fun one(args: Tuple[int, String, double]): Tuple[String] = args[1:1]
+                """;
+        var program = compileProgram(List.of(rawModule("TupleTypes", "/sample/app", tupleSource)));
+
+        var javaCode = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TupleTypes.java"))
+                .findFirst().orElseThrow().code();
+        var javaScriptCode = JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TupleTypes.js"))
+                .findFirst().orElseThrow().code();
+        var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/TupleTypes.py"))
+                .findFirst().orElseThrow().code();
+
+        assertThat(javaCode)
+                .contains("((java.lang.Integer) args.get(0))")
+                .contains("((java.lang.Double) args.get(2))")
+                .contains("((java.lang.String) args.get(1))")
+                .contains("__capy_list_slice(args, 0, (1 + 1))")
+                .contains("__capy_list_slice(args, 1, (1 + 1))");
+        assertThat(javaScriptCode).contains("__capy_slice(args, 0, (1 + 1), \"Tuple\")");
+        assertThat(pythonCode).contains("args[0:(1 + 1)]").contains("args[1:(1 + 1)]");
+    }
+
     private static String generatorOutputType(OutputType outputType) {
         return switch (outputType) {
             case JAVA -> "java";
@@ -3225,10 +3297,10 @@ class CompilationTest {
                                 data None {}
                                 fun tuple(): Tuple[int, String, double] = (1, "foo", 5.0)
                                 fun tuple2(): Tuple[int, Option[String], double] = (1, Some { value: "foo" }, 5.0)
-                                fun tuple_index(): Option[String] = (1, "foo", 5.0)[1]
-                                fun tuple_index_negative(): Option[String] = (1, "foo", 5.0)[-2]
+                                fun tuple_index(): String = (1, "foo", 5.0)[1]
+                                fun tuple_index_last(): double = (1, "foo", 5.0)[2]
                                 fun tuple_slice(): Tuple[String, double] = (1, "foo", 5.0)[1:]
-                                fun tuple_slice_negative(): Tuple[int, String] = (1, "foo", 5.0)[:-1]
+                                fun tuple_slice_inclusive(): Tuple[int, String] = (1, "foo", 5.0)[0:1]
                                 fun tuple_if(x: int): Tuple[int, String, float, String] =
                                     (5, if x > 4 then "big" else "small", 5.1f, "foo")
                                 """)
