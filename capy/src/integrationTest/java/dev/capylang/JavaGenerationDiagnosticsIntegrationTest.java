@@ -290,6 +290,39 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void retainsModuleClassForDuplicateNormalizedRecordComponentNames() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { "foo-bar": int, foo_bar: int }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void retainsModuleClassWhenRecordAccessorCollidesWithZeroArgumentMethod() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { main: int }
+
+                fun main(): int = 1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .contains("static int main()")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
