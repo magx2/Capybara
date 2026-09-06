@@ -766,6 +766,24 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectCollidingHyphenatedAndUnderscoredPackagePaths() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Support", "/sample/shared-code", "fun first(): int = 1"),
+                        rawModule("Support", "/sample/shared_code", "fun second(): int = 2")
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Module paths `sample/shared-code/Support` and `sample/shared_code/Support` "
+                        + "generate the same backend path `sample/shared_code/Support`.");
+    }
+
+    @Test
     void shouldGenerateTopLevelInterfaceParentsFromLegacyModuleOnlyPrograms() {
         var program = compileProgram(List.of(rawModule("UIContract", "/paper-soccer/ui", """
                 interface UI {

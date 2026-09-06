@@ -240,6 +240,7 @@ public final class NativeCompilerValidator {
         var context = new Context(modules, libraryModules);
         VALIDATED_MODULES.get().clear();
         var errors = new ArrayList<CompilerError>();
+        validateGeneratedModulePaths(modules, errors);
         validateImports(context, errors);
         validateDefinitions(context, errors);
         validateObjectOriented(context, errors);
@@ -248,6 +249,23 @@ public final class NativeCompilerValidator {
             rememberValidatedModules(modules);
         }
         return List.copyOf(errors);
+    }
+
+    private void validateGeneratedModulePaths(List<ParsedModule> modules, List<CompilerError> errors) {
+        var sourcePathsByGeneratedPath = new LinkedHashMap<String, String>();
+        for (var module : modules) {
+            var sourcePath = parsedModulePath(module);
+            var generatedPath = sourcePath.replace('-', '_');
+            var existingSourcePath = sourcePathsByGeneratedPath.putIfAbsent(generatedPath, sourcePath);
+            if (existingSourcePath != null && !existingSourcePath.equals(sourcePath)) {
+                errors.add(error(
+                        module,
+                        new SourceLocation(1, 0),
+                        "Module paths `" + existingSourcePath + "` and `" + sourcePath
+                                + "` generate the same backend path `" + generatedPath + "`."
+                ));
+            }
+        }
     }
 
     private void rememberValidatedModules(List<ParsedModule> modules) {
