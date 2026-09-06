@@ -260,19 +260,7 @@ public final class NativeCompilerValidator {
             fragmentsBySourcePath.computeIfAbsent(parsedModulePath(module), ignored -> new ArrayList<>()).add(module);
         }
 
-        var reportedGeneratedPaths = new HashSet<String>();
-        var aliasOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
-        for (var entry : fragmentsBySourcePath.entrySet()) {
-            var module = entry.getValue().getFirst();
-            validateGeneratedPath(
-                    entry.getKey(),
-                    new GeneratedPathOwner("module `" + entry.getKey() + "`", module),
-                    aliasOwnersByGeneratedPath,
-                    reportedGeneratedPaths,
-                    errors
-            );
-        }
-
+        var reportedCollisions = new HashSet<String>();
         var javaOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
         for (var entry : fragmentsBySourcePath.entrySet()) {
             var sourcePath = entry.getKey();
@@ -283,7 +271,7 @@ public final class NativeCompilerValidator {
                         generatedModuleContainerPath(fragments),
                         new GeneratedPathOwner("module `" + sourcePath + "`", module),
                         javaOwnersByGeneratedPath,
-                        reportedGeneratedPaths,
+                        reportedCollisions,
                         errors
                 );
             }
@@ -300,11 +288,23 @@ public final class NativeCompilerValidator {
                                     fragment
                             ),
                             javaOwnersByGeneratedPath,
-                            reportedGeneratedPaths,
+                            reportedCollisions,
                             errors
                     );
                 }
             }
+        }
+
+        var aliasOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
+        for (var entry : fragmentsBySourcePath.entrySet()) {
+            var module = entry.getValue().getFirst();
+            validateGeneratedPath(
+                    entry.getKey().replace('/', '_'),
+                    new GeneratedPathOwner("module `" + entry.getKey() + "`", module),
+                    aliasOwnersByGeneratedPath,
+                    reportedCollisions,
+                    errors
+            );
         }
     }
 
@@ -325,8 +325,9 @@ public final class NativeCompilerValidator {
     }
 
     private boolean generatesModuleContainer(List<ParsedModule> fragments) {
-        return fragments.stream().anyMatch(module -> module.objectOriented().interfaces().isEmpty()
-                || !module.definitions().isEmpty()
+        var hasInterfaces = fragments.stream()
+                .anyMatch(module -> !module.objectOriented().interfaces().isEmpty());
+        return !hasInterfaces || fragments.stream().anyMatch(module -> !module.definitions().isEmpty()
                 || !module.objectOriented().classes().isEmpty());
     }
 
@@ -334,12 +335,15 @@ public final class NativeCompilerValidator {
             String sourcePath,
             GeneratedPathOwner owner,
             Map<String, GeneratedPathOwner> ownersByGeneratedPath,
-            Set<String> reportedGeneratedPaths,
+            Set<String> reportedCollisions,
             List<CompilerError> errors
     ) {
         var generatedPath = sourcePath.replace('-', '_');
         var existingOwner = ownersByGeneratedPath.putIfAbsent(generatedPath, owner);
-        if (existingOwner != null && reportedGeneratedPaths.add(generatedPath)) {
+        var collision = existingOwner == null
+                ? ""
+                : existingOwner.description() + "\n" + owner.description();
+        if (existingOwner != null && reportedCollisions.add(collision)) {
             errors.add(error(
                     owner.module(),
                     new SourceLocation(1, 0),
