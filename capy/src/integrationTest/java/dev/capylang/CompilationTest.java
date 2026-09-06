@@ -690,6 +690,62 @@ class CompilationTest {
     }
 
     @Test
+    void shouldImportFunctionalModulesFromHyphenatedPackages() {
+        var program = compileProgram(List.of(
+                rawModule("Support", "/sample/shared-code", """
+                        fun answer(): int = 42
+                        """),
+                rawModule("Main", "/sample/app", """
+                        import /sample/shared-code/Support
+                        from /sample/shared-code/Support import { answer }
+
+                        fun result(): int = answer()
+                        fun qualified_result(): int = Support.answer()
+                        """)
+        ));
+
+        var generatedModules = JavaGenerator.javaGenerator(program).modules();
+        assertThat(generatedModules)
+                .extracting(module -> module.relativePath())
+                .contains("sample/shared_code/Support.java", "sample/app/Main.java");
+        assertThat(generatedModules.stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("import static sample.shared_code.Support.answer__");
+    }
+
+    @Test
+    void shouldImportObjectOrientedModulesFromHyphenatedPackages() {
+        var program = compileProgram(List.of(
+                rawModule("Widget", "/sample/domain-model", """
+                        class Widget {
+                            def value(): int = 42
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                rawModule("Consumer", "/sample/app", """
+                        from /sample/domain-model/Widget import { Widget }
+
+                        class Consumer {
+                            def value(widget: Widget): int = widget.value()
+                        }
+                        """, SourceKind.OBJECT_ORIENTED)
+        ));
+
+        var generatedModules = JavaGenerator.javaGenerator(program).modules();
+        assertThat(generatedModules)
+                .extracting(module -> module.relativePath())
+                .contains("sample/domain_model/Widget.java", "sample/app/Consumer.java");
+        assertThat(generatedModules.stream()
+                .filter(module -> module.relativePath().equals("sample/app/Consumer.java"))
+                .findFirst()
+                .orElseThrow()
+                .code())
+                .contains("sample.domain_model.Widget");
+    }
+
+    @Test
     void shouldGenerateTopLevelInterfaceParentsFromLegacyModuleOnlyPrograms() {
         var program = compileProgram(List.of(rawModule("UIContract", "/paper-soccer/ui", """
                 interface UI {
