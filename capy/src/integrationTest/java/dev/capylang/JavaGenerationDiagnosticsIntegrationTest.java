@@ -188,6 +188,23 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void usesObjectForNonGeneratedEnumFieldInTopLevelRecord() throws Exception {
+        var source = writeSource("sample/Path.cfun", """
+                enum PathRoot { RELATIVE, ABSOLUTE }
+
+                data Path { root: PathRoot }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public record Path(java.lang.Object root) {")
+                .doesNotContain("record Path(PathRoot root)");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void retainsModuleClassForPrivateSameNamedData() throws Exception {
         var source = writeSource("sample/Secret.cfun", """
                 private data Secret { value: int }

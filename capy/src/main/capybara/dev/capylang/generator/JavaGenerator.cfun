@@ -475,14 +475,14 @@ private fun primitive_type_imported_from(typeName: String, owner: CompiledModule
 
 /// Checks whether a data type should be emitted as a nested Java declaration.
 private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
-    java_data_type_generated(typeName, module)
-        & typeName != module.name
+    typeName != module.name
         & java_data_type_kind(typeName, module.functions) != "enum"
         & java_data_type_kind(typeName, module.functions) != "primitive"
 
 /// Checks whether a data type has a generated Java representation.
 private fun java_data_type_generated(typeName: String, module: CompiledModule): bool =
-    typeName != module.name | java_top_level_record_module(module)
+    java_data_type_emittable(typeName, module)
+        | (typeName == module.name & java_top_level_record_module(module))
 
 /// Formats Java source text for one functional data or union declaration.
 private fun java_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
