@@ -329,9 +329,11 @@ public final class JavaGenerator {
 
     static GeneratedModule generatedModule(Object value) {
         var module = dataMap(value);
+        var relativePath = string(module.get("relativePath"));
+        var code = string(module.get("code"));
         return new GeneratedModule(
-                string(module.get("relativePath")),
-                string(module.get("code"))
+                relativePath,
+                relativePath.endsWith(".java") ? GeneratedJavaPruner.prune(code) : code
         );
     }
 
