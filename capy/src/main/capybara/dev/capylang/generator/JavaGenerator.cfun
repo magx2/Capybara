@@ -818,10 +818,46 @@ private fun java_object_top_level_interface_method(method: CompiledObjectOriente
     if objectInterface.kind == "trait"
     then
         let env = java_object_interface_method_bindings(method.parameters, objectInterface, module)
-        "    default " + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ") {" + newline()
+        "    default " + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ") {" + newline()
         + java_object_interface_method_body(method, env, module, allModules, "        ")
         + "    }" + newline()
-    else "    " + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ");" + newline()
+    else "    " + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ");" + newline()
+
+/// Formats parameters exposed by a generated top-level Java interface.
+private fun java_object_interface_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match parameters[0] with
+    case None -> ""
+    case Some { parameter } ->
+        java_object_interface_type(parameter.typeReference, module, allModules) + " " + java_parameter_name(parameter.name, true)
+            + java_object_interface_parameter_tail(parameters[1:], module, allModules)
+
+/// Formats the recursive tail of generated top-level Java interface parameters.
+private fun java_object_interface_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+    if parameters.is_empty()
+    then ""
+    else ", " + java_object_interface_parameters(parameters, module, allModules)
+
+/// Resolves a Java interface boundary type, including functional data owned by another module.
+private fun java_object_interface_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let ordinary = top_level_java_type(type, module, allModules)
+    if ordinary != "java.lang.Object"
+    then ordinary
+    else match java_object_interface_data_type(type, module, allModules) with
+        case Some { name } -> name
+        case None -> ordinary
+
+/// Resolves a functional data type used by a generated top-level Java interface.
+private fun java_object_interface_data_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[String] =
+    let name = type_unqualified_name(type.name)
+    let resolved =
+        if qualified_call_name(type.name)
+        then top_level_qualified_data_type_java_name(type.name, name, module, allModules)
+        else match data_type_owner_module(name, module, allModules) with
+            case Some { owner } -> /capy/lang/Option.Some { top_level_owned_data_type_java_name(name, module, owner) }
+            case None -> /capy/lang/Option.None {}
+    match resolved with
+    case Some { javaName } -> /capy/lang/Option.Some { javaName + java_data_type_reference_arguments(type.arguments, module, allModules) }
+    case None -> /capy/lang/Option.None {}
 
 /// Formats the Java clause for object interface parent.
 private fun java_object_interface_parent_clause(parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -832,7 +868,7 @@ private fun java_object_interface_parent_clause(parents: List[CompiledTypeRefere
 /// Creates Java name/type bindings for object interface method.
 private fun java_object_interface_method_bindings(parameters: List[CompiledFunctionParameter], objectInterface: CompiledObjectOrientedInterface, module: CompiledModule): List[JavaBinding] =
     [java_binding_with_java_name("this", java_object_interface_type_reference_for_module(module, objectInterface), "this")]
-        + parameter_bindings(parameters)
+        + parameter_bindings(parameters, true)
 
 /// Emits Java expression text for object interface method body.
 private fun java_object_interface_method_body(method: CompiledObjectOrientedMethod, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule], indent: String): String =
@@ -932,7 +968,7 @@ private fun java_object_fields(fields: List[CompiledObjectOrientedField], module
 /// Formats Java source text for object constructor.
 private fun java_object_constructor(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     let env = java_object_constructor_bindings(objectClass, module)
-    "        public " + java_identifier(objectClass.name) + "(" + top_level_java_parameters(objectClass.parameters, module, allModules) + ") {" + newline()
+    "        public " + java_identifier(objectClass.name) + "(" + top_level_java_parameters(objectClass.parameters, module, allModules, true) + ") {" + newline()
     + java_object_field_assignments(objectClass.fields, env, module, allModules)
     + java_object_init_statements(objectClass.initBlocks, env, module, allModules)
     + "        }" + newline() + newline()
@@ -940,7 +976,7 @@ private fun java_object_constructor(objectClass: CompiledObjectOrientedClass, mo
 /// Creates Java name/type bindings for object constructor.
 private fun java_object_constructor_bindings(objectClass: CompiledObjectOrientedClass, module: CompiledModule): List[JavaBinding] =
     [java_binding_with_java_name("this", java_object_type_reference(module, objectClass), "this")]
-        + parameter_bindings(objectClass.parameters)
+        + parameter_bindings(objectClass.parameters, true)
 
 /// Formats Java source text for object field assignments.
 private fun java_object_field_assignments(fields: List[CompiledObjectOrientedField], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -975,15 +1011,16 @@ private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], obj
 
 /// Formats Java source text for object method.
 private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let env = java_object_method_bindings(method.parameters, objectClass, module) + constantBindings
-    "        " + java_visibility_prefix(method.visibility) + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules) + ") {" + newline()
+    let publicParameters = method.visibility == "public"
+    let env = java_object_method_bindings(method.parameters, objectClass, module, publicParameters) + constantBindings
+    "        " + java_visibility_prefix(method.visibility) + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules, publicParameters) + ") {" + newline()
     + java_object_method_body(method, env, module, allModules)
     + "        }" + newline()
 
 /// Creates Java name/type bindings for object method.
-private fun java_object_method_bindings(parameters: List[CompiledFunctionParameter], objectClass: CompiledObjectOrientedClass, module: CompiledModule): List[JavaBinding] =
+private fun java_object_method_bindings(parameters: List[CompiledFunctionParameter], objectClass: CompiledObjectOrientedClass, module: CompiledModule, publicParameters: bool): List[JavaBinding] =
     [java_binding_with_java_name("this", java_object_type_reference(module, objectClass), "this")]
-        + parameter_bindings(parameters)
+        + parameter_bindings(parameters, publicParameters)
 
 /// Emits Java expression text for object method body.
 private fun java_object_method_body(method: CompiledObjectOrientedMethod, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1014,7 +1051,7 @@ private fun java_object_return_statements(expression: CompiledExpression, return
 /// Formats Java source text for object constructor function.
 private fun java_object_constructor_function(objectClass: CompiledObjectOrientedClass, module: CompiledModule, allModules: List[CompiledModule]): String =
     let type = java_object_type_reference(module, objectClass)
-    "    public static capy.lang.Effect<" + boxed_java_type(type) + "> " + java_object_constructor_function_name(objectClass) + "(" + java_parameters(objectClass.parameters) + ") {" + newline()
+    "    public static capy.lang.Effect<" + boxed_java_type(type) + "> " + java_object_constructor_function_name(objectClass) + "(" + java_parameters(objectClass.parameters, true) + ") {" + newline()
     + "        return capy.lang.Effect.delay(() -> new " + boxed_java_type(type) + "(" + java_object_constructor_argument_names(objectClass.parameters) + "));" + newline()
     + "    }" + newline()
 
@@ -1026,13 +1063,13 @@ private fun java_object_constructor_function_name(objectClass: CompiledObjectOri
 private fun java_object_constructor_argument_names(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> java_identifier(parameter.name) + java_object_constructor_argument_name_tail(parameters[1:])
+    case Some { parameter } -> java_parameter_name(parameter.name, true) + java_object_constructor_argument_name_tail(parameters[1:])
 
 /// Formats the recursive tail segment for object constructor argument name.
 private fun java_object_constructor_argument_name_tail(parameters: List[CompiledFunctionParameter]): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + java_identifier(parameter.name) + java_object_constructor_argument_name_tail(parameters[1:])
+    case Some { parameter } -> ", " + java_parameter_name(parameter.name, true) + java_object_constructor_argument_name_tail(parameters[1:])
 
 /// Extracts object interface and class metadata in one top-level function pass.
 private fun compiled_objects(functions: List[CompiledFunction]): JavaCompiledObjects =
@@ -1824,6 +1861,12 @@ private fun string_has_uppercase_from(value: String, idx: int): bool =
 private fun exported_function_name(name: String): String =
     exported_function_name_chars(name, 0, false, "")
 
+/// Computes a Java parameter name while preserving private source names.
+private fun java_parameter_name(name: String, publicParameter: bool): String =
+    if publicParameter
+    then java_identifier(exported_function_name(name))
+    else java_identifier(name)
+
 /// Computes the name for exported function name chars.
 private fun exported_function_name_chars(name: String, idx: int, capitalizeNext: bool, acc: String): String =
     if idx >= name.size().value
@@ -2317,55 +2360,55 @@ private fun tail_match_guarded_statement(matchCase: CompiledMatchCase, valueType
     else tail_expression_statements(matchCase.body, function, caseEnv, expectedType, module, allModules, indent)
 
 /// Formats Java source text for parameters.
-private fun java_parameters(parameters: List[CompiledFunctionParameter]): String =
+private fun java_parameters(parameters: List[CompiledFunctionParameter], publicParameters: bool): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        java_parameter(parameter) + java_parameter_tail(parameters[1:])
+        java_parameter(parameter, publicParameters) + java_parameter_tail(parameters[1:], publicParameters)
 
 /// Formats the recursive tail segment for parameter.
-private fun java_parameter_tail(parameters: List[CompiledFunctionParameter]): String =
+private fun java_parameter_tail(parameters: List[CompiledFunctionParameter], publicParameters: bool): String =
     match parameters[0] with
     case None -> ""
-    case Some { parameter } -> ", " + java_parameter(parameter) + java_parameter_tail(parameters[1:])
+    case Some { parameter } -> ", " + java_parameter(parameter, publicParameters) + java_parameter_tail(parameters[1:], publicParameters)
 
 /// Formats Java source text for parameter.
-private fun java_parameter(parameter: CompiledFunctionParameter): String =
-    java_type(parameter.typeReference) + " " + java_identifier(parameter.name)
+private fun java_parameter(parameter: CompiledFunctionParameter, publicParameters: bool): String =
+    java_type(parameter.typeReference) + " " + java_parameter_name(parameter.name, publicParameters)
 
 /// Formats top level Java parameters for generated emission.
-private fun top_level_java_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun top_level_java_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule], publicParameters: bool): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        top_level_java_parameter(parameter, module, allModules) + top_level_java_parameter_tail(parameters[1:], module, allModules)
+        top_level_java_parameter(parameter, module, allModules, publicParameters) + top_level_java_parameter_tail(parameters[1:], module, allModules, publicParameters)
 
 /// Formats the recursive tail segment for top-level Java parameter.
-private fun top_level_java_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun top_level_java_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule], publicParameters: bool): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
-        ", " + top_level_java_parameter(parameter, module, allModules) + top_level_java_parameter_tail(parameters[1:], module, allModules)
+        ", " + top_level_java_parameter(parameter, module, allModules, publicParameters) + top_level_java_parameter_tail(parameters[1:], module, allModules, publicParameters)
 
 /// Formats one top level Java parameter for generated emission.
-private fun top_level_java_parameter(parameter: CompiledFunctionParameter, module: CompiledModule, allModules: List[CompiledModule]): String =
-    top_level_java_type(parameter.typeReference, module, allModules) + " " + java_identifier(parameter.name)
+private fun top_level_java_parameter(parameter: CompiledFunctionParameter, module: CompiledModule, allModules: List[CompiledModule], publicParameters: bool): String =
+    top_level_java_type(parameter.typeReference, module, allModules) + " " + java_parameter_name(parameter.name, publicParameters)
 
 /// Formats function parameters for Java emission.
 private fun java_function_parameters(function: CompiledFunction, module: CompiledModule, allModules: List[CompiledModule]): String =
     if extension_method_function(function)
-    then top_level_java_type(method_receiver_type(function), module, allModules) + " " + java_identifier("this") + java_method_parameter_tail(function.parameters, module, allModules)
-    else top_level_java_parameters(function.parameters, module, allModules)
+    then top_level_java_type(method_receiver_type(function), module, allModules) + " " + java_identifier("this") + java_method_parameter_tail(function.parameters, module, allModules, function.visibility == "public")
+    else top_level_java_parameters(function.parameters, module, allModules, function.visibility == "public")
 
 /// Formats the recursive tail segment for method parameter.
-private fun java_method_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
+private fun java_method_parameter_tail(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule], publicParameters: bool): String =
     if parameters.is_empty()
     then ""
     else match parameters[0] with
         case Some { parameter } ->
             if parameter.name == "this"
-            then java_method_parameter_tail(parameters[1:], module, allModules)
-            else ", " + top_level_java_parameters(parameters, module, allModules)
+            then java_method_parameter_tail(parameters[1:], module, allModules, publicParameters)
+            else ", " + top_level_java_parameters(parameters, module, allModules, publicParameters)
         case None -> ""
 
 /// Creates Java name/type bindings for function.
@@ -2374,15 +2417,17 @@ private fun java_function_bindings(function: CompiledFunction): List[JavaBinding
     then
         let receiverType = method_receiver_type(function)
         [java_binding("this", receiverType)]
-            + parameter_bindings(function.parameters)
+            + parameter_bindings(function.parameters, function.visibility == "public")
             + [java_binding_with_java_name("receiver", receiverType, java_identifier("this"))]
-    else parameter_bindings(function.parameters)
+    else parameter_bindings(function.parameters, function.visibility == "public")
 
 /// Creates name/type bindings for parameter.
-private fun parameter_bindings(parameters: List[CompiledFunctionParameter]): List[JavaBinding] =
+private fun parameter_bindings(parameters: List[CompiledFunctionParameter], publicParameters: bool): List[JavaBinding] =
     match parameters[0] with
     case None -> []
-    case Some { parameter } -> [java_binding(parameter.name, parameter.typeReference)] + parameter_bindings(parameters[1:])
+    case Some { parameter } ->
+        [java_binding_with_java_name(parameter.name, parameter.typeReference, java_parameter_name(parameter.name, publicParameters))]
+            + parameter_bindings(parameters[1:], publicParameters)
 
 /// Emits generated code for expression.
 private fun expression_code(

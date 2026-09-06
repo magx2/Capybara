@@ -99,7 +99,7 @@ public final class NativeCompilerValidator {
             ))
     );
     private static final Set<String> BUILTIN_TYPES = Set.of(
-            "byte", "char", "int", "long", "double", "bool", "float", "void", "any", "data",
+            "byte", "char", "int", "long", "double", "bool", "float", "void", "Unit", "any", "data", "array",
             "nothing", "String", "List", "Set", "Dict", "Tuple", "Option", "Result", "Either",
             "Effect", "Program", "Assert", "TestFile", "TestCase", "Seq", "Regex", "Match",
             "Path", "Ordering", "size", "index"
@@ -382,7 +382,7 @@ public final class NativeCompilerValidator {
             Set<String> nativeProviderKeys
     ) {
         validatePublicFunctionSignatureVisibility(context, module, function, errors);
-        validateTypeReference(context, module, function.returnType(), List.of(), errors, function.location());
+        validateReturnTypeReference(context, module, function.returnType(), List.of(), errors, function.location());
         for (var parameter : function.parameters()) {
             validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
         }
@@ -2640,6 +2640,14 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors,
             SourceLocation location
     ) {
+        if (noValueType(type)) {
+            errors.add(error(
+                    module,
+                    location,
+                    "No-value type `" + type.name() + "` may only be used as a function or method return type."
+            ));
+            return;
+        }
         var name = unqualified(type.name());
         if (!knownType(context, module, name, typeParameters)) {
             errors.add(error(module, location, "Data type `" + type.name() + "` not found."));
@@ -2647,6 +2655,27 @@ public final class NativeCompilerValidator {
         for (var argument : type.arguments()) {
             validateTypeReference(context, module, argument, typeParameters, errors, location);
         }
+    }
+
+    private void validateReturnTypeReference(
+            Context context,
+            ParsedModule module,
+            TypeReference type,
+            List<String> typeParameters,
+            List<CompilerError> errors,
+            SourceLocation location
+    ) {
+        if (noValueType(type)) {
+            if (!type.arguments().isEmpty()) {
+                errors.add(error(module, location, "No-value return type `" + type.name() + "` cannot have type arguments."));
+            }
+            return;
+        }
+        validateTypeReference(context, module, type, typeParameters, errors, location);
+    }
+
+    private boolean noValueType(TypeReference type) {
+        return type.name().equals("Unit") || type.name().equals("void");
     }
 
     private boolean knownType(Context context, ParsedModule module, String name, List<String> typeParameters) {
@@ -2780,12 +2809,23 @@ public final class NativeCompilerValidator {
     private void validateObjectOriented(Context context, List<CompilerError> errors) {
         for (var module : context.modules) {
             for (var objectInterface : module.objectOriented().interfaces()) {
+                for (var parent : objectInterface.parents()) {
+                    validateTypeReference(context, module, parent, List.of(), errors, objectInterface.location());
+                }
                 for (var method : objectInterface.methods()) {
+                    validateObjectMethodSignature(context, module, method, errors);
                     validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
             for (var objectClass : module.objectOriented().classes()) {
+                for (var parameter : objectClass.parameters()) {
+                    validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
+                }
+                for (var parent : objectClass.parents()) {
+                    validateTypeReference(context, module, parent, List.of(), errors, objectClass.location());
+                }
                 for (var field : objectClass.fields()) {
+                    validateTypeReference(context, module, field.typeReference(), List.of(), errors, field.location());
                     if (field.hasValue()) {
                         validateObjectExpression(module, field.value(), errors);
                     }
@@ -2794,9 +2834,22 @@ public final class NativeCompilerValidator {
                     validateObjectExpression(module, initBlock.body(), errors);
                 }
                 for (var method : objectClass.methods()) {
+                    validateObjectMethodSignature(context, module, method, errors);
                     validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
+        }
+    }
+
+    private void validateObjectMethodSignature(
+            Context context,
+            ParsedModule module,
+            ObjectOrientedMethod method,
+            List<CompilerError> errors
+    ) {
+        validateReturnTypeReference(context, module, method.returnType(), List.of(), errors, method.location());
+        for (var parameter : method.parameters()) {
+            validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
         }
     }
 

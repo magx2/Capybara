@@ -1800,6 +1800,9 @@ function parse_type_reference(type_text) {
     if (pyTruthy(((type_text === null) || (type_text === "")))) {
         return missing_type();
     }
+    if (pyTruthy((type_text === "Unit"))) {
+        return type_ref("void", []);
+    }
     if (pyTruthy(has_top_level_function_arrow(type_text))) {
         return type_ref(type_text, []);
     }

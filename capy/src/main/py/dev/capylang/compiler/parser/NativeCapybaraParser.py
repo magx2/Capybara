@@ -2223,6 +2223,8 @@ def offset_location(location, line_offset, column_offset):
 def parse_type_reference(type_text):
     if type_text is None or type_text == "":
         return missing_type()
+    if type_text == "Unit":
+        return type_ref("void", [])
     if has_top_level_function_arrow(type_text):
         return type_ref(type_text, [])
     if type_text.endswith("[]"):
