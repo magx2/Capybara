@@ -46,7 +46,9 @@ final class GeneratedJavaPruner {
                 if (!reachable.contains(candidate.helperName())
                         && containsCodeIdentifier(reachableSource, candidate.helperName())) {
                     reachable.add(candidate.helperName());
-                    reachableSource.append(candidate.source());
+                    candidates.stream()
+                            .filter(overload -> overload.helperName().equals(candidate.helperName()))
+                            .forEach(overload -> reachableSource.append(overload.source()));
                     changed = true;
                 }
             }
