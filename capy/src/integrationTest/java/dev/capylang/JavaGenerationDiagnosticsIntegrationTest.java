@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -318,6 +319,54 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .content()
                 .contains("public final class Foo")
                 .contains("static int main()")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void readsTopLevelRecordComponentsThroughAccessors() throws Exception {
+        var source = writeSource("sample/Field.cfun", """
+                data Field { width: int }
+                """);
+        writeSource("sample/Field.coo", """
+                class Reader {
+                    def width(value: Field): int = value.width
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("public record Field(int width)")
+                .contains("((Field) __capy_record_value).width()");
+        var classes = compileJava(generated);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var fieldClass = loader.loadClass("sample.Field");
+            var field = fieldClass.getConstructor(int.class).newInstance(7);
+            var readerClass = loader.loadClass("sample.Field$Reader");
+            var reader = readerClass.getConstructor().newInstance();
+
+            assertThat(readerClass.getMethod("width", Object.class).invoke(reader, field)).isEqualTo(7);
+        }
+    }
+
+    @Test
+    void retainsModuleClassWhenRecordAccessorCollidesWithObjectConstructorWrapper() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { "Bar__1_0": int }
+                """);
+        writeSource("sample/Foo.coo", """
+                class Bar {}
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .contains("Bar__1_0()")
                 .doesNotContain("public record Foo(");
         assertJavaCompiles(generatedPath(source));
     }
@@ -1990,6 +2039,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     private void assertJavaCompiles(Path... sources) throws IOException {
+        compileJava(sources);
+    }
+
+    private Path compileJava(Path... sources) throws IOException {
         var compiler = ToolProvider.getSystemJavaCompiler();
         assertThat(compiler).as("system Java compiler").isNotNull();
         var classes = Files.createDirectories(tempDir.resolve("compiled-java"));
@@ -2011,5 +2064,6 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(exitCode)
                 .as(diagnostics.toString(StandardCharsets.UTF_8))
                 .isZero();
+        return classes;
     }
 }
