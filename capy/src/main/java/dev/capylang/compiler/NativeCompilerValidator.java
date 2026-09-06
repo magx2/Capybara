@@ -83,6 +83,9 @@ public final class NativeCompilerValidator {
     private record LinkedDataField(String name, TypeReference typeReference) {
     }
 
+    private record GeneratedPathOwner(String description, ParsedModule module) {
+    }
+
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_FUNCTION_ARITIES = Map.of(
             "capy/collection/Seq", Map.of("to_seq", Set.of(1))
@@ -252,19 +255,70 @@ public final class NativeCompilerValidator {
     }
 
     private void validateGeneratedModulePaths(List<ParsedModule> modules, List<CompilerError> errors) {
-        var sourcePathsByGeneratedPath = new LinkedHashMap<String, String>();
+        var ownersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
         for (var module : modules) {
             var sourcePath = parsedModulePath(module);
-            var generatedPath = sourcePath.replace('-', '_');
-            var existingSourcePath = sourcePathsByGeneratedPath.putIfAbsent(generatedPath, sourcePath);
-            if (existingSourcePath != null && !existingSourcePath.equals(sourcePath)) {
-                errors.add(error(
-                        module,
-                        new SourceLocation(1, 0),
-                        "Module paths `" + existingSourcePath + "` and `" + sourcePath
-                                + "` generate the same backend path `" + generatedPath + "`."
-                ));
+            if (generatesModuleContainer(module)) {
+                validateGeneratedPath(
+                        generatedModuleContainerPath(module),
+                        new GeneratedPathOwner("module `" + sourcePath + "`", module),
+                        ownersByGeneratedPath,
+                        errors
+                );
             }
+            for (var objectInterface : module.objectOriented().interfaces()) {
+                var interfacePath = normalizeModulePath(module.path());
+                interfacePath = interfacePath.isBlank()
+                        ? objectInterface.name()
+                        : interfacePath + "/" + objectInterface.name();
+                validateGeneratedPath(
+                        interfacePath,
+                        new GeneratedPathOwner(
+                                "interface `" + objectInterface.name() + "` from module `" + sourcePath + "`",
+                                module
+                        ),
+                        ownersByGeneratedPath,
+                        errors
+                );
+            }
+        }
+    }
+
+    private String generatedModuleContainerPath(ParsedModule module) {
+        var moduleName = module.name();
+        while (objectInterfaceNamed(module, moduleName)) {
+            moduleName += "_";
+        }
+        var modulePath = normalizeModulePath(module.path());
+        return modulePath.isBlank() ? moduleName : modulePath + "/" + moduleName;
+    }
+
+    private boolean objectInterfaceNamed(ParsedModule module, String name) {
+        return module.objectOriented().interfaces().stream()
+                .anyMatch(objectInterface -> objectInterface.name().equals(name));
+    }
+
+    private boolean generatesModuleContainer(ParsedModule module) {
+        return module.objectOriented().interfaces().isEmpty()
+                || !module.definitions().isEmpty()
+                || !module.objectOriented().classes().isEmpty();
+    }
+
+    private void validateGeneratedPath(
+            String sourcePath,
+            GeneratedPathOwner owner,
+            Map<String, GeneratedPathOwner> ownersByGeneratedPath,
+            List<CompilerError> errors
+    ) {
+        var generatedPath = sourcePath.replace('-', '_');
+        var existingOwner = ownersByGeneratedPath.putIfAbsent(generatedPath, owner);
+        if (existingOwner != null) {
+            errors.add(error(
+                    owner.module(),
+                    new SourceLocation(1, 0),
+                    "Generated backend path `" + generatedPath + "` collides between "
+                            + existingOwner.description() + " and " + owner.description() + "."
+            ));
         }
     }
 
