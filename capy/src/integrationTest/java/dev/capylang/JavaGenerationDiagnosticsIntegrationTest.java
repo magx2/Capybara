@@ -331,6 +331,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
         writeSource("sample/Field.coo", """
                 class Reader {
                     def width(value: Field): int = value.width
+
+                    def matched(value: Field): int =
+                        match value with
+                        case Field { width } -> width
+                        case _ -> 0
                 }
                 """);
 
@@ -349,6 +354,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
             var reader = readerClass.getConstructor().newInstance();
 
             assertThat(readerClass.getMethod("width", Object.class).invoke(reader, field)).isEqualTo(7);
+            assertThat(readerClass.getMethod("matched", Object.class).invoke(reader, field)).isEqualTo(7);
         }
     }
 

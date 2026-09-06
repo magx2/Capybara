@@ -8768,7 +8768,21 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then collection_match_condition_code(matchCase.typeName, valueCode)
     else if primitive_match_type(matchCase.typeName)
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
+    else if java_top_level_record_match_case(matchCase, module, allModules)
+    then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
+        + valueCode + " instanceof " + java_top_level_record_match_java_type(matchCase, module, allModules) + ")"
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
+
+/// Checks whether a data pattern names a promoted top-level record.
+private fun java_top_level_record_match_case(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    java_top_level_record_type(data_type_reference(matchCase.typeName), module, allModules)
+
+/// Computes the raw Java record type used by a promoted-record pattern.
+private fun java_top_level_record_match_java_type(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = type_unqualified_name(matchCase.typeName)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } -> top_level_owned_data_type_java_name(name, module, owner)
+    case None -> "java.lang.Object"
 
 /// Checks whether a case selects a non-empty or empty sequence constructor.
 private fun seq_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference): bool =
@@ -8886,6 +8900,12 @@ private fun match_binding_value_code(binding: String, matchCase: CompiledMatchCa
     then option_value_code(valueCode) + ".orElse(null)"
     else if result_match_case(matchCase, valueType)
     then result_match_binding_value_code(binding, matchCase, valueCode, idx)
+    else if java_top_level_record_match_case(matchCase, module, allModules)
+    then
+        let fieldName = match_binding_field_name(matchCase, idx, module, allModules)
+        "__capy_data_field(" + valueCode + ", \"" + escape_java_string(fieldName)
+            + "\", __capy_record_value -> ((" + java_top_level_record_match_java_type(matchCase, module, allModules)
+            + ") __capy_record_value)." + java_identifier(fieldName) + "())"
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
 
 /// Emits generated code for result match whole value.
