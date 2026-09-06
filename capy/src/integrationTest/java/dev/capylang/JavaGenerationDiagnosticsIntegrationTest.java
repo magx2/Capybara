@@ -112,6 +112,42 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesSameNamedDataAsTopLevelRecordWithStaticModuleMethods() throws Exception {
+        writeSource("paper-soccer/Field.cfun", """
+                from /capy/lang/Result import { Success, Error }
+
+                type field_size -> int with constructor {
+                    if value < 1
+                    then Error { message: "invalid field size" }
+                    else Success { value }
+                }
+
+                data Field {
+                    width: field_size,
+                    height: field_size,
+                    goal_width: field_size,
+                } with constructor {
+                    if goal_width >= width
+                    then Error { message: "invalid goal width" }
+                    else Success { * { width, height, goal_width } }
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var field = outputDir().resolve("paper_soccer/Field.java");
+        assertThat(field)
+                .exists()
+                .content()
+                .contains("public record Field(int width, int height, int goal_width) {")
+                .contains("public static java.lang.Object __capy_constructor_field_size__")
+                .contains("public static java.lang.Object __capy_constructor_Field__")
+                .doesNotContain("public final class Field")
+                .doesNotContain("private Field()");
+        assertJavaCompiles(field);
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
