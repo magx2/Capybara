@@ -255,64 +255,91 @@ public final class NativeCompilerValidator {
     }
 
     private void validateGeneratedModulePaths(List<ParsedModule> modules, List<CompilerError> errors) {
-        var ownersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
+        var fragmentsBySourcePath = new LinkedHashMap<String, List<ParsedModule>>();
         for (var module : modules) {
-            var sourcePath = parsedModulePath(module);
-            if (generatesModuleContainer(module)) {
+            fragmentsBySourcePath.computeIfAbsent(parsedModulePath(module), ignored -> new ArrayList<>()).add(module);
+        }
+
+        var reportedGeneratedPaths = new HashSet<String>();
+        var aliasOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
+        for (var entry : fragmentsBySourcePath.entrySet()) {
+            var module = entry.getValue().getFirst();
+            validateGeneratedPath(
+                    entry.getKey(),
+                    new GeneratedPathOwner("module `" + entry.getKey() + "`", module),
+                    aliasOwnersByGeneratedPath,
+                    reportedGeneratedPaths,
+                    errors
+            );
+        }
+
+        var javaOwnersByGeneratedPath = new LinkedHashMap<String, GeneratedPathOwner>();
+        for (var entry : fragmentsBySourcePath.entrySet()) {
+            var sourcePath = entry.getKey();
+            var fragments = entry.getValue();
+            var module = fragments.getFirst();
+            if (generatesModuleContainer(fragments)) {
                 validateGeneratedPath(
-                        generatedModuleContainerPath(module),
+                        generatedModuleContainerPath(fragments),
                         new GeneratedPathOwner("module `" + sourcePath + "`", module),
-                        ownersByGeneratedPath,
+                        javaOwnersByGeneratedPath,
+                        reportedGeneratedPaths,
                         errors
                 );
             }
-            for (var objectInterface : module.objectOriented().interfaces()) {
-                var interfacePath = normalizeModulePath(module.path());
-                interfacePath = interfacePath.isBlank()
-                        ? objectInterface.name()
-                        : interfacePath + "/" + objectInterface.name();
-                validateGeneratedPath(
-                        interfacePath,
-                        new GeneratedPathOwner(
-                                "interface `" + objectInterface.name() + "` from module `" + sourcePath + "`",
-                                module
-                        ),
-                        ownersByGeneratedPath,
-                        errors
-                );
+            for (var fragment : fragments) {
+                for (var objectInterface : fragment.objectOriented().interfaces()) {
+                    var interfacePath = normalizeModulePath(fragment.path());
+                    interfacePath = interfacePath.isBlank()
+                            ? objectInterface.name()
+                            : interfacePath + "/" + objectInterface.name();
+                    validateGeneratedPath(
+                            interfacePath,
+                            new GeneratedPathOwner(
+                                    "interface `" + objectInterface.name() + "` from module `" + sourcePath + "`",
+                                    fragment
+                            ),
+                            javaOwnersByGeneratedPath,
+                            reportedGeneratedPaths,
+                            errors
+                    );
+                }
             }
         }
     }
 
-    private String generatedModuleContainerPath(ParsedModule module) {
+    private String generatedModuleContainerPath(List<ParsedModule> fragments) {
+        var module = fragments.getFirst();
         var moduleName = module.name();
-        while (objectInterfaceNamed(module, moduleName)) {
+        while (objectInterfaceNamed(fragments, moduleName)) {
             moduleName += "_";
         }
         var modulePath = normalizeModulePath(module.path());
         return modulePath.isBlank() ? moduleName : modulePath + "/" + moduleName;
     }
 
-    private boolean objectInterfaceNamed(ParsedModule module, String name) {
-        return module.objectOriented().interfaces().stream()
+    private boolean objectInterfaceNamed(List<ParsedModule> fragments, String name) {
+        return fragments.stream()
+                .flatMap(module -> module.objectOriented().interfaces().stream())
                 .anyMatch(objectInterface -> objectInterface.name().equals(name));
     }
 
-    private boolean generatesModuleContainer(ParsedModule module) {
-        return module.objectOriented().interfaces().isEmpty()
+    private boolean generatesModuleContainer(List<ParsedModule> fragments) {
+        return fragments.stream().anyMatch(module -> module.objectOriented().interfaces().isEmpty()
                 || !module.definitions().isEmpty()
-                || !module.objectOriented().classes().isEmpty();
+                || !module.objectOriented().classes().isEmpty());
     }
 
     private void validateGeneratedPath(
             String sourcePath,
             GeneratedPathOwner owner,
             Map<String, GeneratedPathOwner> ownersByGeneratedPath,
+            Set<String> reportedGeneratedPaths,
             List<CompilerError> errors
     ) {
         var generatedPath = sourcePath.replace('-', '_');
         var existingOwner = ownersByGeneratedPath.putIfAbsent(generatedPath, owner);
-        if (existingOwner != null) {
+        if (existingOwner != null && reportedGeneratedPaths.add(generatedPath)) {
             errors.add(error(
                     owner.module(),
                     new SourceLocation(1, 0),
