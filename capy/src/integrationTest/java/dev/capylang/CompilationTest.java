@@ -14,8 +14,13 @@ import dev.capylang.compiler.CapybaraCompiler;
 import dev.capylang.compiler.CompiledModule;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.LinkedJsonCodec;
+import dev.capylang.compiler.NativeCompilerValidator;
 import dev.capylang.compiler.NativeProviderManifest;
+import dev.capylang.compiler.parser.Functional;
+import dev.capylang.compiler.parser.NativeCapybaraParser;
+import dev.capylang.compiler.parser.ObjectOriented;
 import dev.capylang.compiler.parser.ParserException;
+import dev.capylang.compiler.parser.ParsedModule;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Either;
@@ -808,8 +813,51 @@ class CompilationTest {
 
         assertThat(result).isInstanceOf(Either.Right.class);
         assertThat(((Either.Right<?, ?>) result).value().toString())
-                .contains("Generated backend path `foo_bar/Defs` collides between "
+                .contains("Generated backend path `foo_bar_Defs` collides between "
                         + "module `foo-bar/Defs` and module `foo_bar/Defs`.");
+    }
+
+    @Test
+    void shouldRejectJavaScriptAliasesThatCollapsePackageBoundaries() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Baz", "/foo-bar", "fun first(): int = 1"),
+                        rawModule("Baz", "/foo/bar", "fun second(): int = 2")
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Generated backend path `foo_bar_Baz` collides between "
+                        + "module `foo-bar/Baz` and module `foo/bar/Baz`.");
+    }
+
+    @Test
+    void shouldDetermineJavaModuleContainerFromMergedFragments() {
+        var parsedModules = new NativeCapybaraParser().parse(List.of(
+                rawModule("Foo", "/sample/shared-code", "interface Api {}", SourceKind.OBJECT_ORIENTED),
+                rawModule("Defs", "/sample/shared-code", "interface Foo {}", SourceKind.OBJECT_ORIENTED)
+        )).modules();
+        var definitionFreeFragment = new ParsedModule(
+                "Foo",
+                "/sample/shared-code",
+                new Functional(List.of()),
+                List.of(),
+                new ObjectOriented(List.of(), List.of()),
+                List.of(),
+                SourceKind.FUNCTIONAL
+        );
+
+        var errors = new NativeCompilerValidator().validate(
+                List.of(definitionFreeFragment, parsedModules.get(0), parsedModules.get(1)),
+                List.of(),
+                emptyNativeProviders()
+        );
+
+        assertThat(errors).isEmpty();
     }
 
     @Test
