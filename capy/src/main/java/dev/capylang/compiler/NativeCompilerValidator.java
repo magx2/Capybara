@@ -323,7 +323,7 @@ public final class NativeCompilerValidator {
     }
 
     private String importedModulePath(ParsedModule module, String modulePath) {
-        var normalizedImportPath = normalizeModulePath(modulePath);
+        var normalizedImportPath = normalizeImportModulePath(modulePath);
         if (modulePath.startsWith("/") || modulePath.contains("/")) {
             return normalizedImportPath;
         }
