@@ -4,7 +4,9 @@ import dev.capylang.AsyncTasks;
 import dev.capylang.compiler.BackendCompilationContext;
 import dev.capylang.compiler.CompiledProgram;
 import dev.capylang.compiler.CompiledModule;
+import dev.capylang.compiler.CompiledNativeProviderBinding;
 import dev.capylang.compiler.LinkedJsonCodec;
+import dev.capylang.compiler.parser.ParserException;
 import dev.capylang.generator.internal.GeneratedJavaGenerator;
 
 import java.io.IOException;
@@ -57,6 +59,7 @@ public final class JavaGenerator {
             CompiledProgram source,
             CompiledProgram lookup
     ) {
+        validateNativeProviderBindings(source, "java");
         var sameProgram = source == lookup;
         source = deduplicateProgram(source);
         lookup = sameProgram ? source : deduplicateProgram(lookup);
@@ -96,6 +99,31 @@ public final class JavaGenerator {
         var result = new GeneratedProgram(modules);
         LAST_GENERATION.set(new CachedGeneration(source, lookup, result));
         return result;
+    }
+
+    static void validateNativeProviderBindings(CompiledProgram program, String backend) {
+        for (var declaration : program.nativeProviderCatalog().declarations()) {
+            var wired = program.nativeProviderCatalog().bindings().stream()
+                    .filter(binding -> binding.interfaceId().equals(declaration.interfaceId()))
+                    .filter(binding -> binding.qualifier().equals(declaration.qualifier()))
+                    .anyMatch(binding -> supportsBackend(binding, backend));
+            if (!wired) {
+                throw new ParserException(
+                        declaration.sourceFile() + ":0:0: NotWired: No native provider registered for interface `"
+                                + declaration.interfaceId() + "` with qualifier `" + declaration.qualifier()
+                                + "` for backend `" + backend + "` (provider `" + declaration.providerName() + "`)."
+                );
+            }
+        }
+    }
+
+    private static boolean supportsBackend(CompiledNativeProviderBinding binding, String backend) {
+        return switch (backend) {
+            case "java" -> binding.javaBinding().isPresent();
+            case "javascript" -> binding.javascriptBinding().isPresent();
+            case "python" -> binding.pythonBinding().isPresent();
+            default -> true;
+        };
     }
 
     static CompiledProgram deduplicateProgram(CompiledProgram program) {
