@@ -269,8 +269,8 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     let nativeProviderScope = java_native_provider_scope_for_module(module, nativeProviderIndex)
     java_package(module)
     + java_imports(module, allModules)
-    + "public final class " + java_module_class_name(module) + " {" + newline()
-    + "    private " + java_module_class_name(module) + "() " + "{" + "}" + newline() + newline()
+    + java_module_declaration(module, allModules) + newline()
+    + java_module_constructor(module)
     + java_function_type_interfaces()
     + java_data_types(schema_values("__capy_schema_type|", module.functions), module, allModules)
     + java_imported_primitive_constructor_adapters(allModules, module, allModules)
@@ -279,6 +279,25 @@ private fun java_module_code_with_objects(module: CompiledModule, allModules: Li
     + java_functions(module.functions, constantBindings, module, allModules, nativeProviderScope)
     + java_helpers(module)
     + "}" + newline()
+
+/// Emits a module as its same-named data record when possible, retaining module functions as static members.
+private fun java_module_declaration(module: CompiledModule, allModules: List[CompiledModule]): String =
+    if java_top_level_record_module(module)
+    then "public record " + java_data_type_declaration_name(module.name, module, allModules)
+        + "(" + java_data_record_components(java_data_record_fields(module.name, module, allModules), module, allModules) + ")"
+        + java_data_record_parent_clause(module.name, module, allModules) + " {"
+    else "public final class " + java_module_class_name(module) + " {"
+
+/// Emits the non-instantiable constructor used by ordinary Java module classes.
+private fun java_module_constructor(module: CompiledModule): String =
+    if java_top_level_record_module(module)
+    then ""
+    else "    private " + java_module_class_name(module) + "() " + "{" + "}" + newline() + newline()
+
+/// Checks whether a same-named functional data declaration can serve as the top-level Java module.
+private fun java_top_level_record_module(module: CompiledModule): bool =
+    schema_type_exists(module.name, module.functions)
+        & java_data_type_kind(module.name, module.functions) == "data"
 
 private fun java_effect_module_code(module: CompiledModule): String =
     java_package(module)
@@ -455,12 +474,13 @@ private fun primitive_type_imported_from(typeName: String, owner: CompiledModule
 /// Checks whether a data type should be emitted as a nested Java declaration.
 private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
     java_data_type_generated(typeName, module)
+        & typeName != module.name
         & java_data_type_kind(typeName, module.functions) != "enum"
         & java_data_type_kind(typeName, module.functions) != "primitive"
 
-/// Checks whether a data type can be generated without colliding with the enclosing module class.
+/// Checks whether a data type has a generated Java representation.
 private fun java_data_type_generated(typeName: String, module: CompiledModule): bool =
-    typeName != module.name
+    typeName != module.name | java_top_level_record_module(module)
 
 /// Formats Java source text for one functional data or union declaration.
 private fun java_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
