@@ -784,6 +784,35 @@ class CompilationTest {
     }
 
     @Test
+    void shouldCoalesceFunctionalAndObjectOrientedFragmentsAtTheSameHyphenatedPath() {
+        var program = compileProgram(List.of(
+                rawModule("Combined", "/sample/shared-code", "fun value(): int = 42"),
+                rawModule("Combined", "/sample/shared-code", "class CombinedObject {}", SourceKind.OBJECT_ORIENTED)
+        ));
+
+        assertThat(program.modules()).hasSize(1);
+        assertThat(program.modules().getFirst().path()).isEqualTo("sample/shared-code");
+    }
+
+    @Test
+    void shouldRejectInterfaceOnlyModuleAliasCollisions() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Defs", "/foo-bar", "interface Api {}", SourceKind.OBJECT_ORIENTED),
+                        rawModule("Defs", "/foo_bar", "fun value(): int = 42")
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Generated backend path `foo_bar/Defs` collides between "
+                        + "module `foo-bar/Defs` and module `foo_bar/Defs`.");
+    }
+
+    @Test
     void shouldRejectObjectInterfaceAndModuleGeneratedPathCollisions() {
         var result = CapybaraCompiler.compile(
                 List.of(
