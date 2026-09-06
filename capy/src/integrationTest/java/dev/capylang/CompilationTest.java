@@ -858,6 +858,30 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectLegacyImportsWhoseJavaScriptAliasesCollide() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Baz", "/dev/capylang/test/foo-bar", "fun first(): int = 1"),
+                        rawModule("Baz", "/dev/capylang/test/foo/bar", "fun second(): int = 2"),
+                        rawModule("Consumer", "/sample", """
+                                import /dev/capylang/capybara/foo-bar/Baz
+                                import /dev/capylang/capybara/foo/bar/Baz
+
+                                fun value(): int = 0
+                                """)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Generated backend path `dev_capylang_test_foo_bar_Baz` collides between "
+                        + "module `dev/capylang/test/foo-bar/Baz` and module `dev/capylang/test/foo/bar/Baz`.");
+    }
+
+    @Test
     void shouldDetermineJavaModuleContainerFromMergedFragments() {
         var parsedModules = new NativeCapybaraParser().parse(List.of(
                 rawModule("Foo", "/sample/shared-code", "interface Api {}", SourceKind.OBJECT_ORIENTED),
