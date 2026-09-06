@@ -382,6 +382,9 @@ public final class NativeCompilerValidator {
             Set<String> nativeProviderKeys
     ) {
         validatePublicFunctionSignatureVisibility(context, module, function, errors);
+        if (function.visibility().equals("public")) {
+            validateJavaPublicParameterNames(module, function.name(), function.parameters(), errors);
+        }
         validateReturnTypeReference(context, module, function.returnType(), List.of(), errors, function.location());
         for (var parameter : function.parameters()) {
             validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
@@ -2640,6 +2643,16 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors,
             SourceLocation location
     ) {
+        if (functionTypeName(type.name())) {
+            for (var parameter : functionTypeParameters(type)) {
+                validateTypeReference(context, module, parameter, typeParameters, errors, location);
+            }
+            validateTypeReference(context, module, functionTypeReturnType(type), typeParameters, errors, location);
+            for (var argument : type.arguments()) {
+                validateTypeReference(context, module, argument, typeParameters, errors, location);
+            }
+            return;
+        }
         if (noValueType(type)) {
             errors.add(error(
                     module,
@@ -2813,11 +2826,13 @@ public final class NativeCompilerValidator {
                     validateTypeReference(context, module, parent, List.of(), errors, objectInterface.location());
                 }
                 for (var method : objectInterface.methods()) {
+                    validateJavaPublicParameterNames(module, method.name(), method.parameters(), errors);
                     validateObjectMethodSignature(context, module, method, errors);
                     validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
             for (var objectClass : module.objectOriented().classes()) {
+                validateJavaPublicParameterNames(module, objectClass.name(), objectClass.parameters(), errors);
                 for (var parameter : objectClass.parameters()) {
                     validateTypeReference(context, module, parameter.typeReference(), List.of(), errors, parameter.location());
                 }
@@ -2834,11 +2849,52 @@ public final class NativeCompilerValidator {
                     validateObjectExpression(module, initBlock.body(), errors);
                 }
                 for (var method : objectClass.methods()) {
+                    if (method.visibility().equals("public")) {
+                        validateJavaPublicParameterNames(module, method.name(), method.parameters(), errors);
+                    }
                     validateObjectMethodSignature(context, module, method, errors);
                     validateObjectExpression(module, method.body(), errors, objectMethodEnv(method));
                 }
             }
         }
+    }
+
+    private void validateJavaPublicParameterNames(
+            ParsedModule module,
+            String declarationName,
+            List<FunctionParameter> parameters,
+            List<CompilerError> errors
+    ) {
+        var sourceNamesByJavaName = new LinkedHashMap<String, String>();
+        for (var parameter : parameters) {
+            var javaName = javaPublicParameterName(parameter.name());
+            var existing = sourceNamesByJavaName.putIfAbsent(javaName, parameter.name());
+            if (existing != null) {
+                errors.add(error(
+                        module,
+                        parameter.location(),
+                        "Public declaration `" + declarationName + "` has parameters `" + existing + "` and `"
+                                + parameter.name() + "` that both map to Java name `" + javaName + "`."
+                ));
+            }
+        }
+    }
+
+    private String javaPublicParameterName(String name) {
+        var result = new StringBuilder();
+        var capitalizeNext = false;
+        for (var index = 0; index < name.length(); index++) {
+            var character = name.charAt(index);
+            if (character == '_') {
+                capitalizeNext = true;
+            } else {
+                result.append(capitalizeNext && character >= 'a' && character <= 'z'
+                        ? Character.toUpperCase(character)
+                        : character);
+                capitalizeNext = false;
+            }
+        }
+        return result.toString();
     }
 
     private void validateObjectMethodSignature(

@@ -2801,6 +2801,40 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectNoValueTypesNestedInFunctionTypes() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("InvalidCallbacks", "/sample", """
+                        fun invalid(callback: Unit => int): int = 0
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString())
+                .contains("No-value type `void` may only be used as a function or method return type.");
+    }
+
+    @Test
+    void shouldRejectCollidingPublicJavaParameterNames() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("InvalidParameters", "/sample", """
+                        fun invalid(foo_bar: int, foo__bar: int): int = foo_bar
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString())
+                .contains("parameters `foo_bar` and `foo__bar` that both map to Java name `fooBar`");
+    }
+
+    @Test
     void shouldCamelCasePublicJavaParameterNamesAndPreserveBindings() {
         var program = compileProgram(List.of(
                 rawModule("Models", "/sample", "data User { name: String }"),

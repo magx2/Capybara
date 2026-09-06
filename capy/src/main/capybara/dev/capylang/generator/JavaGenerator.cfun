@@ -1012,10 +1012,51 @@ private fun java_object_methods(methods: List[CompiledObjectOrientedMethod], obj
 /// Formats Java source text for object method.
 private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass: CompiledObjectOrientedClass, constantBindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let publicParameters = method.visibility == "public"
+    let interfaceSignature = java_object_method_implements_interface(method, objectClass.parents, module, allModules)
     let env = java_object_method_bindings(method.parameters, objectClass, module, publicParameters) + constantBindings
-    "        " + java_visibility_prefix(method.visibility) + top_level_java_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + top_level_java_parameters(method.parameters, module, allModules, publicParameters) + ") {" + newline()
+    "        " + java_visibility_prefix(method.visibility) + java_object_method_signature_type(method.returnType, interfaceSignature, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_method_signature_parameters(method.parameters, interfaceSignature, publicParameters, module, allModules) + ") {" + newline()
     + java_object_method_body(method, env, module, allModules)
     + "        }" + newline()
+
+/// Formats an object method type consistently with an implemented Java interface.
+private fun java_object_method_signature_type(type: CompiledTypeReference, interfaceSignature: bool, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if interfaceSignature
+    then java_object_interface_type(type, module, allModules)
+    else top_level_java_type(type, module, allModules)
+
+/// Formats object method parameters consistently with an implemented Java interface.
+private fun java_object_method_signature_parameters(parameters: List[CompiledFunctionParameter], interfaceSignature: bool, publicParameters: bool, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if interfaceSignature
+    then java_object_interface_parameters(parameters, module, allModules)
+    else top_level_java_parameters(parameters, module, allModules, publicParameters)
+
+/// Checks whether an object method implements a method declared by an interface parent.
+private fun java_object_method_implements_interface(method: CompiledObjectOrientedMethod, parents: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match parents[0] with
+    case None -> false
+    case Some { parent } ->
+        match java_object_parent_interface(parent, module, allModules) with
+        case Some { binding } ->
+            java_object_interface_has_method(binding.objectInterface.methods, method)
+                | java_object_method_implements_interface(method, binding.objectInterface.parents, binding.module, allModules)
+                | java_object_method_implements_interface(method, parents[1:], module, allModules)
+        case None -> java_object_method_implements_interface(method, parents[1:], module, allModules)
+
+/// Resolves an interface parent from either encoded compiled metadata or a source-level name.
+private fun java_object_parent_interface(parent: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaObjectInterfaceBinding] =
+    if java_object_type(parent)
+    then match find_object_interface_by_type(parent, allModules) with
+        case Some { binding } -> /capy/lang/Option.Some { binding }
+        case None -> find_object_interface(type_unqualified_name(parent.name), module)
+    else find_object_interface_by_name(parent.name, module, allModules)
+
+/// Checks whether an interface declares the object method signature.
+private fun java_object_interface_has_method(methods: List[CompiledObjectOrientedMethod], method: CompiledObjectOrientedMethod): bool =
+    match methods[0] with
+    case None -> false
+    case Some { candidate } ->
+        (candidate.name == method.name & candidate.parameters.size().value == method.parameters.size().value)
+            | java_object_interface_has_method(methods[1:], method)
 
 /// Creates Java name/type bindings for object method.
 private fun java_object_method_bindings(parameters: List[CompiledFunctionParameter], objectClass: CompiledObjectOrientedClass, module: CompiledModule, publicParameters: bool): List[JavaBinding] =
