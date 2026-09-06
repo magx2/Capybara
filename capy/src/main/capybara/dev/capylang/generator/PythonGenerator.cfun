@@ -710,8 +710,21 @@ private fun python_imports(imports: List[CompiledImportDeclaration], module: Com
 /// Emits Python import source for import.
 private fun python_import(declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): String =
     let modulePath = python_import_module_name(declaration.modulePath, module)
-    "import " + modulePath + python_newline()
-        + python_import_extension_method_aliases(declaration, modulePath, module, allModules)
+    let moduleReference = python_import_module_reference(modulePath)
+    python_import_statement(modulePath, moduleReference)
+        + python_import_extension_method_aliases(declaration, moduleReference, module, allModules)
+
+/// Emits a syntax-safe Python import statement for a module path.
+private fun python_import_statement(modulePath: String, moduleReference: String): String =
+    if modulePath ? "-"
+    then moduleReference + " = __import__(" + python_string_literal(modulePath) + ", fromlist=['*'])" + python_newline()
+    else "import " + modulePath + python_newline()
+
+/// Computes the Python expression used to reference an imported module.
+private fun python_import_module_reference(modulePath: String): String =
+    if modulePath ? "-"
+    then "__capy_import_" + python_identifier(modulePath)
+    else modulePath
 
 /// Emits Python import source for import extension method aliases.
 private fun python_import_extension_method_aliases(declaration: CompiledImportDeclaration, modulePath: String, module: CompiledModule, allModules: List[CompiledModule]): String =
