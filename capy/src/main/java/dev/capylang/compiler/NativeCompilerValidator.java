@@ -738,6 +738,7 @@ public final class NativeCompilerValidator {
                 validateNestedLambdaFunctionArguments(context, module, ifExpression.elseBranch(), types, errors);
             }
             case IndexExpression index -> {
+                validateIndexReceiver(context, module, index, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, index.receiver(), types, errors);
                 validateNestedLambdaFunctionArguments(context, module, index.index(), types, errors);
                 if (index.hasEndIndex()) {
@@ -826,6 +827,41 @@ public final class NativeCompilerValidator {
             default -> {
             }
         }
+    }
+
+    private void validateIndexReceiver(
+            Context context,
+            ParsedModule module,
+            IndexExpression index,
+            Map<String, TypeReference> types,
+            List<CompilerError> errors
+    ) {
+        var receiverType = validationExpressionType(context, module, index.receiver(), types);
+        if (receiverType == null || unqualified(receiverType.name()).equals("any")) {
+            return;
+        }
+        var receiverName = unqualified(receiverType.name());
+        var arity = index.hasEndIndex() ? 2 : 1;
+        var builtInReceivers = index.hasEndIndex()
+                ? Set.of("String", "List", "Tuple")
+                : Set.of("String", "List", "Dict", "Tuple");
+        if (builtInReceivers.contains(receiverName)
+                || context.extensionMethodArities(module, receiverName, "get").contains(arity)) {
+            return;
+        }
+        var backingReceiverName = context.primitiveBackingType(module, receiverName);
+        if (backingReceiverName != null
+                && (builtInReceivers.contains(backingReceiverName)
+                || context.extensionMethodArities(module, backingReceiverName, "get").contains(arity))) {
+            return;
+        }
+        var access = index.hasEndIndex() ? "Slice" : "Index";
+        var message = access + " access is not defined for receiver type `" + displayType(receiverType) + "`";
+        var wrappedReceiver = wrappedExtensionReceiverType(receiverType, builtInReceivers);
+        if (wrappedReceiver.isPresent()) {
+            message += "; extract a `" + wrappedReceiver.orElseThrow() + "` value before indexing";
+        }
+        errors.add(error(module, index.location(), message + "."));
     }
 
     private void validateKnownExtensionMethodReceiver(

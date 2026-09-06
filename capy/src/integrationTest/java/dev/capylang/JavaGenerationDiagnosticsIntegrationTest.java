@@ -1026,6 +1026,49 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsNonIndexableReceiverDuringCompilationForEveryBackend() throws Exception {
+        var source = writeSource("sample/ResultIndexFailure.cfun", """
+                from /capy/lang/Result import { Result }
+
+                fun broken(args: Result[Tuple[String, String, String]]): Result[int] =
+                    args[0].to_int()
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 1 error(s):
+                    /sample/ResultIndexFailure.cfun:4:4: Index access is not defined for receiver type `Result[Tuple[String, String, String]]`; extract a `Tuple` value before indexing.
+                    """);
+        }
+
+        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source, ".js")).doesNotExist();
+        assertThat(generatedPath(source, ".py")).doesNotExist();
+    }
+
+    @Test
+    void allowsIndexingThroughPrimitiveBackedReceiverForEveryBackend() throws Exception {
+        var source = writeSource("sample/PrimitiveBackedIndex.cfun", """
+                from /capy/lang/Option import { Option }
+
+                type token -> String
+
+                fun first(value: token): Option[char] = value[0]
+        """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEmpty();
+            var extension = switch (outputType) {
+                case "java" -> ".java";
+                case "javascript" -> ".js";
+                case "python" -> ".py";
+                default -> throw new IllegalStateException("Unexpected output type: " + outputType);
+            };
+            assertThat(generatedPath(source, extension)).exists();
+        }
+    }
+
+    @Test
     void reportsNestedLambdaArgumentTypeDuringCompilation() throws Exception {
         var source = writeSource("sample/NestedLambdaTypeFailure.cfun", """
                 from /capy/lang/Result import { Result }
