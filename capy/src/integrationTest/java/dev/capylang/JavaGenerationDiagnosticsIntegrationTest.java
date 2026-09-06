@@ -220,6 +220,21 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void retainsModuleClassForIllegalJavaRecordComponentName() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { wait: int }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesOneTopLevelJavaInterfaceWhenSourceFileHasADifferentName() throws Exception {
         writeSource("paper-soccer/ui/UIContract.coo", """
                 interface UI {
