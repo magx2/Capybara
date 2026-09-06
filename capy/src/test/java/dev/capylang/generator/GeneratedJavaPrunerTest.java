@@ -69,6 +69,34 @@ class GeneratedJavaPrunerTest {
     }
 
     @Test
+    void scansDependenciesFromEveryRetainedOverload() {
+        var source = """
+                public final class Errors {
+                    public static Object value() {
+                        return __capy_error("failed");
+                    }
+
+                    private static Object __capy_error(String message) {
+                        return message;
+                    }
+
+                    private static Object __capy_error(String message, Throwable throwable) {
+                        return __capy_cause(throwable);
+                    }
+
+                    private static Object __capy_cause(Throwable throwable) {
+                        return throwable.getCause();
+                    }
+                }
+                """;
+
+        assertThat(GeneratedJavaPruner.prune(source))
+                .contains("__capy_error(String message)")
+                .contains("__capy_error(String message, Throwable throwable)")
+                .contains("__capy_cause(Throwable throwable)");
+    }
+
+    @Test
     void retainsOnlyRequiredFunctionInterfaceArity() {
         var source = """
                 public final class Functions {
