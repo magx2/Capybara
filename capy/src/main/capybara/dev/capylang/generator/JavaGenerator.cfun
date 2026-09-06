@@ -296,16 +296,19 @@ private fun java_module_constructor(module: CompiledModule, allModules: List[Com
 
 /// Checks whether a same-named functional data declaration can serve as the top-level Java module.
 private fun java_top_level_record_module(module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let fields = java_data_record_fields(module.name, module, allModules)
     schema_type_exists(module.name, module.functions)
         & java_data_type_kind(module.name, module.functions) == "data"
         & data_type_visibility(module.name, module.functions) == "public"
         & java_module_class_name(module) == java_identifier(module.name)
         & java_data_record_union_parents(data_type_parent_types(module.name, module, allModules), module, allModules).is_empty()
-        & java_record_component_names_legal(java_data_record_fields(module.name, module, allModules))
+        & java_record_component_names_legal(fields)
+        & java_record_component_names_unique(fields, [])
         & !java_record_component_constant_collision(
-            java_data_record_fields(module.name, module, allModules),
+            fields,
             constant_functions(module.functions)
         )
+        & !java_record_component_function_collision(fields, module.functions)
 
 /// Checks whether fields avoid names forbidden for Java record components.
 private fun java_record_component_names_legal(fields: List[String]): bool =
@@ -326,6 +329,15 @@ private fun java_record_component_name_legal(name: String): bool =
         & name != "toString"
         & name != "wait"
 
+/// Checks whether distinct source fields remain distinct after Java identifier normalization.
+private fun java_record_component_names_unique(fields: List[String], names: List[String]): bool =
+    match fields[0] with
+    case None -> true
+    case Some { field } ->
+        let name = java_identifier(schema_field_name(field))
+        !string_list_contains(name, names)
+            & java_record_component_names_unique(fields[1:], [name] + names)
+
 /// Checks whether a generated record component would collide with a static module constant.
 private fun java_record_component_constant_collision(fields: List[String], constants: List[CompiledFunction]): bool =
     match fields[0] with
@@ -340,6 +352,22 @@ private fun java_constant_named(name: String, constants: List[CompiledFunction])
     case None -> false
     case Some { constant } ->
         java_identifier(constant.name) == name | java_constant_named(name, constants[1:])
+
+/// Checks whether a generated accessor would collide with an emitted zero-argument static method.
+private fun java_record_component_function_collision(fields: List[String], functions: List[CompiledFunction]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } ->
+        java_zero_argument_function_named(java_identifier(schema_field_name(field)), functions)
+            | java_record_component_function_collision(fields[1:], functions)
+
+/// Checks whether functions contain the requested emitted zero-argument Java method name.
+private fun java_zero_argument_function_named(name: String, functions: List[CompiledFunction]): bool =
+    match functions[0] with
+    case None -> false
+    case Some { function } ->
+        (!java_skip_function(function) & function.parameters.is_empty() & java_function_name(function) == name)
+            | java_zero_argument_function_named(name, functions[1:])
 
 private fun java_effect_module_code(module: CompiledModule): String =
     java_package(module)
