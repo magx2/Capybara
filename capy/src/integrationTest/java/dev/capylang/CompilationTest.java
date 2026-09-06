@@ -714,6 +714,16 @@ class CompilationTest {
                 .orElseThrow()
                 .code())
                 .contains("import static sample.shared_code.Support.answer__");
+
+        var pythonMain = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Main.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonMain)
+                .contains("__capy_import_sample_shared_code_Support = "
+                        + "__import__(\"sample.shared-code.Support\", fromlist=['*'])")
+                .doesNotContain("import sample.shared-code.Support");
     }
 
     @Test
@@ -743,6 +753,16 @@ class CompilationTest {
                 .orElseThrow()
                 .code())
                 .contains("sample.domain_model.Widget");
+
+        var pythonConsumer = PythonGenerator.pythonGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/app/Consumer.py"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+        assertThat(pythonConsumer)
+                .contains("__capy_import_sample_domain_model_Widget = "
+                        + "__import__(\"sample.domain-model.Widget\", fromlist=['*'])")
+                .doesNotContain("import sample.domain-model.Widget");
     }
 
     @Test
