@@ -948,12 +948,12 @@ private fun find_compiled_module_by_class(className: String, modules: List[Compi
 /// Resolves an import path relative to a compiled module as a generated class name.
 private fun compiled_imported_module_class(module: CompiledModule, modulePath: String): String =
     if compiler_string_has_prefix(modulePath, "/")
-    then normalize_import_module_path(modulePath).replace("/", ".")
+    then compiler_java_package_name(normalize_import_module_path(modulePath))
     else if modulePath ? "/"
-    then normalize_import_module_path(modulePath).replace("/", ".")
+    then compiler_java_package_name(normalize_import_module_path(modulePath))
     else if module.path.is_empty()
-    then modulePath
-    else module.path.replace("/", ".") + "." + modulePath
+    then compiler_java_identifier(modulePath)
+    else compiler_java_package_name(module.path) + "." + compiler_java_identifier(modulePath)
 
 /// Builds a merge index for compiled modules without repeatedly scanning the already-compiled tail.
 private fun compile_module_merge_index(modules: List[ParsedModule], allModules: List[ParsedModule], libraryIndex: CompiledLibraryIndex, index: CompiledModuleMergeIndex): CompiledModuleMergeIndex =

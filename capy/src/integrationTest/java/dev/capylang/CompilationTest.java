@@ -804,7 +804,13 @@ class CompilationTest {
         var result = CapybaraCompiler.compile(
                 List.of(
                         rawModule("Defs", "/foo-bar", "interface Api {}", SourceKind.OBJECT_ORIENTED),
-                        rawModule("Defs", "/foo_bar", "fun value(): int = 42")
+                        rawModule("Defs", "/foo_bar", "fun value(): int = 42"),
+                        rawModule("Consumer", "/sample", """
+                                import /foo-bar/Defs
+                                import /foo_bar/Defs
+
+                                fun value(): int = 0
+                                """)
                 ),
                 new LinkedHashSet<>(),
                 emptyNativeProviders(),
@@ -822,7 +828,13 @@ class CompilationTest {
         var result = CapybaraCompiler.compile(
                 List.of(
                         rawModule("Baz", "/foo-bar", "fun first(): int = 1"),
-                        rawModule("Baz", "/foo/bar", "fun second(): int = 2")
+                        rawModule("Baz", "/foo/bar", "fun second(): int = 2"),
+                        rawModule("Consumer", "/sample", """
+                                import /foo-bar/Baz
+                                import /foo/bar/Baz
+
+                                fun value(): int = 0
+                                """)
                 ),
                 new LinkedHashSet<>(),
                 emptyNativeProviders(),
@@ -833,6 +845,16 @@ class CompilationTest {
         assertThat(((Either.Right<?, ?>) result).value().toString())
                 .contains("Generated backend path `foo_bar_Baz` collides between "
                         + "module `foo-bar/Baz` and module `foo/bar/Baz`.");
+    }
+
+    @Test
+    void shouldAllowJavaScriptAliasCandidatesThatAreNotImportedTogether() {
+        var program = compileProgram(List.of(
+                rawModule("Baz", "/foo-bar", "fun first(): int = 1"),
+                rawModule("Baz", "/foo/bar", "fun second(): int = 2")
+        ));
+
+        assertThat(program.modules()).hasSize(2);
     }
 
     @Test
