@@ -1,0 +1,16 @@
+from /capy/test/Assert import { * }
+from /capy/test/CapyTest import { * }
+from /capy/lang/Effect import { * }
+import /dev/capylang/test/hyphen-package/FunctionalSupport
+from /dev/capylang/test/hyphen-package/FunctionalSupport import { answer }
+
+fun tests(): Effect[TestFile] =
+    test_file("/dev/capylang/test/hyphen-package/FunctionalSupport.cfun", [
+        test("imports functions from a hyphenated package", () => imports_functions_from_a_hyphenated_package()),
+    ])
+
+private fun imports_functions_from_a_hyphenated_package(): Assert =
+    assert_all([
+        assert_that(answer()).is_equal_to(42),
+        assert_that(FunctionalSupport.answer()).is_equal_to(42),
+    ])
