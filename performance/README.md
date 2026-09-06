@@ -4,6 +4,16 @@ Generated from `results.csv`. Do not edit by hand.
 
 Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regression.
 
+## 2026-09-06 [c9cdb79](https://github.com/magx2/Capybara/commit/c9cdb797eea2f05d6cfa84f165be6187779030a0)
+
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/3e5e2dffe98eab8ac71ae847734ce62e43430ba3...c9cdb797eea2f05d6cfa84f165be6187779030a0)
+
+| Backend | compile | gen java | gen python | gen js | test |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `Java` | 3s (3.279 s)<br>🔴 Δ+1s / +22% | 4s (4.367 s)<br>🔵 Δ+0s / +1% | 3s (2.583 s)<br>🟢 Δ-0s / -11% | 3s (3.221 s)<br>🟢 Δ-0s / -0% | 17s (17.439 s)<br>🔴 Δ+2s / +15% |
+| `Python` | 3s (2.802 s)<br>🔵 Δ+0s / +1% | 4s (4.493 s)<br>🔵 Δ+0s / +1% | 3s (2.975 s)<br>🔵 Δ+0s / +1% | 3s (3.198 s)<br>🟢 Δ-0s / -3% | 17s (17.383 s)<br>🟡 Δ+1s / +8% |
+| `JS` | 3s (2.706 s)<br>🔵 Δ+0s / +2% | 4s (4.238 s)<br>🔵 Δ+0s / +1% | 3s (3.127 s)<br>🔵 Δ+0s / +2% | 3s (3.385 s)<br>🔴 Δ+0s / +15% | 17s (17.1 s)<br>🟡 Δ+1s / +5% |
+
 ## 2026-09-05 [3e5e2df](https://github.com/magx2/Capybara/commit/3e5e2dffe98eab8ac71ae847734ce62e43430ba3)
 
 [Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/22cfbf1d1bccabd0f093e5fbbfdcf521f5483be5...3e5e2dffe98eab8ac71ae847734ce62e43430ba3)
