@@ -91,8 +91,9 @@ fun positive_counts(entries: List[Tuple[String, int]]): Seq[Tuple[String, int]] 
 ```
 
 This form is available to collection operations that receive tuple elements,
-including `map`, `filter`, `flat_map`, `any`, and `all` and their pipe
-operators.
+including `map`, `filter`, `flat_map`, `any`, and `all`. The `map`, `filter`,
+and `flat_map` operations also support the `|`, `|-`, and `|*` pipe operators,
+respectively.
 
 ## Tuples from Collections
 
