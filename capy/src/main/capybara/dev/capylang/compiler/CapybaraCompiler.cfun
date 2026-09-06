@@ -2824,13 +2824,22 @@ private fun compile_parameters_in_module(parameters: List[FunctionParameter], mo
 /// Converts a parsed type into compiled metadata.
 private fun compile_type(type: TypeReference): CompiledTypeReference =
     CompiledTypeReference {
-        name: type.name,
+        name: compile_type_name(type.name),
         arguments: compile_types(type.arguments)
     }
 
+/// Normalizes source-level aliases to their canonical compiled type name.
+private fun compile_type_name(name: String): String =
+    if name == "Unit" then "void" else name
+
 /// Converts a parsed type in a module into compiled metadata.
 private fun compile_type_in_module(type: TypeReference, module: ParsedModule, allModules: List[ParsedModule]): CompiledTypeReference =
-    if type.name.is_empty()
+    if type.name == "Unit"
+    then CompiledTypeReference {
+        name: "void",
+        arguments: compile_types_in_module(type.arguments, module, allModules)
+    }
+    else if type.name.is_empty()
     then CompiledTypeReference {
         name: type.name,
         arguments: compile_types_in_module(type.arguments, module, allModules)

@@ -3958,6 +3958,9 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     private static TypeReference typeReference(String text) {
+        if (text.equals("Unit")) {
+            return new TypeReference("void", List.of());
+        }
         if (hasTopLevelFunctionArrow(text)) {
             return new TypeReference(text, List.of());
         }

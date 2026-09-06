@@ -2760,6 +2760,75 @@ class CompilationTest {
     }
 
     @Test
+    void shouldNormalizeUnitObjectMethodReturnTypeToVoid() {
+        var program = compileProgram(List.of(rawModule("UI", "/sample", """
+                interface UI {
+                    def refresh(): Unit
+                }
+                """, SourceKind.OBJECT_ORIENTED)));
+
+        assertThat(program.objectOrientedModules().getFirst().interfaces().getFirst().methods().getFirst().returnType().name())
+                .isEqualTo("void");
+    }
+
+    @Test
+    void shouldRejectNoValueTypesOutsideReturnPosition() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("InvalidValues", "/sample", """
+                                data InvalidValues {
+                                    direct: Unit,
+                                    nested: List[void],
+                                }
+
+                                fun invalid(value: Unit): int = 0
+                                """),
+                        rawModule("InvalidUI", "/sample", """
+                                interface InvalidUI {
+                                    def invalid(value: void): Unit
+                                }
+                                """, SourceKind.OBJECT_ORIENTED)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors.toString())
+                .contains("No-value type `void` may only be used as a function or method return type.");
+    }
+
+    @Test
+    void shouldCamelCasePublicJavaParameterNamesAndPreserveBindings() {
+        var program = compileProgram(List.of(
+                rawModule("Models", "/sample", "data User { name: String }"),
+                rawModule("Consumer", "/sample", """
+                        from Models import { User }
+
+                        fun copy(user_value: User): User = user_value
+
+                        private fun keep_private(private_value: int): int = private_value
+                        """)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("sample/Consumer.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("java.lang.Object userValue")
+                .contains("return userValue;")
+                .doesNotContain("user_value")
+                .contains("private static int keep_private__")
+                .contains("int private_value")
+                .contains("return private_value;");
+    }
+
+    @Test
     void shouldRejectObjectOrientedNonFinalIfThatFallsThrough() {
         var objectSource = """
                 class BadIf {

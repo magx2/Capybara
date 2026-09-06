@@ -49,6 +49,41 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesTypedUnitInterfaceSignatureWithCamelCaseParameter() throws Exception {
+        writeSource("paper-soccer/Field.cfun", """
+                data Field {}
+                """);
+        writeSource("paper-soccer/ui/UI.coo", """
+                interface UI {
+                    def draw_field(game_field: Field): Unit
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var field = outputDir().resolve("paper_soccer/Field.java");
+        var ui = outputDir().resolve("paper_soccer/ui/UI.java");
+        assertThat(ui)
+                .exists()
+                .content()
+                .contains("void draw_field(paper_soccer.Field gameField);")
+                .doesNotContain("java.lang.Object draw_field(java.lang.Object game_field)");
+
+        var implementation = tempDir.resolve("implementation/paper_soccer/ui/JavaUI.java");
+        Files.createDirectories(implementation.getParent());
+        Files.writeString(implementation, """
+                package paper_soccer.ui;
+
+                public final class JavaUI implements UI {
+                    @Override
+                    public void draw_field(paper_soccer.Field gameField) {
+                    }
+                }
+                """);
+        assertJavaCompiles(field, ui, implementation);
+    }
+
+    @Test
     void generatesModuleClassForDataDeclarationOnlySource() throws Exception {
         writeSource("sample/Models.cfun", """
                 data User { name: String }
