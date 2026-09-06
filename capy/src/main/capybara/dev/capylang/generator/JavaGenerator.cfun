@@ -309,6 +309,7 @@ private fun java_top_level_record_module(module: CompiledModule, allModules: Lis
             constant_functions(module.functions)
         )
         & !java_record_component_function_collision(fields, module.functions)
+        & !java_record_component_object_constructor_collision(fields, compiled_objects(module.functions).classes)
 
 /// Checks whether fields avoid names forbidden for Java record components.
 private fun java_record_component_names_legal(fields: List[String]): bool =
@@ -368,6 +369,22 @@ private fun java_zero_argument_function_named(name: String, functions: List[Comp
     case Some { function } ->
         (!java_skip_function(function) & function.parameters.is_empty() & java_function_name(function) == name)
             | java_zero_argument_function_named(name, functions[1:])
+
+/// Checks whether a generated accessor would collide with a zero-argument OO constructor wrapper.
+private fun java_record_component_object_constructor_collision(fields: List[String], classes: List[CompiledObjectOrientedClass]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } ->
+        java_zero_argument_object_constructor_named(java_identifier(schema_field_name(field)), classes)
+            | java_record_component_object_constructor_collision(fields[1:], classes)
+
+/// Checks whether classes contain the requested emitted zero-argument constructor wrapper name.
+private fun java_zero_argument_object_constructor_named(name: String, classes: List[CompiledObjectOrientedClass]): bool =
+    match classes[0] with
+    case None -> false
+    case Some { objectClass } ->
+        (objectClass.parameters.is_empty() & java_object_constructor_function_name(objectClass) == name)
+            | java_zero_argument_object_constructor_named(name, classes[1:])
 
 private fun java_effect_module_code(module: CompiledModule): String =
     java_package(module)
@@ -820,7 +837,7 @@ private fun java_data_type_boxed_non_primitive_java_type(type: CompiledTypeRefer
     else if type.name == "Effect"
     then "capy.lang.Effect<" + java_data_type_boxed_java_type(first_type_argument(type), module, allModules) + ">"
     else if type.name == "String"
-    then "String"
+    then "java.lang.String"
     else if !simpleType.is_empty()
     then simpleType
     else match data_type_owner_module(dataTypeName, module, allModules) with
@@ -8416,15 +8433,40 @@ private fun field_access_code(access: CompiledFieldAccessExpression, env: List[J
 private fun ordinary_field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let sourceType = field_access_type(access, env, module, allModules)
     let castType = field_access_cast_type(sourceType, expectedType)
+    let receiverType = expression_type(access.receiver, env, module, allModules)
+    let fieldCode =
+        if java_top_level_record_type(receiverType, module, allModules)
+        then "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_data_field("
+            + expression_code(access.receiver, env, receiverType, module, allModules)
+            + ", \"" + escape_java_string(access.name) + "\", __capy_record_value -> (("
+            + java_top_level_record_java_type(receiverType, module, allModules) + ") __capy_record_value)."
+            + java_identifier(access.name) + "()))"
+        else "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_data_field("
+            + expression_code(access.receiver, env, receiverType, module, allModules)
+            + ", \"" + escape_java_string(access.name) + "\"))"
     value_conversion_code(
-        "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_data_field("
-        + expression_code(access.receiver, env, expression_type(access.receiver, env, module, allModules), module, allModules)
-        + ", \"" + escape_java_string(access.name) + "\"))",
+        fieldCode,
         castType,
         expectedType,
         module,
         allModules
     )
+
+/// Checks whether a type is represented by its declaring module's promoted top-level record.
+private fun java_top_level_record_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = type_unqualified_name(type.name)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } -> name == owner.name & java_top_level_record_module(owner, allModules)
+    case None -> false
+
+/// Computes the Java type name for a promoted top-level record.
+private fun java_top_level_record_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = type_unqualified_name(type.name)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        top_level_owned_data_type_java_name(name, module, owner)
+            + java_data_type_reference_arguments(type.arguments, module, allModules)
+    case None -> "java.lang.Object"
 
 /// Emits generated code for object field access.
 private fun object_field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -14503,12 +14545,17 @@ private fun java_seq_helpers(): String =
 private fun java_base_helpers(): String =
     java_pow_helpers()
         + java_data_helpers()
+        + java_record_field_helper()
         + java_deep_equal_helper()
         + java_assert_helper()
         + java_assert_result_helper()
         + java_option_result_helpers()
         + java_regex_helpers()
         + java_parse_helpers()
+
+/// Emits dual-representation field access for map-backed data and promoted Java records.
+private fun java_record_field_helper(): String =
+    "    private static <T> T __capy_data_field(java.lang.Object value, java.lang.String field, java.util.function.Function<java.lang.Object, T> recordAccessor) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return __capy_data_field(value, field);\n        }\n        return recordAccessor.apply(value);\n    }\n\n"
 
 /// Emits Java runtime helper source for value-based equality.
 private fun java_deep_equal_helper(): String =

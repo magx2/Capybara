@@ -2863,11 +2863,11 @@ class CompilationTest {
 
         assertThat(code).contains("""
                     public sealed interface A {
-                        public String a();
+                        public java.lang.String a();
                     }
                 """);
-        assertThat(code).contains("    public record B(String a, int x) implements A {}");
-        assertThat(code).contains("    public record C(String a, String y) implements A {}");
+        assertThat(code).contains("    public record B(java.lang.String a, int x) implements A {}");
+        assertThat(code).contains("    public record C(java.lang.String a, java.lang.String y) implements A {}");
     }
 
     @Test
@@ -2901,8 +2901,8 @@ class CompilationTest {
 
         assertThat(ownerCode).contains("    public interface A {");
         assertThat(ownerCode).doesNotContain("public sealed interface A");
-        assertThat(ownerCode).contains("    public record B(String a, String b) implements A {}");
-        assertThat(extensionCode).contains("    public record C(String a, String c) implements sample.owner.Owner.A {}");
+        assertThat(ownerCode).contains("    public record B(java.lang.String a, java.lang.String b) implements A {}");
+        assertThat(extensionCode).contains("    public record C(java.lang.String a, java.lang.String c) implements sample.owner.Owner.A {}");
     }
 
     @Test
@@ -2924,12 +2924,12 @@ class CompilationTest {
 
         assertThat(code).contains("""
                     public sealed interface A {
-                        public String a();
+                        public java.lang.String a();
                     }
                 """);
         assertThat(code).contains("    public sealed interface B extends A {");
-        assertThat(code).contains("        public String b();");
-        assertThat(code).contains("    public record C(String a, String b, String c) implements B {}");
+        assertThat(code).contains("        public java.lang.String b();");
+        assertThat(code).contains("    public record C(java.lang.String a, java.lang.String b, java.lang.String c) implements B {}");
     }
 
     @Test
