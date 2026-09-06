@@ -2962,9 +2962,9 @@ private fun object_equality_type(type: CompiledTypeReference): bool =
 /// Emits generated code for object equality.
 private fun object_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = "__capy_deep_equal("
-        + expression_code(binary.left, env, leftType, module, allModules)
+        + java_normalized_data_value_code(expression_code(binary.left, env, leftType, module, allModules), leftType, module, allModules)
         + ", "
-        + expression_code(binary.right, env, rightType, module, allModules)
+        + java_normalized_data_value_code(expression_code(binary.right, env, rightType, module, allModules), rightType, module, allModules)
         + ")"
     if binary.operator == "!=" then "(!" + code + ")" else code
 
@@ -8286,7 +8286,12 @@ private fun with_expression_code(withExpression: CompiledWithExpression, env: Li
 /// Emits generated code for raw with expression.
 private fun raw_with_expression_code(withExpression: CompiledWithExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     "__capy_merge_data("
-        + expression_code(withExpression.receiver, env, receiverType, module, allModules)
+        + java_normalized_data_value_code(
+            expression_code(withExpression.receiver, env, receiverType, module, allModules),
+            receiverType,
+            module,
+            allModules
+        )
         + ", __capy_data(\"\", " + with_fields_code(withExpression.fields, receiverType, env, module, allModules) + "))"
 
 /// Computes the compiled type for with expression receiver.
@@ -8463,10 +8468,43 @@ private fun java_top_level_record_type(type: CompiledTypeReference, module: Comp
 private fun java_top_level_record_java_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let name = type_unqualified_name(type.name)
     match data_type_owner_module(name, module, allModules) with
-    case Some { owner } ->
-        top_level_owned_data_type_java_name(name, module, owner)
-            + java_data_type_reference_arguments(type.arguments, module, allModules)
+    case Some { owner } -> top_level_owned_data_type_java_name(name, module, owner)
     case None -> "java.lang.Object"
+
+/// Normalizes a promoted Java record to the map representation used by Capybara data operations.
+private fun java_normalized_data_value_code(valueCode: String, type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if !java_top_level_record_type(type, module, allModules)
+    then valueCode
+    else
+        let name = type_unqualified_name(type.name)
+        match data_type_owner_module(name, module, allModules) with
+        case Some { owner } ->
+            let javaType = top_level_owned_data_type_java_name(name, module, owner)
+            "__capy_record_data(" + valueCode + ", \"" + escape_java_string(name)
+                + "\", __capy_record_value -> "
+                + java_record_field_map_code(java_data_record_fields(name, owner, allModules), javaType) + ")"
+        case None -> valueCode
+
+/// Emits a field map for normalizing a promoted record.
+private fun java_record_field_map_code(fields: List[String], javaType: String): String =
+    if fields.is_empty()
+    then "java.util.Map.of()"
+    else "java.util.Map.ofEntries(" + java_record_field_map_entries(fields, javaType) + ")"
+
+/// Emits promoted-record component entries using their original Capybara field names.
+private fun java_record_field_map_entries(fields: List[String], javaType: String): String =
+    match fields[0] with
+    case None -> ""
+    case Some { field } ->
+        "java.util.Map.entry(\"" + escape_java_string(schema_field_name(field)) + "\", (("
+            + javaType + ") __capy_record_value)." + java_identifier(schema_field_name(field)) + "())"
+            + java_record_field_map_entry_tail(fields[1:], javaType)
+
+/// Emits the remaining promoted-record normalization entries.
+private fun java_record_field_map_entry_tail(fields: List[String], javaType: String): String =
+    match fields[0] with
+    case None -> ""
+    case Some _ -> ", " + java_record_field_map_entries(fields, javaType)
 
 /// Emits generated code for object field access.
 private fun object_field_access_code(access: CompiledFieldAccessExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -8761,7 +8799,7 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     else if seq_match_case(matchCase, valueType)
     then seq_match_condition_code(matchCase.typeName, valueCode)
     else if matchCase.typeName == "data"
-    then "__capy_data_is_any(" + valueCode + ")"
+    then "__capy_data_is_any_value(" + valueCode + ")"
     else if matchCase.typeName == "enum"
     then "__capy_enum_is(" + valueCode + ")"
     else if collection_match_type(matchCase.typeName)
@@ -14566,6 +14604,8 @@ private fun java_base_helpers(): String =
     java_pow_helpers()
         + java_data_helpers()
         + java_record_field_helper()
+        + java_record_data_helper()
+        + java_record_match_helper()
         + java_deep_equal_helper()
         + java_assert_helper()
         + java_assert_result_helper()
@@ -14576,6 +14616,14 @@ private fun java_base_helpers(): String =
 /// Emits dual-representation field access for map-backed data and promoted Java records.
 private fun java_record_field_helper(): String =
     "    private static <T> T __capy_data_field(java.lang.Object value, java.lang.String field, java.util.function.Function<java.lang.Object, T> recordAccessor) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return __capy_data_field(value, field);\n        }\n        return recordAccessor.apply(value);\n    }\n\n"
+
+/// Emits normalization from a promoted Java record to map-backed Capybara data.
+private fun java_record_data_helper(): String =
+    "    private static java.lang.Object __capy_record_data(java.lang.Object value, java.lang.String type, java.util.function.Function<java.lang.Object, java.util.Map<java.lang.String, ?>> recordFields) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return value;\n        }\n        return __capy_data(type, recordFields.apply(value));\n    }\n\n"
+
+/// Emits generic data-pattern support for both Capybara maps and promoted Java records.
+private fun java_record_match_helper(): String =
+    "    private static boolean __capy_data_is_any_value(java.lang.Object value) {\n        return __capy_data_is_any(value) || value instanceof java.lang.Record;\n    }\n\n"
 
 /// Emits Java runtime helper source for value-based equality.
 private fun java_deep_equal_helper(): String =

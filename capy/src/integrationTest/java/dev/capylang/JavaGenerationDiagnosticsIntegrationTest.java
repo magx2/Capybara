@@ -327,6 +327,15 @@ class JavaGenerationDiagnosticsIntegrationTest {
     void readsTopLevelRecordComponentsThroughAccessors() throws Exception {
         var source = writeSource("sample/Field.cfun", """
                 data Field { width: int }
+
+                fun updated_width(value: Field): int = value.with(width: 2).width
+
+                fun generic_data(value: Field): bool =
+                    match value with
+                    case data -> true
+                    case _ -> false
+
+                fun equals_literal(value: Field): bool = value == Field { width: 7 }
                 """);
         writeSource("sample/Field.coo", """
                 class Reader {
@@ -355,7 +364,28 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
             assertThat(readerClass.getMethod("width", Object.class).invoke(reader, field)).isEqualTo(7);
             assertThat(readerClass.getMethod("matched", Object.class).invoke(reader, field)).isEqualTo(7);
+            assertThat(generatedMethod(fieldClass, "updated_width__").invoke(null, field)).isEqualTo(2);
+            assertThat(generatedMethod(fieldClass, "generic_data__").invoke(null, field)).isEqualTo(true);
+            assertThat(generatedMethod(fieldClass, "equals_literal__").invoke(null, field)).isEqualTo(true);
         }
+    }
+
+    @Test
+    void erasesGenericParametersFromTopLevelRecordAccessorCasts() throws Exception {
+        var source = writeSource("sample/Box.cfun", """
+                data Box[T] { value: T }
+
+                fun Box[T].get(): T = this.value
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public record Box<T>(T value)")
+                .contains("((Box) __capy_record_value).value()")
+                .doesNotContain("((Box<T>) __capy_record_value)");
+        assertJavaCompiles(generatedPath(source));
     }
 
     @Test
@@ -2071,5 +2101,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .as(diagnostics.toString(StandardCharsets.UTF_8))
                 .isZero();
         return classes;
+    }
+
+    private java.lang.reflect.Method generatedMethod(Class<?> owner, String prefix) {
+        return java.util.Arrays.stream(owner.getDeclaredMethods())
+                .filter(method -> method.getName().startsWith(prefix))
+                .findFirst()
+                .orElseThrow();
     }
 }
