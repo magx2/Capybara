@@ -2962,9 +2962,9 @@ private fun object_equality_type(type: CompiledTypeReference): bool =
 /// Emits generated code for object equality.
 private fun object_equality_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = "__capy_deep_equal("
-        + java_normalized_data_value_code(expression_code(binary.left, env, leftType, module, allModules), leftType, module, allModules)
+        + "__capy_normalize_records(" + java_normalized_data_value_code(expression_code(binary.left, env, leftType, module, allModules), leftType, module, allModules) + ")"
         + ", "
-        + java_normalized_data_value_code(expression_code(binary.right, env, rightType, module, allModules), rightType, module, allModules)
+        + "__capy_normalize_records(" + java_normalized_data_value_code(expression_code(binary.right, env, rightType, module, allModules), rightType, module, allModules) + ")"
         + ")"
     if binary.operator == "!=" then "(!" + code + ")" else code
 
@@ -9511,7 +9511,7 @@ private fun reflection_dynamic_value_info_code(valueCode: String, module: Compil
     let runtimeTypeName = "__capy_reflection_runtime_type"
     let modules = reflection_dispatch_modules(module, allModules)
     "((java.util.function.Supplier<java.util.Map<java.lang.String, java.lang.Object>>) () -> {" + newline()
-        + "                java.lang.String " + runtimeTypeName + " = __capy_data_type(" + valueCode + ");" + newline()
+        + "                java.lang.String " + runtimeTypeName + " = __capy_reflection_data_type(" + valueCode + ");" + newline()
         + reflection_dynamic_enum_value_cases_code(modules, runtimeTypeName, valueCode, allModules)
         + reflection_dynamic_data_type_cases_code(modules, runtimeTypeName, valueCode, allModules)
         + "                return " + reflection_unknown_data_value_info_code(runtimeTypeName) + ";" + newline()
@@ -9642,7 +9642,7 @@ private fun reflection_field_value_info_code(dataName: String, valueCode: String
     "__capy_data(\"FieldValueInfo\", java.util.Map.ofEntries("
         + java_map_entry("name", "\"" + escape_java_string(fieldName) + "\"")
         + ", " + java_map_entry("type", reflection_any_info_code(fieldType, owner, allModules))
-        + ", " + java_map_entry("value", "__capy_data_field(" + valueCode + ", \"" + escape_java_string(fieldName) + "\")")
+        + ", " + java_map_entry("value", "__capy_reflection_data_field(" + valueCode + ", \"" + escape_java_string(fieldName) + "\")")
         + ", " + java_map_entry("annotations", reflection_annotation_infos_code(
             schema_values("__capy_schema_annotation|field|" + dataName + "|" + idx + "|", owner.functions),
             owner,
@@ -14605,6 +14605,8 @@ private fun java_base_helpers(): String =
         + java_data_helpers()
         + java_record_field_helper()
         + java_record_data_helper()
+        + java_record_normalization_helper()
+        + java_record_reflection_helper()
         + java_record_match_helper()
         + java_deep_equal_helper()
         + java_assert_helper()
@@ -14619,7 +14621,15 @@ private fun java_record_field_helper(): String =
 
 /// Emits normalization from a promoted Java record to map-backed Capybara data.
 private fun java_record_data_helper(): String =
-    "    private static java.lang.Object __capy_record_data(java.lang.Object value, java.lang.String type, java.util.function.Function<java.lang.Object, java.util.Map<java.lang.String, ?>> recordFields) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return value;\n        }\n        return __capy_data(type, recordFields.apply(value));\n    }\n\n"
+    "    private static java.lang.Object __capy_record_data(java.lang.Object value, java.lang.String type, java.util.function.Function<java.lang.Object, java.util.Map<java.lang.String, ?>> recordFields) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return value;\n        }\n        return __capy_data(type, recordFields.apply(value));\n    }\n\n    private static java.lang.Object __capy_record_data(java.lang.Object value) {\n        if (!(value instanceof java.lang.Record record)) {\n            return value;\n        }\n        java.util.Map<java.lang.String, java.lang.Object> fields = new java.util.LinkedHashMap<>();\n        for (java.lang.reflect.RecordComponent component : record.getClass().getRecordComponents()) {\n            try {\n                fields.put(component.getName(), component.getAccessor().invoke(record));\n            } catch (java.lang.ReflectiveOperationException exception) {\n                throw new java.lang.IllegalStateException(\"Cannot read record component \" + component.getName(), exception);\n            }\n        }\n        return __capy_data(record.getClass().getSimpleName(), fields);\n    }\n\n"
+
+/// Emits recursive normalization so records nested in collections retain Capybara data equality.
+private fun java_record_normalization_helper(): String =
+    "    private static java.lang.Object __capy_normalize_records(java.lang.Object value) {\n        value = __capy_record_data(value);\n        if (value instanceof java.util.Optional<?> optional) {\n            return optional.map(item -> __capy_normalize_records(item));\n        }\n        if (value instanceof java.util.List<?> list) {\n            java.util.List<java.lang.Object> result = new java.util.ArrayList<>();\n            for (java.lang.Object item : list) {\n                result.add(__capy_normalize_records(item));\n            }\n            return java.util.Collections.unmodifiableList(result);\n        }\n        if (value instanceof java.util.Set<?> set) {\n            java.util.Set<java.lang.Object> result = new java.util.LinkedHashSet<>();\n            for (java.lang.Object item : set) {\n                result.add(__capy_normalize_records(item));\n            }\n            return java.util.Collections.unmodifiableSet(result);\n        }\n        if (value instanceof java.util.Map<?, ?> map) {\n            java.util.Map<java.lang.Object, java.lang.Object> result = new java.util.LinkedHashMap<>();\n            for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {\n                result.put(entry.getKey(), __capy_normalize_records(entry.getValue()));\n            }\n            return java.util.Collections.unmodifiableMap(result);\n        }\n        return value;\n    }\n\n"
+
+/// Emits record-aware access used by reflection for statically known and widened data values.
+private fun java_record_reflection_helper(): String =
+    "    private static java.lang.String __capy_reflection_data_type(java.lang.Object value) {\n        java.lang.String type = __capy_data_type(value);\n        if (!type.isEmpty()) {\n            return type;\n        }\n        return value instanceof java.lang.Record record ? record.getClass().getSimpleName() : \"\";\n    }\n\n    private static java.lang.Object __capy_reflection_data_field(java.lang.Object value, java.lang.String field) {\n        return __capy_data_field(__capy_record_data(value), field);\n    }\n\n"
 
 /// Emits generic data-pattern support for both Capybara maps and promoted Java records.
 private fun java_record_match_helper(): String =
