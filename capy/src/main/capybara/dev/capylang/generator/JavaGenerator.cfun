@@ -2921,8 +2921,8 @@ private fun set_algebra_operator(operator: String): bool =
 
 /// Emits generated code for set binary.
 private fun set_binary_code(binary: CompiledBinaryExpression, leftType: CompiledTypeReference, rightType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let leftCode = expression_code(binary.left, env, leftType, module, allModules)
-    let rightCode = expression_code(binary.right, env, rightType, module, allModules)
+    let leftCode = "((java.util.Set) __capy_normalize_records(" + expression_code(binary.left, env, leftType, module, allModules) + "))"
+    let rightCode = "((java.util.Set) __capy_normalize_records(" + expression_code(binary.right, env, rightType, module, allModules) + "))"
     if binary.operator == "⊆"
     then "__capy_set_subset(" + leftCode + ", " + rightCode + ")"
     else if binary.operator == "⊂"
@@ -6405,12 +6405,15 @@ private fun set_one_argument_method(name: String): bool =
 /// Emits generated code for set method call.
 private fun set_method_call_code(call: CompiledMethodCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let receiverType = expression_type(call.receiver, env, module, allModules)
-    let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
+    let receiverCode = "((java.util.Set) __capy_normalize_records(" + expression_code(call.receiver, env, receiverType, module, allModules) + "))"
     if call.name == "power_set" | call.name == "℘"
     then "__capy_set_power_set(" + receiverCode + ")"
     else
         let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
-        let argumentCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
+        let rawArgumentCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
+        let argumentCode = if argumentType.name == "Set"
+            then "((java.util.Set) __capy_normalize_records(" + rawArgumentCode + "))"
+            else rawArgumentCode
         if call.name == "contains"
         then "__capy_collection_contains(" + receiverCode + ", " + argumentCode + ")"
         else if call.name == "is_subset_of"
