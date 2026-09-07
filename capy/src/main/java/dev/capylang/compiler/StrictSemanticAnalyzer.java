@@ -446,6 +446,11 @@ final class StrictSemanticAnalyzer {
     }
 
     private Type dataLiteralType(ParsedModule module, DataLiteral literal, Type expected, Env env) {
+        return dataLiteralType(module, literal, expected, env, true);
+    }
+
+    private Type dataLiteralType(ParsedModule module, DataLiteral literal, Type expected, Env env,
+                                 boolean requireAllFields) {
         var result = simple(stripRaw(literal.typeName()));
         if (expected != null && switch (unqualified(expected.name)) {
             case "Result" -> Set.of("Success", "Error").contains(unqualified(result.name));
@@ -487,7 +492,7 @@ final class StrictSemanticAnalyzer {
                         "Field `" + name + "` of data `" + result.name + "`");
             }
         }
-        if (literal.fields().stream().noneMatch(Expression.DataField::spread)) {
+        if (requireAllFields && literal.fields().stream().noneMatch(Expression.DataField::spread)) {
             fields.stream().filter(field -> !seen.contains(field.name())).forEach(field -> report(module, literal.location(),
                     "CONSTRUCTOR_FIELD", "Data `" + result.name + "` requires field `" + field.name() + "`."));
         }
@@ -687,7 +692,7 @@ final class StrictSemanticAnalyzer {
     private Type withType(ParsedModule module, WithExpression with, Type expected, Env env) {
         var receiver = infer(module, with.receiver(), expected, env);
         var synthetic = new DataLiteral(receiver.name, with.fields(), with.location());
-        dataLiteralType(module, synthetic, receiver, env);
+        dataLiteralType(module, synthetic, receiver, env, false);
         return receiver;
     }
 

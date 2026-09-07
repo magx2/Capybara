@@ -2401,6 +2401,38 @@ class CompilationTest {
     }
 
     @Test
+    void shouldAllowPartialDataUpdatesDuringStrictSemanticAnalysis() {
+        var program = compileProgram(List.of(rawModule("Profile", "", """
+                data Profile {
+                    name: String,
+                    age: int
+                }
+
+                fun rename(profile: Profile): Profile = profile.with(name: "Ada")
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldRecognizeImportedObjectTypeReflectionIntrinsic() {
+        var program = compileProgram(List.of(
+                rawModule("Workflow", "/sample", "class Workflow {}", SourceKind.OBJECT_ORIENTED),
+                rawModule("Report", "/sample", """
+                        from /sample/Workflow import { Workflow }
+
+                        fun object_name(): String = Workflow.type().name
+                        """)
+        ));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldGeneratePrimitiveBackedOperatorsAndStandardLibraryCalls() {
         var source = """
                 from /capy/lang/Async import { Async, compute }
