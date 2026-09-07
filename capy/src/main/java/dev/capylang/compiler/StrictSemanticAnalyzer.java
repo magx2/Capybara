@@ -356,7 +356,7 @@ final class StrictSemanticAnalyzer {
             if (candidates.size() == 1) {
                 var candidate = candidates.getFirst();
                 var actual = function(candidate.parameters, candidate.result);
-                if (!assignable(actual, expected)) {
+                if (!assignable(module, actual, expected)) {
                     report(module, reference.location(), "ARGUMENT_TYPE",
                             "Function reference `:" + reference.name() + "` has type `" + actual + "`, but `" + expected + "` is required.");
                 }
@@ -552,8 +552,8 @@ final class StrictSemanticAnalyzer {
                     elseType, expected, "If else branch");
             return expected;
         }
-        if (assignable(thenType, elseType)) return thenType;
-        if (assignable(elseType, thenType)) return elseType;
+        if (assignable(module, thenType, elseType)) return thenType;
+        if (assignable(module, elseType, thenType)) return elseType;
         report(module, conditional.location(), "ASSIGNMENT_TYPE",
                 "If branches have incompatible types `" + thenType + "` and `" + elseType + "`.");
         return ERROR;
@@ -720,7 +720,7 @@ final class StrictSemanticAnalyzer {
             var substitutions = inferSubstitutions(module, candidate, arguments, env);
             for (var index = 0; index < arguments.size(); index++) {
                 var actual = probe(module, arguments.get(index), env);
-                if (!assignable(actual, substitute(candidate.parameters.get(index), substitutions))) return false;
+                if (!assignable(module, actual, substitute(candidate.parameters.get(index), substitutions))) return false;
             }
             return true;
         }).toList();
@@ -741,7 +741,7 @@ final class StrictSemanticAnalyzer {
             for (var index = 0; index < arguments.size(); index++) {
                 var expected = substitute(candidate.parameters.get(index), substitutions);
                 var actual = probe(module, arguments.get(index), expected, env);
-                if (!assignable(actual, expected)) return false;
+                if (!assignable(module, actual, expected)) return false;
             }
             return true;
         }).toList();
@@ -841,8 +841,33 @@ final class StrictSemanticAnalyzer {
         return true;
     }
 
+    private boolean assignable(ParsedModule module, Type actual, Type expected) {
+        if (actual == null || expected == null || dynamic(actual) || dynamic(expected)
+                || actual == ERROR || expected == ERROR) {
+            return true;
+        }
+        if (expected.functionResult != null || actual.functionResult != null) {
+            if (expected.functionResult == null || actual.functionResult == null
+                    || expected.parameters.size() != actual.parameters.size()) {
+                return false;
+            }
+            for (var index = 0; index < expected.parameters.size(); index++) {
+                if (!assignable(module, expected.parameters.get(index), actual.parameters.get(index))) return false;
+            }
+            return assignable(module, actual.functionResult, expected.functionResult);
+        }
+        if (assignable(actual, expected)) return true;
+        if (!subtype(module, actual.name, expected.name)) return false;
+        if (actual.arguments.isEmpty()) return true;
+        if (actual.arguments.size() != expected.arguments.size()) return false;
+        for (var index = 0; index < actual.arguments.size(); index++) {
+            if (!assignable(module, actual.arguments.get(index), expected.arguments.get(index))) return false;
+        }
+        return true;
+    }
+
     private void requireAssignable(ParsedModule module, SourceLocation location, String code, Type actual, Type expected, String subject) {
-        if (!assignable(actual, expected)) report(module, location, code,
+        if (!assignable(module, actual, expected)) report(module, location, code,
                 subject + " has type `" + actual + "`, but `" + expected + "` is required.");
     }
 

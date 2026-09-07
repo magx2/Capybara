@@ -670,6 +670,28 @@ class CompilationTest {
     }
 
     @Test
+    void shouldAcceptSubtypeReturningGenericMethodMappers() {
+        compileProgram(List.of(rawModule("SubtypeMapper", "", """
+                data Success[T] { value: T }
+                data Failure {}
+                union Outcome[T] = Success[T] | Failure
+
+                fun Outcome[T].and_then(mapper: T => Outcome[Y]): Outcome[Y] =
+                    match this with
+                    case Failure -> Failure {}
+                    case Success success -> mapper(success.value)
+
+                fun parse(value: String): Success[int] = Success { value: 5 }
+
+                fun referenced(value: Outcome[String]): Outcome[int] =
+                    value.and_then(:parse)
+
+                fun lambda(value: Outcome[String]): Outcome[int] =
+                    value.and_then(text => parse(text))
+                """)));
+    }
+
+    @Test
     void shouldKeepPrimitiveConstructionWithoutValidatorUnwrapped() {
         compileProgram(List.of(rawModule("TimeUnit", "", """
                 type second -> long
