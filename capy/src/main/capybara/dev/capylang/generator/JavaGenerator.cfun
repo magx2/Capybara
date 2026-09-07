@@ -1840,13 +1840,7 @@ private fun java_constant_type(type: CompiledTypeReference, module: CompiledModu
 private fun java_data_type_has_direct_value(typeName: String, owner: CompiledModule, allModules: List[CompiledModule]): bool =
     let kind = java_data_type_kind(typeName, owner.functions)
     java_data_type_generated(typeName, owner, allModules)
-        & (kind == "enum"
-            | (kind == "data"
-                & !java_record_fields_contain_generated_data(
-                    java_data_record_fields(typeName, owner, allModules),
-                    owner,
-                    allModules
-                )))
+        & (kind == "enum" | kind == "data")
 
 /// Computes constant metadata for type.
 private fun constant_type(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -7918,26 +7912,14 @@ private fun java_record_data_literal(literal: CompiledDataLiteral, module: Compi
         java_data_type_kind(name, owner.functions) == "data"
             & java_data_type_generated(name, owner, allModules)
             & !data_fields_have_spread(literal.fields)
-            & !java_record_fields_contain_generated_data(
-                java_data_record_fields(name, owner, allModules),
-                owner,
-                allModules
-            )
     case None -> false
 
-/// Checks whether record fields require the transitional map-backed data representation.
-private fun java_record_fields_contain_generated_data(fields: List[String], module: CompiledModule, allModules: List[CompiledModule]): bool =
-    match fields[0] with
-    case None -> false
-    case Some { field } ->
-        java_type_contains_generated_data(schema_type_reference(schema_field_type_name(field)), module, allModules)
-            | java_record_fields_contain_generated_data(fields[1:], module, allModules)
-
-/// Checks whether a type, including a container argument, has a generated nominal data representation.
+/// Checks whether a value must retain a generated nominal representation, including inside containers.
 private fun java_type_contains_generated_data(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
     let name = type_unqualified_name(type.name)
     if !primitive_java_type_name(type.name).is_empty()
         | !simple_java_type_name(type.name).is_empty()
+        | boxed_container_java_type_name(type.name)
         | java_object_type(type)
     then java_types_contain_generated_data(type.arguments, module, allModules)
     else match data_type_owner_module(name, module, allModules) with
@@ -7946,7 +7928,7 @@ private fun java_type_contains_generated_data(type: CompiledTypeReference, modul
                 | java_types_contain_generated_data(type.arguments, module, allModules)
         case None -> java_types_contain_generated_data(type.arguments, module, allModules)
 
-/// Checks recursively whether any type argument has a generated nominal data representation.
+/// Checks recursively whether any type argument has a generated nominal representation.
 private fun java_types_contain_generated_data(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match types[0] with
     case None -> false
@@ -7985,13 +7967,20 @@ private fun java_record_data_literal_arguments(schemaFields: List[String], field
     case None -> ""
     case Some { field } ->
         let fieldType = generic_data_field_type(field, bindings)
-        expression_code(
+        java_record_data_literal_argument_code(
             data_constructor_argument_value(fields, schema_field_name(field), "$" + idx),
             env,
             fieldType,
             module,
             allModules
         ) + java_record_data_literal_argument_tail(schemaFields[1:], fields, bindings, idx + 1, env, module, allModules)
+
+/// Coerces erased function values back to the Java type required by a record component.
+private fun java_record_data_literal_argument_code(expression: CompiledExpression, env: List[JavaBinding], fieldType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let code = expression_code(expression, env, fieldType, module, allModules)
+    if java_type_contains_generated_data(fieldType, module, allModules)
+    then "((" + java_data_type_java_type(fieldType, module, allModules) + ") (java.lang.Object) " + code + ")"
+    else code
 
 /// Emits the remaining generated-record constructor arguments.
 private fun java_record_data_literal_argument_tail(schemaFields: List[String], fields: List[CompiledDataField], bindings: List[JavaBinding], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
