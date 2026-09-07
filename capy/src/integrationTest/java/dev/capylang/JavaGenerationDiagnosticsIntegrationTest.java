@@ -189,6 +189,25 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void castsParameterizedTopLevelRecordFieldsThroughObject() throws Exception {
+        var source = writeSource("sample/Game.cfun", """
+                data Game { moves: List[Point] }
+                data Point { x: int, y: int }
+
+                fun Game.ball_position(): Option[Point] = this.moves[-1]
+                fun add_move(game: Game, point: Point): List[Point] = game.moves + point
+                fun Game.has_no_moves(): bool = this.moves == []
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("((java.util.List<java.lang.Object>) (java.lang.Object) __capy_data_field(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void usesObjectForNonGeneratedEnumFieldInTopLevelRecord() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
