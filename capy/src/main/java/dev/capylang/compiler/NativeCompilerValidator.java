@@ -662,7 +662,7 @@ public final class NativeCompilerValidator {
             case FieldAccessExpression access ->
                     validateJavaBackendVariables(context, module, access.receiver(), variables, errors);
             case FunctionCallExpression call -> {
-                if (!knownJavaBackendCallable(context, module, call.name(), variables)) {
+                if (!knownJavaBackendCallable(context, module, call.name(), call.arguments().size(), variables)) {
                     errors.add(error(
                             module,
                             call.location(),
@@ -780,18 +780,20 @@ public final class NativeCompilerValidator {
             Context context,
             ParsedModule module,
             String name,
+            int arity,
             Set<String> variables
     ) {
         return variables.contains(name)
                 || knownFunction(context, module, name)
                 || context.hasConstructor(module, name)
-                || knownObjectTypeIntrinsic(context, module, name)
+                || knownObjectTypeIntrinsic(context, module, name, arity)
                 || knownQualifiedValueCall(context, module, name);
     }
 
-    private boolean knownObjectTypeIntrinsic(Context context, ParsedModule module, String name) {
+    private boolean knownObjectTypeIntrinsic(Context context, ParsedModule module, String name, int arity) {
         var suffix = ".type";
-        return name.endsWith(suffix)
+        return arity == 0
+                && name.endsWith(suffix)
                 && context.objectTypeExists(module, name.substring(0, name.length() - suffix.length()));
     }
 
