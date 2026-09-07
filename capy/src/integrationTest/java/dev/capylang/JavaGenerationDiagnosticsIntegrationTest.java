@@ -113,6 +113,47 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesNominalEnumAndRecordConstantsWithoutDataHelpers() throws Exception {
+        var source = writeSource("sample/Game.cfun", """
+                enum Player { PLAYER_A, PLAYER_B }
+
+                data Point { x: int, y: int }
+
+                const CENTER_POINT = Point { x: 0, y: 0 }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public enum Player { PLAYER_A, PLAYER_B }")
+                .contains("public static final Player PLAYER_A = Player.PLAYER_A;")
+                .contains("public static final Player PLAYER_B = Player.PLAYER_B;")
+                .contains("public static final Point CENTER_POINT = new Point(0, 0);")
+                .doesNotContain("__capy_data(", "java.lang.Object PLAYER_A", "java.lang.Object CENTER_POINT");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void keepsNestedDataConstantsCompatibleWithMapBackedValues() throws Exception {
+        var source = writeSource("sample/Path.cfun", """
+                enum PathRoot { RELATIVE, ABSOLUTE }
+
+                data Path { root: PathRoot }
+
+                const CURRENT = Path { root: RELATIVE }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public static final java.lang.Object CURRENT = __capy_data(\"Path\"")
+                .doesNotContain("new Path(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void generatesSameNamedDataAsTopLevelRecordWithStaticModuleMethods() throws Exception {
         writeSource("paper-soccer/Field.cfun", """
                 from /capy/lang/Result import { Success, Error }
@@ -208,7 +249,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
-    void usesObjectForNonGeneratedEnumFieldInTopLevelRecord() throws Exception {
+    void usesGeneratedEnumTypeForFieldInTopLevelRecord() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
 
@@ -219,8 +260,9 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(generatedPath(source))
                 .content()
-                .contains("public record Path(java.lang.Object root) {")
-                .doesNotContain("record Path(PathRoot root)");
+                .contains("public enum PathRoot { RELATIVE, ABSOLUTE }")
+                .contains("public record Path(PathRoot root) {")
+                .doesNotContain("public record Path(java.lang.Object root)");
         assertJavaCompiles(generatedPath(source));
     }
 
@@ -1931,8 +1973,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(compileGenerateWithTestsStderr()).isEmpty();
         assertThat(generatedPath(mainSource))
                 .content()
-                .contains("Map.entry(\"first\", 1)")
-                .contains("Map.entry(\"fourth\", 4)");
+                .contains("public static final Digits EXPECTED = new Digits(1, 2, 3, 4);")
+                .doesNotContain("__capy_data(\"Digits\"");
         assertThat(generatedTestPath(testSource))
                 .content()
                 .doesNotContain("unsupported(\"match\")");

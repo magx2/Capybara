@@ -562,7 +562,6 @@ private fun primitive_type_imported_from(typeName: String, owner: CompiledModule
 /// Checks whether a data type should be emitted as a nested Java declaration.
 private fun java_data_type_emittable(typeName: String, module: CompiledModule): bool =
     typeName != module.name
-        & java_data_type_kind(typeName, module.functions) != "enum"
         & java_data_type_kind(typeName, module.functions) != "primitive"
 
 /// Checks whether a data type has a generated Java representation.
@@ -572,9 +571,29 @@ private fun java_data_type_generated(typeName: String, module: CompiledModule, a
 
 /// Formats Java source text for one functional data or union declaration.
 private fun java_data_type(typeName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
-    if java_data_type_kind(typeName, module.functions) == "union"
+    if java_data_type_kind(typeName, module.functions) == "enum"
+    then java_enum_data_type(typeName, module)
+    else if java_data_type_kind(typeName, module.functions) == "union"
     then java_union_data_type(typeName, module, allModules)
     else java_record_data_type(typeName, module, allModules)
+
+/// Formats a Capybara enum as a nominal Java enum.
+private fun java_enum_data_type(typeName: String, module: CompiledModule): String =
+    "    " + java_visibility_prefix(data_type_visibility(typeName, module.functions)) + "enum "
+        + java_identifier(typeName) + " { "
+        + java_enum_data_values(enum_values_in_functions(typeName, module.functions)) + " }" + newline()
+
+/// Formats the constants of a generated Java enum.
+private fun java_enum_data_values(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some { value } -> java_identifier(value) + java_enum_data_value_tail(values[1:])
+
+/// Formats the remaining constants of a generated Java enum.
+private fun java_enum_data_value_tail(values: List[String]): String =
+    match values[0] with
+    case None -> ""
+    case Some _ -> ", " + java_enum_data_values(values)
 
 /// Resolves the schema kind for a functional data type.
 private fun java_data_type_kind(typeName: String, functions: List[CompiledFunction]): String =
@@ -1804,8 +1823,30 @@ private fun java_constant(constant: CompiledFunction, env: List[JavaBinding], mo
 
 /// Formats Java source text for a constant after its type has already been resolved.
 private fun java_constant_with_type(constant: CompiledFunction, type: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "    " + constant_java_visibility(constant) + "static final " + top_level_java_type(type, module, allModules) + " " + java_identifier(constant.name)
+    "    " + constant_java_visibility(constant) + "static final " + java_constant_type(type, module, allModules) + " " + java_identifier(constant.name)
     + " = " + expression_code(constant.body, env, type, module, allModules) + ";" + newline()
+
+/// Preserves nominal generated data and enum types on Java constants.
+private fun java_constant_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let name = type_unqualified_name(type.name)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        if java_data_type_has_direct_value(name, owner, allModules)
+        then java_data_type_java_type(type, module, allModules)
+        else top_level_java_type(type, module, allModules)
+    case None -> top_level_java_type(type, module, allModules)
+
+/// Checks whether values of a generated data type are emitted as nominal Java values.
+private fun java_data_type_has_direct_value(typeName: String, owner: CompiledModule, allModules: List[CompiledModule]): bool =
+    let kind = java_data_type_kind(typeName, owner.functions)
+    java_data_type_generated(typeName, owner, allModules)
+        & (kind == "enum"
+            | (kind == "data"
+                & !java_record_fields_contain_generated_data(
+                    java_data_record_fields(typeName, owner, allModules),
+                    owner,
+                    allModules
+                )))
 
 /// Computes constant metadata for type.
 private fun constant_type(constant: CompiledFunction, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -7818,6 +7859,8 @@ private fun dict_entries_tail(entries: List[CompiledDictEntry], env: List[JavaBi
 private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     if primitive_char_constructor(literal, expectedType)
     then primitive_char_constructor_code(literal, env, module, allModules)
+    else if enum_data_literal(literal, expectedType, module, allModules)
+    then enum_data_literal_code(literal, expectedType, module, allModules)
     else if seq_data_literal(literal, expectedType)
     then seq_data_literal_code(literal, env, expectedType, module, allModules)
     else if stdlib_date_time_data_literal(literal.typeName, module.imports)
@@ -7846,8 +7889,110 @@ private fun data_literal_code(literal: CompiledDataLiteral, env: List[JavaBindin
                 if parentConstructors.is_empty()
                 then match data_constructor_binding(literal.typeName, module, allModules) with
                     case Some { binding } -> data_constructor_call_code(binding, literal, env, module, allModules)
-                    case None -> imported_data_constructor_call_code(literal, env, expectedType, module, allModules)
+                    case None ->
+                        if java_record_data_literal(literal, module, allModules)
+                        then java_record_data_literal_code(literal, env, expectedType, module, allModules)
+                        else imported_data_constructor_call_code(literal, env, expectedType, module, allModules)
                 else data_constructor_pipeline_code(parentConstructors + data_own_constructor_type_names(declaredType.name, module, allModules), literal, env, expectedType, module, allModules)
+
+/// Checks whether an enum literal can use its generated Java enum constant directly.
+private fun enum_data_literal(literal: CompiledDataLiteral, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    enum_type_exists(expectedType.name, module, allModules)
+        & enum_value_exists(expectedType.name, raw_data_literal_type_name(literal.typeName), module, allModules)
+
+/// Emits a generated Java enum constant.
+private fun enum_data_literal_code(literal: CompiledDataLiteral, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    java_data_type_reference_name(expectedType, module, allModules) + "."
+        + java_identifier(raw_data_literal_type_name(literal.typeName))
+
+/// Checks whether a constructor-free data literal has a nominal Java record representation.
+private fun java_record_data_literal(literal: CompiledDataLiteral, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = data_literal_declared_type(literal.typeName).name
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        java_data_type_kind(name, owner.functions) == "data"
+            & java_data_type_generated(name, owner, allModules)
+            & !data_fields_have_spread(literal.fields)
+            & !java_record_fields_contain_generated_data(
+                java_data_record_fields(name, owner, allModules),
+                owner,
+                allModules
+            )
+    case None -> false
+
+/// Checks whether record fields require the transitional map-backed data representation.
+private fun java_record_fields_contain_generated_data(fields: List[String], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match fields[0] with
+    case None -> false
+    case Some { field } ->
+        java_type_contains_generated_data(schema_type_reference(schema_field_type_name(field)), module, allModules)
+            | java_record_fields_contain_generated_data(fields[1:], module, allModules)
+
+/// Checks whether a type, including a container argument, has a generated nominal data representation.
+private fun java_type_contains_generated_data(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = type_unqualified_name(type.name)
+    if !primitive_java_type_name(type.name).is_empty()
+        | !simple_java_type_name(type.name).is_empty()
+        | java_object_type(type)
+    then java_types_contain_generated_data(type.arguments, module, allModules)
+    else match data_type_owner_module(name, module, allModules) with
+        case Some { owner } ->
+            java_data_type_generated(name, owner, allModules)
+                | java_types_contain_generated_data(type.arguments, module, allModules)
+        case None -> java_types_contain_generated_data(type.arguments, module, allModules)
+
+/// Checks recursively whether any type argument has a generated nominal data representation.
+private fun java_types_contain_generated_data(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match types[0] with
+    case None -> false
+    case Some { type } ->
+        java_type_contains_generated_data(type, module, allModules)
+            | java_types_contain_generated_data(types[1:], module, allModules)
+
+/// Emits direct construction of a generated Java record.
+private fun java_record_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let declaredType = data_literal_declared_type(literal.typeName)
+    let name = declaredType.name
+    let dataType = find_data_type(name, module, allModules)
+    let bindings = data_type_bindings(dataType, data_literal_context_type(declaredType, expectedType), module, allModules)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        "new " + java_data_type_reference_name(declaredType, module, allModules)
+            + java_record_constructor_type_arguments(data_type_parameters(name, owner, allModules))
+            + "(" + java_record_data_literal_arguments(
+                java_data_record_fields(name, owner, allModules),
+                literal.fields,
+                bindings,
+                0,
+                env,
+                module,
+                allModules
+            ) + ")"
+    case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+
+/// Uses diamond inference when constructing a generic generated record.
+private fun java_record_constructor_type_arguments(parameters: List[String]): String =
+    if parameters.is_empty() then "" else "<>"
+
+/// Emits generated-record constructor arguments in declaration order.
+private fun java_record_data_literal_arguments(schemaFields: List[String], fields: List[CompiledDataField], bindings: List[JavaBinding], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match schemaFields[0] with
+    case None -> ""
+    case Some { field } ->
+        let fieldType = generic_data_field_type(field, bindings)
+        expression_code(
+            data_constructor_argument_value(fields, schema_field_name(field), "$" + idx),
+            env,
+            fieldType,
+            module,
+            allModules
+        ) + java_record_data_literal_argument_tail(schemaFields[1:], fields, bindings, idx + 1, env, module, allModules)
+
+/// Emits the remaining generated-record constructor arguments.
+private fun java_record_data_literal_argument_tail(schemaFields: List[String], fields: List[CompiledDataField], bindings: List[JavaBinding], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match schemaFields[0] with
+    case None -> ""
+    case Some _ -> ", " + java_record_data_literal_arguments(schemaFields, fields, bindings, idx, env, module, allModules)
 
 /// Emits the primitive runtime representation while preserving explicit constructor calls.
 private fun primitive_backed_data_literal_code(literal: CompiledDataLiteral, backingType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7904,6 +8049,8 @@ private fun raw_linked_data_literal_code(literal: CompiledDataLiteral, env: List
     then match data_constructor_binding(typeName, module, allModules) with
         case Some { binding } -> data_constructor_call_code(binding, declaredLiteral, env, module, allModules)
         case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+    else if java_record_data_literal(declaredLiteral, module, allModules)
+    then java_record_data_literal_code(declaredLiteral, env, expectedType, module, allModules)
     else raw_data_literal_code(literal, env, expectedType, module, allModules)
 
 /// Emits an imported constructor call when linked test generation omits the imported module metadata.
@@ -14682,9 +14829,9 @@ private fun java_pow_helpers(): String =
 private fun java_data_helpers(): String =
     "    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data(java.lang.String type, java.util.Map<java.lang.String, ?> fields) {\n        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>() {\n            @Override\n            public java.lang.String toString() {\n                return __capy_data_to_string(this);\n            }\n        };\n        result.put(\"__type\", type);\n        result.putAll(fields);\n        return java.util.Collections.unmodifiableMap(result);\n    }\n\n    private static java.lang.String __capy_data_to_string(java.util.Map<java.lang.String, ?> data) {\n        java.lang.String type = "
         + "java.lang.String.valueOf(data.get(\"__type\"));\n        java.lang.StringBuilder builder = new java.lang.StringBuilder(type).append(\" {\");\n        java.util.List<java.lang.String> keys = new java.util.ArrayList<>(data.keySet());\n        keys.remove(\"__type\");\n        java.util.Collections.sort(keys);\n        boolean first = true;\n        for (java.lang.String key : keys) {\n            if (!first) {\n                builder.append(\", \");\n            }\n            builder.append(key).append(\"=\").append(__capy_render_value(data.get(key)));\n            first = false;\n        }\n        return builder.append(\"}\").toString();\n    }\n\n    private static java.lang.String "
-        + "__capy_render_value(java.lang.Object value) {\n        return java.lang.String.valueOf(value);\n    }\n\n    private static boolean __capy_data_is(java.lang.Object value, java.lang.String type) {\n        return value instanceof java.util.Map<?, ?> map && type.equals(map.get(\"__type\"));\n    }\n\n    private static boolean __capy_data_is_any(java.lang.Object value) {\n        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\");\n    }\n\n    private static java.lang.String __capy_data_type(java.lang.Object value) {\n        if (value instanceof java.util.Map<?, ?> map && map.get(\"__type\") instanceof java.lang.String type) {\n            return type;\n        "
-        + "}\n        return \"\";\n    }\n\n    private static boolean __capy_enum_is(java.lang.Object value) {\n        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\") && map.get(\"name\") instanceof java.lang.String && map.get(\"order\") instanceof java.lang.Integer;\n    }\n\n    private static java.lang.String __capy_enum_name(java.lang.Object value) {\n        if (__capy_enum_is(value)) {\n            return java.lang.String.valueOf(((java.util.Map<?, ?>) value).get(\"name\"));\n        }\n        return java.lang.String.valueOf(value);\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private static <T> T __capy_data_field(java.lang.Object value, "
-        + "java.lang.String field) {\n        return (T) ((java.util.Map<java.lang.String, java.lang.Object>) value).get(field);\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data_fields(java.lang.Object... parts) {\n        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();\n        for (java.lang.Object part : parts) {\n            if (part instanceof java.util.Map.Entry<?, ?> entry) {\n                result.put(java.lang.String.valueOf(entry.getKey()), entry.getValue());\n            } else if (part instanceof java.util.Map<?, ?> map) {\n                for (java.util.Map.Entry<?, "
+        + "__capy_render_value(java.lang.Object value) {\n        return java.lang.String.valueOf(value);\n    }\n\n    private static boolean __capy_data_is(java.lang.Object value, java.lang.String type) {\n        if (value instanceof java.lang.Enum<?> enumValue) {\n            return type.equals(enumValue.name());\n        }\n        return value instanceof java.util.Map<?, ?> map && type.equals(map.get(\"__type\"));\n    }\n\n    private static boolean __capy_data_is_any(java.lang.Object value) {\n        return value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\");\n    }\n\n    private static java.lang.String __capy_data_type(java.lang.Object value) {\n        if (value instanceof java.lang.Enum<?> enumValue) {\n            return enumValue.name();\n        }\n        if (value instanceof java.util.Map<?, ?> map && map.get(\"__type\") instanceof java.lang.String type) {\n            return type;\n        "
+        + "}\n        return \"\";\n    }\n\n    private static boolean __capy_enum_is(java.lang.Object value) {\n        return value instanceof java.lang.Enum<?> || (value instanceof java.util.Map<?, ?> map && map.containsKey(\"__type\") && map.get(\"name\") instanceof java.lang.String && map.get(\"order\") instanceof java.lang.Integer);\n    }\n\n    private static java.lang.String __capy_enum_name(java.lang.Object value) {\n        if (value instanceof java.lang.Enum<?> enumValue) {\n            return enumValue.name();\n        }\n        if (__capy_enum_is(value)) {\n            return java.lang.String.valueOf(((java.util.Map<?, ?>) value).get(\"name\"));\n        }\n        return java.lang.String.valueOf(value);\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private static <T> T __capy_data_field(java.lang.Object value, "
+        + "java.lang.String field) {\n        if (value instanceof java.lang.Enum<?> enumValue) {\n            if (field.equals(\"name\")) {\n                return (T) enumValue.name();\n            }\n            if (field.equals(\"order\")) {\n                return (T) java.lang.Integer.valueOf(enumValue.ordinal());\n            }\n            return null;\n        }\n        return (T) ((java.util.Map<java.lang.String, java.lang.Object>) value).get(field);\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private static java.util.Map<java.lang.String, java.lang.Object> __capy_data_fields(java.lang.Object... parts) {\n        java.util.Map<java.lang.String, java.lang.Object> result = new java.util.LinkedHashMap<>();\n        for (java.lang.Object part : parts) {\n            if (part instanceof java.util.Map.Entry<?, ?> entry) {\n                result.put(java.lang.String.valueOf(entry.getKey()), entry.getValue());\n            } else if (part instanceof java.util.Map<?, ?> map) {\n                for (java.util.Map.Entry<?, "
         + "?> entry : map.entrySet()) {\n                    if (!\"__type\".equals(entry.getKey())) {\n"
         + "                        result.put(java.lang.String.valueOf(entry.getKey()), entry.getValue());\n                    }\n                }\n            }\n        }\n        return java.util.Collections.unmodifiableMap(result);\n    }\n\n"
         + java_constructor_helpers()
