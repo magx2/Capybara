@@ -2793,8 +2793,12 @@ private fun binary_expression_code(binary: CompiledBinaryExpression, env: List[J
             if leftType.name == "Dict"
             then expression_code(binary.left, env, leftType, module, allModules)
                 + ".containsKey(" + expression_code(binary.right, env, string_type(), module, allModules) + ")"
-            else expression_code(binary.left, env, leftType, module, allModules)
+            else if leftType.name == "String"
+            then expression_code(binary.left, env, leftType, module, allModules)
                 + ".contains(" + expression_code(binary.right, env, rightType, module, allModules) + ")"
+            else "__capy_collection_contains("
+                + expression_code(binary.left, env, leftType, module, allModules)
+                + ", " + expression_code(binary.right, env, rightType, module, allModules) + ")"
         else if string_equality_operator(binary.operator, leftType, rightType)
         then string_equality_code(binary, leftType, rightType, env, module, allModules)
         else if object_equality_operator(binary.operator, leftType, rightType)
@@ -8286,14 +8290,14 @@ private fun with_expression_code(withExpression: CompiledWithExpression, env: Li
 
 /// Emits generated code for raw with expression.
 private fun raw_with_expression_code(withExpression: CompiledWithExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "__capy_merge_data("
+    "__capy_merge_data(__capy_record_data("
         + java_normalized_data_value_code(
             expression_code(withExpression.receiver, env, receiverType, module, allModules),
             receiverType,
             module,
             allModules
         )
-        + ", __capy_data(\"\", " + with_fields_code(withExpression.fields, receiverType, env, module, allModules) + "))"
+        + "), __capy_data(\"\", " + with_fields_code(withExpression.fields, receiverType, env, module, allModules) + "))"
 
 /// Computes the compiled type for with expression receiver.
 private fun with_expression_receiver_type(withExpression: CompiledWithExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -14607,6 +14611,7 @@ private fun java_base_helpers(): String =
         + java_record_field_helper()
         + java_record_data_helper()
         + java_record_normalization_helper()
+        + java_record_membership_helper()
         + java_record_reflection_helper()
         + java_record_match_helper()
         + java_deep_equal_helper()
@@ -14627,6 +14632,10 @@ private fun java_record_data_helper(): String =
 /// Emits recursive normalization so records nested in collections retain Capybara data equality.
 private fun java_record_normalization_helper(): String =
     "    private static java.lang.Object __capy_normalize_records(java.lang.Object value) {\n        value = __capy_record_data(value);\n        if (value instanceof java.util.Optional<?> optional) {\n            return optional.map(item -> __capy_normalize_records(item));\n        }\n        if (value instanceof java.util.List<?> list) {\n            java.util.List<java.lang.Object> result = new java.util.ArrayList<>();\n            for (java.lang.Object item : list) {\n                result.add(__capy_normalize_records(item));\n            }\n            return java.util.Collections.unmodifiableList(result);\n        }\n        if (value instanceof java.util.Set<?> set) {\n            java.util.Set<java.lang.Object> result = new java.util.LinkedHashSet<>();\n            for (java.lang.Object item : set) {\n                result.add(__capy_normalize_records(item));\n            }\n            return java.util.Collections.unmodifiableSet(result);\n        }\n        if (value instanceof java.util.Map<?, ?> map) {\n            java.util.Map<java.lang.Object, java.lang.Object> result = new java.util.LinkedHashMap<>();\n            for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {\n                result.put(entry.getKey(), __capy_normalize_records(entry.getValue()));\n            }\n            return java.util.Collections.unmodifiableMap(result);\n        }\n        return value;\n    }\n\n"
+
+/// Emits collection membership using normalized mixed record/map representations.
+private fun java_record_membership_helper(): String =
+    "    private static boolean __capy_collection_contains(java.lang.Object collection, java.lang.Object value) {\n        java.lang.Object normalized = __capy_normalize_records(collection);\n        return normalized instanceof java.util.Collection<?> values && values.contains(__capy_normalize_records(value));\n    }\n\n"
 
 /// Emits record-aware access used by reflection for statically known and widened data values.
 private fun java_record_reflection_helper(): String =
