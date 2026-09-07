@@ -348,6 +348,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
                 fun updated_width(value: Field): int = value.with(width: 2).width
 
+                fun updated_widened(value: data): int = value.with(width: 3).width
+
                 fun generic_data(value: Field): bool =
                     match value with
                     case data -> true
@@ -356,6 +358,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 fun equals_literal(value: Field): bool = value == Field { width: 7 }
 
                 fun equals_nested(value: Field): bool = [value] == [Field { width: 7 }]
+
+                fun contains_record(value: Field): bool = [Field { width: 7 }] ? value
 
                 fun reflected(value: data): DataValueInfo = reflection(value)
 
@@ -389,9 +393,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(readerClass.getMethod("width", Object.class).invoke(reader, field)).isEqualTo(7);
             assertThat(readerClass.getMethod("matched", Object.class).invoke(reader, field)).isEqualTo(7);
             assertThat(generatedMethod(fieldClass, "updated_width__").invoke(null, field)).isEqualTo(2);
+            assertThat(generatedMethod(fieldClass, "updated_widened__").invoke(null, field)).isEqualTo(3);
             assertThat(generatedMethod(fieldClass, "generic_data__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "equals_literal__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "equals_nested__").invoke(null, field)).isEqualTo(true);
+            assertThat(generatedMethod(fieldClass, "contains_record__").invoke(null, field)).isEqualTo(true);
             var reflected = (java.util.Map<?, ?>) generatedMethod(fieldClass, "reflected__").invoke(null, field);
             assertThat(reflected.get("name")).isEqualTo("Field");
             var reflectedFields = (java.util.List<?>) reflected.get("fields");
