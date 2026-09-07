@@ -602,6 +602,74 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPropagateGenericResultTypesAcrossChainedFlatMapCalls() {
+        compileProgram(List.of(rawModule("ResultChain", "", """
+                from /capy/lang/Result import { Result, Success }
+
+                data Field { width: int }
+                data Game { game_field: Field }
+
+                fun strings(): Result[Tuple[String, String, String]] = Success { ("5", "11", "3") }
+                fun integers(values: Tuple[String, String, String]): Result[Tuple[int, int, int]] = Success { (5, 11, 3) }
+                fun field(values: Tuple[int, int, int]): Result[Field] = Success { Field { width: values[0] } }
+
+                fun referenced(): Result[Game] =
+                    strings()
+                        .flat_map(:integers)
+                        .flat_map(:field)
+                        .map(value => Game { game_field: value })
+
+                fun lambdas(): Result[Game] =
+                    strings()
+                        .flat_map(values => integers(values))
+                        .flat_map(values => field(values))
+                        .map(value => Game { game_field: value })
+                """)));
+    }
+
+    @Test
+    void shouldPropagateGenericOptionTypesAcrossChainedFlatMapCalls() {
+        compileProgram(List.of(rawModule("OptionChain", "", """
+                from /capy/lang/Option import { Option, Some }
+
+                data Field { width: int }
+                data Game { game_field: Field }
+
+                fun string_value(): Option[String] = Some { "5" }
+                fun integer_value(value: String): Option[int] = Some { 5 }
+                fun field_value(value: int): Option[Field] = Some { Field { width: value } }
+
+                fun reproduce(): Option[Game] =
+                    string_value()
+                        .flat_map(:integer_value)
+                        .flat_map(:field_value)
+                        .map(value => Game { game_field: value })
+                """)));
+    }
+
+    @Test
+    void shouldPropagateGenericTypesAcrossLocallyDeclaredExtensionMethods() {
+        compileProgram(List.of(rawModule("GenericExtensionChain", "", """
+                data Box[T] { value: T }
+                data Field { width: int }
+                data Game { game_field: Field }
+
+                fun Box[T].and_then(mapper: T => Box[Y]): Box[Y] = mapper(this.value)
+
+                fun strings(): Box[String] = Box { value: "5" }
+                fun integers(value: String): Box[int] = Box { value: 5 }
+                fun field(value: int): Box[Field] = Box { value: Field { width: value } }
+                fun game(value: Field): Box[Game] = Box { value: Game { game_field: value } }
+
+                fun reproduce(): Box[Game] =
+                    strings()
+                        .and_then(:integers)
+                        .and_then(:field)
+                        .and_then(:game)
+                """)));
+    }
+
+    @Test
     void shouldKeepPrimitiveConstructionWithoutValidatorUnwrapped() {
         compileProgram(List.of(rawModule("TimeUnit", "", """
                 type second -> long
