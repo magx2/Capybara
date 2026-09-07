@@ -365,6 +365,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
                 fun set_contains_record(value: Field): bool = { Field { width: 7 }, }.contains(value)
 
+                fun set_subset_record(value: Field): bool = { value, }.is_subset_of({ Field { width: 7 }, })
+
                 fun reflected(value: data): DataValueInfo = reflection(value)
 
                 fun spread_width(value: Field): int = Extended { ...value, y: 2 }.width
@@ -404,6 +406,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(generatedMethod(fieldClass, "equals_nested__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "contains_record__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "set_contains_record__").invoke(null, field)).isEqualTo(true);
+            assertThat(generatedMethod(fieldClass, "set_subset_record__").invoke(null, field)).isEqualTo(true);
             var reflected = (java.util.Map<?, ?>) generatedMethod(fieldClass, "reflected__").invoke(null, field);
             assertThat(reflected.get("name")).isEqualTo("Field");
             var reflectedFields = (java.util.List<?>) reflected.get("fields");
