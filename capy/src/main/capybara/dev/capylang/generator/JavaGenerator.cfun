@@ -8450,7 +8450,7 @@ private fun ordinary_field_access_code(access: CompiledFieldAccessExpression, en
     let receiverType = expression_type(access.receiver, env, module, allModules)
     let fieldCode =
         if java_top_level_record_type(receiverType, module, allModules)
-        then "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_data_field("
+        then "((" + top_level_boxed_java_type(castType, module, allModules) + ") (java.lang.Object) __capy_data_field("
             + expression_code(access.receiver, env, receiverType, module, allModules)
             + ", \"" + escape_java_string(access.name) + "\", __capy_record_value -> (("
             + java_top_level_record_java_type(receiverType, module, allModules) + ") __capy_record_value)."
