@@ -1,0 +1,1 @@
+RETURN_TYPE|Main.cfun|1|0|Function `invalid` return value has type `String`, but `int` is required.

@@ -1,2 +1,2 @@
-/// Compiler diagnostic with message text, source module name, and source position.
-data CompilerError { message: String, moduleName: String, line: int, column: int }
+/// Compiler diagnostic with a stable code, message text, source module name, and source position.
+data CompilerError { code: String, message: String, moduleName: String, line: int, column: int }

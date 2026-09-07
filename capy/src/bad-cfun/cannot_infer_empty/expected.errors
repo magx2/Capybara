@@ -1,0 +1,1 @@
+CANNOT_INFER_TYPE|Main.cfun|1|16|Cannot infer element type of empty `List`; add a type annotation.

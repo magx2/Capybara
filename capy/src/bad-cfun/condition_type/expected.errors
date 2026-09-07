@@ -1,0 +1,1 @@
+CONDITION_TYPE|Main.cfun|1|24|If condition has type `int`, but `bool` is required.

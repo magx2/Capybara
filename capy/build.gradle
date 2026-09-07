@@ -443,9 +443,13 @@ def e2eCooGeneratedPythonDir = layout.buildDirectory.dir('generated/sources/capy
 def e2eCooLinkedPythonOutputDir = layout.buildDirectory.dir('generated/sources/capybara/linked-python/e2e-coo')
 def e2eCooPythonTestResultsDir = layout.buildDirectory.dir('test-results/e2e-python-coo')
 def e2eCooNativePythonDir = layout.projectDirectory.dir('src/e2e-coo/native/py')
+def badCfunSourceDir = layout.projectDirectory.dir('src/bad-cfun')
+def badCooSourceDir = layout.projectDirectory.dir('src/bad-coo')
 def intellijE2eTestSourceDirs = files(
         'src/e2e-cfun',
         'src/e2e-coo',
+        'src/bad-cfun',
+        'src/bad-coo',
         'src/e2e-coo-java-native',
         'src/e2e-coo-js-native',
         'src/e2e-coo-py-native'
@@ -494,8 +498,8 @@ sourceSets {
     integrationTest {
         java.srcDir file('src/integrationTest/java')
         resources.srcDir file('src/integrationTest/resources')
-        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-        runtimeClasspath += output + compileClasspath
+        compileClasspath = sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath = output + sourceSets.main.output + configurations.testRuntimeClasspath
     }
 }
 
@@ -1149,6 +1153,20 @@ def integrationTests = tasks.register('integrationTest', Test) {
     )
     shouldRunAfter test
     useJUnitPlatform()
+    inputs.dir(badCfunSourceDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(badCooSourceDir).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+tasks.register('badCodeTest', Test) {
+    description = 'Compiles the invalid CFUN and COO fixture corpus and verifies diagnostics.'
+    group = capybaraTaskGroup
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = files(sourceSets.integrationTest.output, sourceSets.main.output, sourceSets.integrationTest.runtimeClasspath)
+    useJUnitPlatform()
+    filter { includeTestsMatching 'dev.capylang.BadCodeCompilationTest' }
+    inputs.dir(badCfunSourceDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.dir(badCooSourceDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    shouldRunAfter test
 }
 
 def e2eJavaScriptTests = tasks.register('e2e-javascript') {

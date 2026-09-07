@@ -1,0 +1,2 @@
+from /support/Tools import { * }
+fun invalid(): int = missing()

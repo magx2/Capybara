@@ -1,0 +1,1 @@
+RETURN_TYPE|Bad.coo|1|12|Method `Bad.value` return value has type `String`, but `int` is required.

@@ -1,0 +1,5 @@
+fun invalid(): int =
+    {
+        let value: int = "text"
+        value
+    }
