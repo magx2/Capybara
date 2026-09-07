@@ -350,6 +350,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
                 fun updated_widened(value: data): int = value.with(width: 3).width
 
+                fun widened_width(value: data): int = value.width
+
                 fun generic_data(value: Field): bool =
                     match value with
                     case data -> true
@@ -360,6 +362,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 fun equals_nested(value: Field): bool = [value] == [Field { width: 7 }]
 
                 fun contains_record(value: Field): bool = [Field { width: 7 }] ? value
+
+                fun set_contains_record(value: Field): bool = { Field { width: 7 }, }.contains(value)
 
                 fun reflected(value: data): DataValueInfo = reflection(value)
 
@@ -394,10 +398,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(readerClass.getMethod("matched", Object.class).invoke(reader, field)).isEqualTo(7);
             assertThat(generatedMethod(fieldClass, "updated_width__").invoke(null, field)).isEqualTo(2);
             assertThat(generatedMethod(fieldClass, "updated_widened__").invoke(null, field)).isEqualTo(3);
+            assertThat(generatedMethod(fieldClass, "widened_width__").invoke(null, field)).isEqualTo(7);
             assertThat(generatedMethod(fieldClass, "generic_data__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "equals_literal__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "equals_nested__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "contains_record__").invoke(null, field)).isEqualTo(true);
+            assertThat(generatedMethod(fieldClass, "set_contains_record__").invoke(null, field)).isEqualTo(true);
             var reflected = (java.util.Map<?, ?>) generatedMethod(fieldClass, "reflected__").invoke(null, field);
             assertThat(reflected.get("name")).isEqualTo("Field");
             var reflectedFields = (java.util.List<?>) reflected.get("fields");
