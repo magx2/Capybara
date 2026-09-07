@@ -1212,6 +1212,9 @@ private fun java_object_return_statements(expression: CompiledExpression, return
         let expressionType = expression_type(expression, env, module, allModules)
         if returnType.name == "void" & expressionType.name == "Effect"
         then indent + expression_code(expression, env, expressionType, module, allModules) + ".unsafeRun();" + newline()
+        else if returnType.name == "void" & expressionType.name != "void"
+        then indent + "((java.util.function.Supplier<java.lang.Object>) () -> "
+            + expression_code(expression, env, object_type(), module, allModules) + ").get();" + newline()
         else if returnType.name == "void"
         then indent + expression_code(expression, env, object_type(), module, allModules) + ";" + newline()
         else indent + "return " + expression_code(expression, env, returnType, module, allModules) + ";" + newline()
