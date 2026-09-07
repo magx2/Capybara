@@ -11,7 +11,7 @@ jar="$(capy_jar)"
 cli_backend="$(backend_cli_name "${backend}")"
 
 if [[ ! -f "${linked_input}/program.json" ]]; then
-    prepare_linked_input "${linked_input}"
+    prepare_linked_input "${linked_input}" "${backend}"
 fi
 
 mkdir -p "${generated_output}"

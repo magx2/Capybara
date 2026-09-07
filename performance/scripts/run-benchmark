@@ -60,7 +60,7 @@ def capy_jar():
     sys.exit(1)
 
 
-def prepare_linked_input(output_dir):
+def prepare_linked_input(output_dir, backend):
     jar = capy_jar()
     shutil.rmtree(output_dir, ignore_errors=True)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -68,11 +68,14 @@ def prepare_linked_input(output_dir):
         "java",
         "-jar",
         jar,
-        "compile",
+        "compile-generate",
+        backend,
         "--input",
         PROJECT_SRC_DIR,
-        "--output",
+        "--linked-output",
         output_dir,
+        "--output",
+        PROJECT_BUILD_DIR / "generated" / "prepare-linked" / backend,
         "--log",
         "WARN",
     ])
@@ -95,7 +98,7 @@ def run_benchmark():
         for backend in BACKENDS:
             run([SCRIPTS_DIR / "clean"])
             linked_input = PROJECT_BUILD_DIR / "linked" / runner / f"generate-{backend}"
-            prepare_linked_input(linked_input)
+            prepare_linked_input(linked_input, backend)
             timings[f"{runner}-generate-{backend}"] = measure([
                 SCRIPTS_DIR / "generate",
                 backend,
