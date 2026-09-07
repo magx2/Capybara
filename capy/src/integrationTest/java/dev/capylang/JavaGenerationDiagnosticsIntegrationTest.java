@@ -250,6 +250,14 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     to_move: Player,
                 }
 
+                const BASE_GAME = Game {
+                    field: Field { width: 7, height: 9 },
+                    moves: [Point { x: 1, y: 2 }],
+                    to_move: Player.PLAYER_A,
+                }
+
+                const COPY_GAME = Game { ...BASE_GAME }
+
                 fun initial_game(field: Field): Game =
                     Game {
                         field,
@@ -272,6 +280,16 @@ class JavaGenerationDiagnosticsIntegrationTest {
                             to_move: Player.PLAYER_A,
                         }
                     }
+
+                fun updated_nested_values(field: Field): Game =
+                    let point = Point { x: 3, y: 4 }
+                    Game {
+                        field: field.with(width: 15),
+                        moves: [point.with(x: 8)],
+                        to_move: Player.PLAYER_B,
+                    }
+
+                fun copied_game(game: Game): Game = Game { ...game }
 
                 fun field_width(game: Game): int = game.field.width
                 fun first_move_x(game: Game): int = game.moves[0].or_else(Point { x: 0, y: 0 }).x
@@ -339,6 +357,18 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(pointClass.getMethod("x").invoke(moves.getFirst())).isEqualTo(3);
             assertThat(generatedMethod(gamesClass, "first_move_x__").invoke(null, withMove)).isEqualTo(3);
             assertThat(generatedMethod(gamesClass, "same_game__").invoke(null, withMove, withMove)).isEqualTo(true);
+
+            var updated = generatedMethod(gamesClass, "updated_nested_values__").invoke(null, field);
+            var updatedField = gameClass.getMethod("field").invoke(updated);
+            var updatedMoves = (List<?>) gameClass.getMethod("moves").invoke(updated);
+            assertThat(updatedField).isInstanceOf(fieldClass);
+            assertThat(fieldClass.getMethod("width").invoke(updatedField)).isEqualTo(15);
+            assertThat(updatedMoves).singleElement().isInstanceOf(pointClass);
+            assertThat(pointClass.getMethod("x").invoke(updatedMoves.getFirst())).isEqualTo(8);
+
+            var copied = generatedMethod(gamesClass, "copied_game__").invoke(null, withMove);
+            assertThat(copied).isInstanceOf(gameClass).isEqualTo(withMove);
+            assertThat(gamesClass.getField("COPY_GAME").get(null)).isInstanceOf(gameClass);
 
             var wrapped = (java.util.Map<?, ?>) generatedMethod(gamesClass, "wrapped_game__").invoke(null, field);
             assertThat(wrapped.get("__type")).isEqualTo("Success");

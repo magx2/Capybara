@@ -7911,22 +7911,13 @@ private fun java_record_data_literal(literal: CompiledDataLiteral, module: Compi
     case Some { owner } ->
         java_data_type_kind(name, owner.functions) == "data"
             & java_data_type_generated(name, owner, allModules)
-            & !data_fields_have_spread(literal.fields)
     case None -> false
 
 /// Checks whether a value must retain a generated nominal representation, including inside containers.
 private fun java_type_contains_generated_data(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    let name = type_unqualified_name(type.name)
-    if !primitive_java_type_name(type.name).is_empty()
-        | !simple_java_type_name(type.name).is_empty()
-        | boxed_container_java_type_name(type.name)
-        | java_object_type(type)
+    if boxed_container_java_type_name(type.name) | type.name == "array"
     then java_types_contain_generated_data(type.arguments, module, allModules)
-    else match data_type_owner_module(name, module, allModules) with
-        case Some { owner } ->
-            java_data_type_generated(name, owner, allModules)
-                | java_types_contain_generated_data(type.arguments, module, allModules)
-        case None -> java_types_contain_generated_data(type.arguments, module, allModules)
+    else java_generated_record_type(type, module, allModules)
 
 /// Checks recursively whether any type argument has a generated nominal representation.
 private fun java_types_contain_generated_data(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -7936,6 +7927,28 @@ private fun java_types_contain_generated_data(types: List[CompiledTypeReference]
         java_type_contains_generated_data(type, module, allModules)
             | java_types_contain_generated_data(types[1:], module, allModules)
 
+/// Checks whether erased generated values require a Java cast at a record boundary.
+private fun java_type_requires_generated_cast(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = type_unqualified_name(type.name)
+    if !primitive_java_type_name(type.name).is_empty()
+        | !simple_java_type_name(type.name).is_empty()
+        | boxed_container_java_type_name(type.name)
+        | java_object_type(type)
+    then java_types_require_generated_cast(type.arguments, module, allModules)
+    else match data_type_owner_module(name, module, allModules) with
+        case Some { owner } ->
+            java_data_type_generated(name, owner, allModules)
+                | java_types_require_generated_cast(type.arguments, module, allModules)
+        case None -> java_types_require_generated_cast(type.arguments, module, allModules)
+
+/// Checks recursively whether a type argument requires a Java cast at a record boundary.
+private fun java_types_require_generated_cast(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match types[0] with
+    case None -> false
+    case Some { type } ->
+        java_type_requires_generated_cast(type, module, allModules)
+            | java_types_require_generated_cast(types[1:], module, allModules)
+
 /// Emits direct construction of a generated Java record.
 private fun java_record_data_literal_code(literal: CompiledDataLiteral, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let declaredType = data_literal_declared_type(literal.typeName)
@@ -7944,18 +7957,25 @@ private fun java_record_data_literal_code(literal: CompiledDataLiteral, env: Lis
     let bindings = data_type_bindings(dataType, data_literal_context_type(declaredType, expectedType), module, allModules)
     match data_type_owner_module(name, module, allModules) with
     case Some { owner } ->
-        "new " + java_data_type_reference_name(declaredType, module, allModules)
-            + java_record_constructor_type_arguments(data_type_parameters(name, owner, allModules))
-            + "(" + java_record_data_literal_arguments(
-                java_data_record_fields(name, owner, allModules),
-                literal.fields,
-                bindings,
-                0,
-                env,
-                module,
-                allModules
-            ) + ")"
+        if data_fields_have_spread(literal.fields)
+        then java_nominal_value_code(java_record_spread_data_code(literal, env, dataType, bindings, module, allModules), declaredType, module, allModules)
+        else
+            "new " + java_data_type_reference_name(declaredType, module, allModules)
+                + java_record_constructor_type_arguments(data_type_parameters(name, owner, allModules))
+                + "(" + java_record_data_literal_arguments(
+                    java_data_record_fields(name, owner, allModules),
+                    literal.fields,
+                    bindings,
+                    0,
+                    env,
+                    module,
+                    allModules
+                ) + ")"
     case None -> raw_data_literal_code(literal, env, expectedType, module, allModules)
+
+/// Emits merged spread fields as an anonymous transitional value before nominal materialization.
+private fun java_record_spread_data_code(literal: CompiledDataLiteral, env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
+    "__capy_data(\"\", " + data_fields_code(literal.fields, env, dataType, bindings, module, allModules) + ")"
 
 /// Uses diamond inference when constructing a generic generated record.
 private fun java_record_constructor_type_arguments(parameters: List[String]): String =
@@ -7979,8 +7999,51 @@ private fun java_record_data_literal_arguments(schemaFields: List[String], field
 private fun java_record_data_literal_argument_code(expression: CompiledExpression, env: List[JavaBinding], fieldType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = expression_code(expression, env, fieldType, module, allModules)
     if java_type_contains_generated_data(fieldType, module, allModules)
+    then java_nominal_value_code(code, fieldType, module, allModules)
+    else if java_type_requires_generated_cast(fieldType, module, allModules)
     then "((" + java_data_type_java_type(fieldType, module, allModules) + ") (java.lang.Object) " + code + ")"
     else code
+
+/// Materializes map-backed record values recursively according to their nominal Java type.
+private fun java_nominal_value_code(code: String, type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    "((" + java_data_type_java_type(type, module, allModules) + ") __capy_nominal_value((java.lang.Object) " + code
+        + ", " + java_nominal_type_code(type, module, allModules) + "))"
+
+/// Emits reflective Java type metadata used to materialize nested nominal values.
+private fun java_nominal_type_code(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if boxed_container_java_type_name(type.name)
+    then java_nominal_container_type_code(type, module, allModules)
+    else if type.name == "array" | type.arguments.is_empty()
+    then java_data_type_java_type(type, module, allModules) + ".class"
+    else "__capy_parameterized_type(" + java_data_type_reference_name(type, module, allModules) + ".class, "
+        + java_nominal_type_codes(type.arguments, module, allModules) + ")"
+
+/// Emits reflective Java type metadata for a built-in container.
+private fun java_nominal_container_type_code(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    if type.name == "Dict"
+    then "__capy_parameterized_type(java.util.Map.class, java.lang.String.class, " + java_nominal_type_code(first_type_argument(type), module, allModules) + ")"
+    else "__capy_parameterized_type(" + java_nominal_container_class(type.name) + ".class, "
+        + java_nominal_type_code(first_type_argument(type), module, allModules) + ")"
+
+/// Resolves a built-in container raw Java class.
+private fun java_nominal_container_class(name: String): String =
+    if name == "List" then "java.util.List"
+    else if name == "Set" then "java.util.Set"
+    else if option_type_name(name) then "java.util.Optional"
+    else if name == "Supplier" then "java.util.function.Supplier"
+    else "java.lang.Object"
+
+/// Emits a comma-separated list of reflective Java type metadata.
+private fun java_nominal_type_codes(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match types[0] with
+    case None -> ""
+    case Some { type } -> java_nominal_type_code(type, module, allModules) + java_nominal_type_codes_tail(types[1:], module, allModules)
+
+/// Emits the remaining reflective Java type metadata.
+private fun java_nominal_type_codes_tail(types: List[CompiledTypeReference], module: CompiledModule, allModules: List[CompiledModule]): String =
+    match types[0] with
+    case None -> ""
+    case Some _ -> ", " + java_nominal_type_codes(types, module, allModules)
 
 /// Emits the remaining generated-record constructor arguments.
 private fun java_record_data_literal_argument_tail(schemaFields: List[String], fields: List[CompiledDataField], bindings: List[JavaBinding], idx: int, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -8423,7 +8486,10 @@ private fun with_expression_code(withExpression: CompiledWithExpression, env: Li
     let constructorTypes = with_constructor_type_names(rawReceiverType.name, module, allModules)
     let rawWithCode = raw_with_expression_code(withExpression, rawReceiverType, env, module, allModules)
     if constructorTypes.is_empty()
-    then rawWithCode
+    then
+        if java_generated_record_type(rawReceiverType, module, allModules)
+        then java_nominal_value_code(rawWithCode, rawReceiverType, module, allModules)
+        else rawWithCode
     else
         let resultType = with_constructor_result_type(rawReceiverType, constructorTypes, module, allModules)
         let dataName = "__capy_constructor_data_" + withExpression.location.line + "_" + withExpression.location.column + "_" + with_expression_receiver_depth(withExpression.receiver)
@@ -8432,6 +8498,20 @@ private fun with_expression_code(withExpression: CompiledWithExpression, env: Li
         + data_constructor_pipeline_steps(constructorTypes, rawReceiverType.name, dataName, 0, module, allModules)
         + data_constructor_pipeline_return(dataName, resultType)
         + "        }).get()"
+
+/// Checks whether a type is emitted as a generated Java record.
+private fun java_generated_record_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = type_unqualified_name(type.name)
+    if !primitive_java_type_name(type.name).is_empty()
+    then false
+    else match primitive_backed_backing_type(type.name, module, allModules) with
+        case Some { _ } -> false
+        case None -> match data_type_owner_module(name, module, allModules) with
+            case Some { owner } ->
+                java_data_type_kind(name, owner.functions) == "data"
+                    & java_data_type_generated(name, owner, allModules)
+                    & java_data_type_java_type(type, module, allModules) == java_data_type_reference_java_type(type, module, allModules)
+            case None -> false
 
 /// Emits generated code for raw with expression.
 private fun raw_with_expression_code(withExpression: CompiledWithExpression, receiverType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -14755,6 +14835,7 @@ private fun java_base_helpers(): String =
         + java_data_helpers()
         + java_record_field_helper()
         + java_record_data_helper()
+        + java_record_materialization_helper()
         + java_record_normalization_helper()
         + java_record_membership_helper()
         + java_record_reflection_helper()
@@ -14773,6 +14854,10 @@ private fun java_record_field_helper(): String =
 /// Emits normalization from a promoted Java record to map-backed Capybara data.
 private fun java_record_data_helper(): String =
     "    private static java.lang.Object __capy_record_data(java.lang.Object value, java.lang.String type, java.util.function.Function<java.lang.Object, java.util.Map<java.lang.String, ?>> recordFields) {\n        if (value instanceof java.util.Map<?, ?>) {\n            return value;\n        }\n        return __capy_data(type, recordFields.apply(value));\n    }\n\n    private static java.lang.Object __capy_record_data(java.lang.Object value) {\n        if (!(value instanceof java.lang.Record record)) {\n            return value;\n        }\n        java.util.Map<java.lang.String, java.lang.Object> fields = new java.util.LinkedHashMap<>();\n        for (java.lang.reflect.RecordComponent component : record.getClass().getRecordComponents()) {\n            try {\n                fields.put(component.getName(), component.getAccessor().invoke(record));\n            } catch (java.lang.ReflectiveOperationException exception) {\n                throw new java.lang.IllegalStateException(\"Cannot read record component \" + component.getName(), exception);\n            }\n        }\n        return __capy_data(record.getClass().getSimpleName(), fields);\n    }\n\n"
+
+/// Emits recursive conversion from transitional maps to generated nominal records.
+private fun java_record_materialization_helper(): String =
+    "    private static java.lang.reflect.ParameterizedType __capy_parameterized_type(java.lang.Class<?> rawType, java.lang.reflect.Type... arguments) {\n        return new java.lang.reflect.ParameterizedType() {\n            public java.lang.reflect.Type[] getActualTypeArguments() { return arguments.clone(); }\n            public java.lang.reflect.Type getRawType() { return rawType; }\n            public java.lang.reflect.Type getOwnerType() { return null; }\n        };\n    }\n\n    private static java.lang.Object __capy_nominal_value(java.lang.Object value, java.lang.reflect.Type targetType) {\n        if (targetType instanceof java.lang.reflect.ParameterizedType parameterized) {\n            java.lang.Class<?> rawType = (java.lang.Class<?>) parameterized.getRawType();\n            java.lang.reflect.Type[] arguments = parameterized.getActualTypeArguments();\n            if (rawType == java.util.List.class && value instanceof java.util.List<?> list) {\n                return list.stream().map(item -> __capy_nominal_value(item, arguments[0])).toList();\n            }\n            if (rawType == java.util.Set.class && value instanceof java.util.Set<?> set) {\n                java.util.Set<java.lang.Object> result = new java.util.LinkedHashSet<>();\n                for (java.lang.Object item : set) { result.add(__capy_nominal_value(item, arguments[0])); }\n                return java.util.Collections.unmodifiableSet(result);\n            }\n            if (rawType == java.util.Map.class && value instanceof java.util.Map<?, ?> map) {\n                java.util.Map<java.lang.Object, java.lang.Object> result = new java.util.LinkedHashMap<>();\n                for (java.util.Map.Entry<?, ?> entry : map.entrySet()) { result.put(entry.getKey(), __capy_nominal_value(entry.getValue(), arguments[1])); }\n                return java.util.Collections.unmodifiableMap(result);\n            }\n            if (rawType == java.util.Optional.class && value instanceof java.util.Optional<?> optional) {\n                return optional.map(item -> __capy_nominal_value(item, arguments[0]));\n            }\n            if (rawType == java.util.function.Supplier.class && value instanceof java.util.function.Supplier<?> supplier) {\n                return (java.util.function.Supplier<java.lang.Object>) () -> __capy_nominal_value(supplier.get(), arguments[0]);\n            }\n            return __capy_nominal_record(value, rawType, arguments);\n        }\n        if (targetType instanceof java.lang.Class<?> targetClass) {\n            return __capy_nominal_record(value, targetClass, new java.lang.reflect.Type[0]);\n        }\n        return value;\n    }\n\n    private static java.lang.Object __capy_nominal_record(java.lang.Object value, java.lang.Class<?> targetClass, java.lang.reflect.Type[] typeArguments) {\n        if (value == null) {\n            return null;\n        }\n        if (targetClass.isArray()) {\n            return __capy_nominal_array(value, targetClass.getComponentType());\n        }\n        if (targetClass.isInstance(value) || !targetClass.isRecord()) {\n            return value;\n        }\n        java.lang.Object data = __capy_record_data(value);\n        if (!(data instanceof java.util.Map<?, ?>)) {\n            return value;\n        }\n        java.lang.reflect.RecordComponent[] components = targetClass.getRecordComponents();\n        java.lang.Class<?>[] parameterTypes = new java.lang.Class<?>[components.length];\n        java.lang.Object[] arguments = new java.lang.Object[components.length];\n        for (int index = 0; index < components.length; index++) {\n            java.lang.reflect.RecordComponent component = components[index];\n            parameterTypes[index] = component.getType();\n            java.lang.reflect.Type componentType = __capy_resolved_record_type(component.getGenericType(), targetClass, typeArguments);\n            arguments[index] = __capy_nominal_value(__capy_data_field(data, component.getName()), componentType);\n        }\n        try {\n            return targetClass.getDeclaredConstructor(parameterTypes).newInstance(arguments);\n        } catch (java.lang.ReflectiveOperationException exception) {\n            throw new java.lang.IllegalStateException(\"Cannot materialize record \" + targetClass.getName(), exception);\n        }\n    }\n\n    private static java.lang.Object __capy_nominal_array(java.lang.Object value, java.lang.Class<?> componentType) {\n        int length = value instanceof java.util.List<?> list ? list.size() : value.getClass().isArray() ? java.lang.reflect.Array.getLength(value) : -1;\n        if (length < 0) { return value; }\n        java.lang.Object result = java.lang.reflect.Array.newInstance(componentType, length);\n        for (int index = 0; index < length; index++) {\n            java.lang.Object item = value instanceof java.util.List<?> list ? list.get(index) : java.lang.reflect.Array.get(value, index);\n            java.lang.reflect.Array.set(result, index, __capy_nominal_value(item, componentType));\n        }\n        return result;\n    }\n\n    private static java.lang.reflect.Type __capy_resolved_record_type(java.lang.reflect.Type type, java.lang.Class<?> recordClass, java.lang.reflect.Type[] arguments) {\n        if (type instanceof java.lang.reflect.TypeVariable<?> variable) {\n            java.lang.reflect.TypeVariable<?>[] parameters = recordClass.getTypeParameters();\n            for (int index = 0; index < parameters.length && index < arguments.length; index++) {\n                if (parameters[index].getName().equals(variable.getName())) { return arguments[index]; }\n            }\n            return java.lang.Object.class;\n        }\n        if (type instanceof java.lang.reflect.ParameterizedType parameterized) {\n            java.lang.reflect.Type[] nested = parameterized.getActualTypeArguments();\n            java.lang.reflect.Type[] resolved = new java.lang.reflect.Type[nested.length];\n            for (int index = 0; index < nested.length; index++) { resolved[index] = __capy_resolved_record_type(nested[index], recordClass, arguments); }\n            return __capy_parameterized_type((java.lang.Class<?>) parameterized.getRawType(), resolved);\n        }\n        return type;\n    }\n\n"
 
 /// Emits recursive normalization so records nested in collections retain Capybara data equality.
 private fun java_record_normalization_helper(): String =
