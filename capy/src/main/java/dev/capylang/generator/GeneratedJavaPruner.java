@@ -15,7 +15,7 @@ final class GeneratedJavaPruner {
             "\\bprivate\\s+interface\\s+(__CapyFunction[34])\\b"
     );
     private static final Pattern TOP_LEVEL_TYPE = Pattern.compile(
-            "\\bpublic\\s+(?:final\\s+)?(?:class|interface)\\b"
+            "\\bpublic\\s+(?:final\\s+)?(?:class|interface|record)\\b"
     );
 
     private GeneratedJavaPruner() {

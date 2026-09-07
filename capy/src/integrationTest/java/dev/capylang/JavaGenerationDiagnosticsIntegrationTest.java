@@ -342,6 +342,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     void readsTopLevelRecordComponentsThroughAccessors() throws Exception {
         var source = writeSource("sample/Field.cfun", """
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+                from /capy/test/Assert import { DataAssert, assert_that }
 
                 data Field { width: int }
                 data Extended { width: int, y: int }
@@ -366,6 +367,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 fun set_contains_record(value: Field): bool = { Field { width: 7 }, }.contains(value)
 
                 fun set_subset_record(value: Field): bool = { value, }.is_subset_of({ Field { width: 7 }, })
+
+                fun remove_record(value: Field): List[Field] = [Field { width: 7 }] - value
+
+                fun equal_assertion(value: Field): DataAssert = assert_that(value).is_equal_to(Field { width: 7 })
 
                 fun reflected(value: data): DataValueInfo = reflection(value)
 
@@ -407,6 +412,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(generatedMethod(fieldClass, "contains_record__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "set_contains_record__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "set_subset_record__").invoke(null, field)).isEqualTo(true);
+            assertThat((java.util.List<?>) generatedMethod(fieldClass, "remove_record__").invoke(null, field)).isEmpty();
+            var assertion = (java.util.Map<?, ?>) generatedMethod(fieldClass, "equal_assertion__").invoke(null, field);
+            var assertions = (java.util.List<?>) assertion.get("assertions");
+            var assertionResult = (java.util.Map<?, ?>) ((java.util.function.Supplier<?>) assertions.getFirst()).get();
+            assertThat(assertionResult.get("result")).isEqualTo(true);
             var reflected = (java.util.Map<?, ?>) generatedMethod(fieldClass, "reflected__").invoke(null, field);
             assertThat(reflected.get("name")).isEqualTo("Field");
             var reflectedFields = (java.util.List<?>) reflected.get("fields");

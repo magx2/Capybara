@@ -120,4 +120,27 @@ class GeneratedJavaPrunerTest {
                 .contains("__CapyFunction3")
                 .doesNotContain("__CapyFunction4");
     }
+
+    @Test
+    void prunesSupportMembersFromTopLevelRecords() {
+        var source = """
+                public record Value(int value) {
+                    public static int compute() {
+                        return __capy_needed();
+                    }
+
+                    private static int __capy_needed() {
+                        return 1;
+                    }
+
+                    private static int __capy_unused() {
+                        return 2;
+                    }
+                }
+                """;
+
+        assertThat(GeneratedJavaPruner.prune(source))
+                .contains("__capy_needed")
+                .doesNotContain("__capy_unused");
+    }
 }
