@@ -3503,6 +3503,7 @@ private fun result_pipe_value_name(binary: CompiledBinaryExpression): String =
 private fun result_pipe_left_depth(expression: CompiledExpression): int =
     match expression with
     case CompiledBinaryExpression binary -> 1 + result_pipe_left_depth(binary.left)
+    case CompiledMethodCallExpression call -> 1 + result_pipe_left_depth(call.receiver)
     case _ -> 0
 
 /// Computes the compiled type for result pipe value.
@@ -4110,8 +4111,10 @@ private fun primitive_backed_value_conversion_code(code: String, backingType: Co
 
 /// Emits generated code for ordinary value conversion.
 private fun ordinary_value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let ordinaryType = top_level_boxed_java_type(expectedType, module, allModules)
+    let castType = if ordinaryType == "java.lang.Object" then java_object_interface_type(expectedType, module, allModules) else ordinaryType
     if (sourceType.name.is_empty() | sourceType.name == "any") & !expectedType.name.is_empty() & expectedType.name != "any"
-    then "((" + top_level_boxed_java_type(expectedType, module, allModules) + ") " + code + ")"
+    then "((" + castType + ") " + code + ")"
     else numeric_widening_code(code, sourceType, expectedType)
 
 /// Emits generated code for function call.
@@ -5103,7 +5106,9 @@ private fun object_method_call_code_with_binding(binding: JavaResolvedObjectMeth
         + "." + java_method_name(call.name)
         + "(" + parameter_expression_list_code(binding.method.parameters, call.arguments, env, module, allModules) + ")"
     if expectedType.name == "Effect"
-    then "capy.lang.Effect.delay(() -> " + java_object_value_code(rawCode, binding.method.returnType, valueType) + ")"
+    then if binding.method.returnType.name == "void"
+        then "capy.lang.Effect.delay(() -> { " + rawCode + "; return null; })"
+        else "capy.lang.Effect.delay(() -> " + java_object_value_code(rawCode, binding.method.returnType, valueType) + ")"
     else java_object_value_code(rawCode, binding.method.returnType, valueType)
 
 /// Checks whether object method call can be emitted by the target backend.

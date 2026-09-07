@@ -59,6 +59,51 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesResultMethodChainReducedToProgram() throws Exception {
+        var fieldSource = writeSource("sample/Field.cfun", """
+                data Field {}
+                """);
+        writeSource("sample/ui/UI.coo", """
+                interface UI {
+                    def draw_field(game_field: Field): Unit
+                }
+                """);
+        var source = writeSource("sample/Main.cfun", """
+                from /capy/lang/Program import { Program, DEFAULT_FAILED_EXIT_CODE }
+                from /capy/lang/Result import { Result, Success }
+                from /sample/Field import { Field }
+                from /sample/ui/UI import { UI }
+
+                private fun parse_strings(args: List[String]): Result[String] = Success { args[0].or_else("") }
+                private fun parse_int(value: String): Result[int] = value.to_int()
+                private fun parse_field(value: int): Result[Field] = Success { Field {} }
+
+                fun render(ui: UI, args: List[String]): Program =
+                    parse_strings(args)
+                        .flat_map(:parse_int)
+                        .flat_map(:parse_field)
+                        .map(field => ui.draw_field(field))
+                        .map(_ => Program.Success {})
+                        .or_else(Program.Failed { exit_code: DEFAULT_FAILED_EXIT_CODE })
+                """);
+
+        assertThat(compileGenerateStderr()).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("ui.draw_field(((Field) field))")
+                .contains("; return null; })")
+                .doesNotContain("ui.draw_field(((java.lang.Object) field))")
+                .doesNotContain("Unsupported CFUN expression at");
+        assertJavaCompiles(
+                generatedPath(fieldSource),
+                outputDir().resolve("sample/ui/UI.java"),
+                generated
+        );
+    }
+
+    @Test
     void doesNotGenerateModuleClassForInterfaceOnlySource() throws Exception {
         writeSource("paper-soccer/ui/UI.coo", """
                 interface UI {
