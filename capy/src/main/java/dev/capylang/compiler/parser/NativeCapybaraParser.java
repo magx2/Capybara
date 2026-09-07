@@ -462,7 +462,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 ctx.identifier().getText(),
                 visibility,
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
-                ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
+                ctx.functionType() == null ? voidType() : typeReference(ctx.functionType().type().getText()),
                 objectMethodBody(ctx.methodBody()),
                 docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
@@ -478,7 +478,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 ctx.identifier().getText(),
                 visibility,
                 ctx.parameters() == null ? List.of() : objectParameters(ctx.parameters()),
-                ctx.functionType() == null ? missingType() : typeReference(ctx.functionType().type().getText()),
+                ctx.functionType() == null ? voidType() : typeReference(ctx.functionType().type().getText()),
                 new Expression.StringLiteral("", "\"\"", location(ctx)),
                 docComments(ctx.docComment()),
                 objectAnnotationApplications(ctx.annotationBlock()),
@@ -4048,6 +4048,10 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
 
     private static TypeReference missingType() {
         return new TypeReference("", List.of());
+    }
+
+    private static TypeReference voidType() {
+        return new TypeReference("void", List.of());
     }
 
     private static boolean isIndexExpression(dev.capylang.parser.antlr.FunctionalParser.ExpressionNoLetContext ctx) {

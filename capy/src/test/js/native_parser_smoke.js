@@ -49,10 +49,12 @@ const modules = [
         'dev/capylang/smoke',
         'interface Clock {\n'
             + '  def now(): int\n'
+            + '  def reset()\n'
             + '}\n'
             + 'class FixedClock(value: int): Clock {\n'
             + '  field name: String = "fixed"\n'
             + '  def now(): int = value\n'
+            + '  def reset() = value\n'
             + '}\n',
         'OBJECT_ORIENTED'
     ),
@@ -69,6 +71,8 @@ assertEqual(parsed.modules[0].definitions[0].__type, 'DataDeclaration', 'first f
 assertEqual(parsed.modules[0].definitions[2].function.body.right.parameters[0], '__capy_typed_lambda|value|String', 'typed lambda parameter');
 assertEqual(parsed.modules[1].objectOriented.interfaces[0].name, 'Clock', 'object interface');
 assertEqual(parsed.modules[1].objectOriented.classes[0].name, 'FixedClock', 'object class');
+assertEqual(parsed.modules[1].objectOriented.interfaces[0].methods[1].returnType.name, 'void', 'omitted interface return type');
+assertEqual(parsed.modules[1].objectOriented.classes[0].methods[1].returnType.name, 'void', 'omitted class return type');
 
 try {
     parserImpl.parse([
@@ -95,7 +99,7 @@ try {
     const compilerResult = unsafeRun(compile(
         [
             rawModule('Simple', 'dev/capylang/smoke', 'fun one(): int = 1\n', 'FUNCTIONAL'),
-            rawModule('SimpleObject', 'dev/capylang/smoke', 'interface SimpleObject {\n  def value(): int\n}\n', 'OBJECT_ORIENTED'),
+            rawModule('SimpleObject', 'dev/capylang/smoke', 'interface SimpleObject {\n  def value(): int\n  def reset()\n}\n', 'OBJECT_ORIENTED'),
         ],
         emptyLibraries,
         empty_native_provider_manifest(),
