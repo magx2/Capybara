@@ -6412,7 +6412,7 @@ private fun set_method_call_code(call: CompiledMethodCallExpression, env: List[J
         let argumentType = expression_type(argument(call.arguments, 0), env, module, allModules)
         let argumentCode = expression_code(argument(call.arguments, 0), env, argumentType, module, allModules)
         if call.name == "contains"
-        then receiverCode + ".contains(" + argumentCode + ")"
+        then "__capy_collection_contains(" + receiverCode + ", " + argumentCode + ")"
         else if call.name == "is_subset_of"
         then "__capy_set_subset(" + receiverCode + ", " + argumentCode + ")"
         else if call.name == "is_proper_subset_of"
@@ -8451,7 +8451,7 @@ private fun ordinary_field_access_code(access: CompiledFieldAccessExpression, en
             + ", \"" + escape_java_string(access.name) + "\", __capy_record_value -> (("
             + java_top_level_record_java_type(receiverType, module, allModules) + ") __capy_record_value)."
             + java_identifier(access.name) + "()))"
-        else "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_data_field("
+        else "((" + top_level_boxed_java_type(castType, module, allModules) + ") __capy_reflection_data_field("
             + expression_code(access.receiver, env, receiverType, module, allModules)
             + ", \"" + escape_java_string(access.name) + "\"))"
     value_conversion_code(

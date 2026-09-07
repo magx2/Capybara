@@ -1531,7 +1531,7 @@ class CompilationTest {
                 .code();
 
         assertThat(code).contains("__capy_result_error_value");
-        assertThat(code).contains("__capy_data_field(error, \"kind\")");
+        assertThat(code).contains("__capy_reflection_data_field(error, \"kind\")");
         assertThat(code).doesNotContain("java.lang.String error = java.lang.String.valueOf(__capy_result_error_value");
     }
 
@@ -2376,7 +2376,7 @@ class CompilationTest {
                 .code();
 
         assertThat(code).doesNotContain("throw new UnsupportedOperationException(\"Unsupported CFUN expression at");
-        assertThat(code).contains("__capy_data_field(value, \"first\")");
+        assertThat(code).contains("__capy_reflection_data_field(value, \"first\")");
         assertThat(code).contains("__capy_list_get_optional(values, 0)");
 
         var pythonCode = PythonGenerator.pythonGenerator(program).modules().stream()
