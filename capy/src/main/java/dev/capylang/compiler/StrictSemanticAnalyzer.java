@@ -378,14 +378,16 @@ final class StrictSemanticAnalyzer {
         var candidates = visibleMethods(module, receiver.name, call.name());
         var matching = candidates.stream().filter(candidate -> candidate.parameters.size() == call.arguments().size()).toList();
         if (!matching.isEmpty()) {
-            var chosen = bestCandidate(module, matching, call.arguments(), env);
+            var chosen = bestMethodCandidate(module, matching, receiver, call.arguments(), env);
             if (chosen == null) {
                 return UNKNOWN;
             }
             var substitutions = new HashMap<String, Type>();
             bind(chosen.owner, receiver, substitutions);
+            inferMethodSubstitutions(module, chosen, call.arguments(), env, substitutions);
             var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
             checkArguments(module, call.name(), call.arguments(), parameters, env, call.location());
+            checkCallableArguments(module, call.name(), call.arguments(), parameters, env);
             return substitute(chosen.result, substitutions);
         }
         if (BUILTIN_METHODS.contains(call.name())) {
@@ -405,10 +407,16 @@ final class StrictSemanticAnalyzer {
         if (call.name().equals("as_list")) return new Type("List", receiver.arguments, List.of(), null);
         if (Set.of("map", "flat_map", "filter", "reject").contains(call.name()) && !receiver.arguments.isEmpty()) {
             var element = receiver.arguments.getFirst();
-            if (!call.arguments().isEmpty() && call.arguments().getFirst() instanceof LambdaExpression mapper) {
-                var mapperType = lambdaType(module, mapper, function(List.of(element), expected == null ? UNKNOWN : expected), env);
-                if (call.name().equals("map") && mapperType.functionResult != null) {
-                    return new Type(receiver.name, List.of(mapperType.functionResult), List.of(), null);
+            if (!call.arguments().isEmpty()) {
+                var mapperType = infer(module, call.arguments().getFirst(), function(List.of(element), UNKNOWN), env);
+                if (mapperType.functionResult != null) {
+                    if (call.name().equals("map")) {
+                        return new Type(receiver.name, List.of(mapperType.functionResult), List.of(), null);
+                    }
+                    if (call.name().equals("flat_map")
+                            && unqualified(mapperType.functionResult.name).equals(unqualified(receiver.name))) {
+                        return mapperType.functionResult;
+                    }
                 }
             }
             return receiver;
@@ -719,6 +727,57 @@ final class StrictSemanticAnalyzer {
         return compatible.size() == 1 ? compatible.getFirst() : candidates.size() == 1 ? candidates.getFirst() : null;
     }
 
+    private FunctionSig bestMethodCandidate(
+            ParsedModule module,
+            List<FunctionSig> candidates,
+            Type receiver,
+            List<Expression> arguments,
+            Env env
+    ) {
+        var compatible = candidates.stream().filter(candidate -> {
+            var substitutions = new HashMap<String, Type>();
+            bind(candidate.owner, receiver, substitutions);
+            inferMethodSubstitutions(module, candidate, arguments, env, substitutions);
+            for (var index = 0; index < arguments.size(); index++) {
+                var expected = substitute(candidate.parameters.get(index), substitutions);
+                var actual = probe(module, arguments.get(index), expected, env);
+                if (!assignable(actual, expected)) return false;
+            }
+            return true;
+        }).toList();
+        return compatible.size() == 1 ? compatible.getFirst() : candidates.size() == 1 ? candidates.getFirst() : null;
+    }
+
+    private void inferMethodSubstitutions(
+            ParsedModule module,
+            FunctionSig signature,
+            List<Expression> arguments,
+            Env env,
+            Map<String, Type> substitutions
+    ) {
+        for (var index = 0; index < Math.min(signature.parameters.size(), arguments.size()); index++) {
+            var expected = substitute(signature.parameters.get(index), substitutions);
+            var actual = probe(module, arguments.get(index), expected, env);
+            bind(signature.parameters.get(index), actual, substitutions);
+        }
+    }
+
+    private void checkCallableArguments(
+            ParsedModule module,
+            String name,
+            List<Expression> arguments,
+            List<Type> parameters,
+            Env env
+    ) {
+        for (var index = 0; index < Math.min(arguments.size(), parameters.size()); index++) {
+            var argument = arguments.get(index);
+            if (!(argument instanceof LambdaExpression) && !(argument instanceof FunctionReferenceExpression)) continue;
+            var actual = infer(module, argument, parameters.get(index), env);
+            requireAssignable(module, location(argument), "ARGUMENT_TYPE", actual, parameters.get(index),
+                    "Argument " + (index + 1) + " of `" + name + "`");
+        }
+    }
+
     private Map<String, Type> inferSubstitutions(ParsedModule module, FunctionSig signature, List<Expression> arguments, Env env) {
         var result = new HashMap<String, Type>();
         for (var index = 0; index < Math.min(signature.parameters.size(), arguments.size()); index++) {
@@ -728,8 +787,12 @@ final class StrictSemanticAnalyzer {
     }
 
     private Type probe(ParsedModule module, Expression expression, Env env) {
+        return probe(module, expression, null, env);
+    }
+
+    private Type probe(ParsedModule module, Expression expression, Type expected, Env env) {
         var size = errors.size();
-        var result = infer(module, expression, null, env.copy());
+        var result = infer(module, expression, expected, env.copy());
         while (errors.size() > size) errors.removeLast();
         return result;
     }
@@ -737,6 +800,13 @@ final class StrictSemanticAnalyzer {
     private void bind(Type declared, Type actual, Map<String, Type> substitutions) {
         if (generic(declared)) {
             substitutions.putIfAbsent(declared.name, actual);
+            return;
+        }
+        if (declared.functionResult != null && actual.functionResult != null) {
+            for (var index = 0; index < Math.min(declared.parameters.size(), actual.parameters.size()); index++) {
+                bind(declared.parameters.get(index), actual.parameters.get(index), substitutions);
+            }
+            bind(declared.functionResult, actual.functionResult, substitutions);
             return;
         }
         for (var index = 0; index < Math.min(declared.arguments.size(), actual.arguments.size()); index++) {
@@ -808,14 +878,43 @@ final class StrictSemanticAnalyzer {
 
     private List<FunctionSig> visibleMethods(ParsedModule module, String receiver, String name) {
         var result = new ArrayList<FunctionSig>();
-        collectFunctions(module, receiver + "." + name, result);
+        collectMethods(module, receiver, name, result);
         for (var declaration : module.imports()) {
             if (declaration.qualified()) continue;
-            collectFunctions(resolveParsed(declaration.modulePath()), receiver + "." + name, result);
-            collectFunctions(resolveLinked(declaration.modulePath()), receiver + "." + name, result);
+            collectMethods(resolveParsed(declaration.modulePath()), receiver, name, result);
+            collectMethods(resolveLinked(declaration.modulePath()), receiver, name, result);
         }
         collectObjectMethods(module, receiver, name, result, new HashSet<>());
         return deduplicate(result);
+    }
+
+    private void collectMethods(ParsedModule module, String receiver, String name, List<FunctionSig> target) {
+        if (module == null) return;
+        module.definitions().stream().filter(FunctionDefinition.class::isInstance).map(FunctionDefinition.class::cast)
+                .map(FunctionDefinition::function)
+                .filter(function -> extensionMethodMatches(function.name(), receiver, name))
+                .map(this::signature).forEach(target::add);
+    }
+
+    private void collectMethods(CompiledModule module, String receiver, String name, List<FunctionSig> target) {
+        if (module == null) return;
+        module.functions().stream().filter(function -> extensionMethodMatches(function.name(), receiver, name))
+                .map(function -> new FunctionSig(
+                        function.name(), function.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
+                        type(function.returnType()), ownerType(function.name())))
+                .forEach(target::add);
+    }
+
+    private boolean extensionMethodMatches(String functionName, String receiver, String methodName) {
+        var separator = functionName.lastIndexOf('.');
+        if (separator <= 0) return false;
+        var candidateName = functionName.substring(separator + 1);
+        if (candidateName.startsWith("`") && candidateName.endsWith("`")) {
+            candidateName = candidateName.substring(1, candidateName.length() - 1);
+        }
+        if (!candidateName.equals(methodName)) return false;
+        return unqualified(parseType(functionName.substring(0, separator)).name)
+                .equals(unqualified(receiver));
     }
 
     private void collectObjectMethods(
@@ -891,7 +990,7 @@ final class StrictSemanticAnalyzer {
     }
 
     private Type ownerType(String name) {
-        return name.contains(".") ? simple(name.substring(0, name.lastIndexOf('.'))) : UNKNOWN;
+        return name.contains(".") ? parseType(name.substring(0, name.lastIndexOf('.'))) : UNKNOWN;
     }
 
     private Type visibleConstant(ParsedModule module, String name) {
@@ -1054,6 +1153,7 @@ final class StrictSemanticAnalyzer {
     }
 
     private static Type type(CompiledTypeReference reference) {
+        if (topLevelArrow(reference.name()) >= 0) return parseType(reference.name());
         return new Type(reference.name(), reference.arguments().stream().map(StrictSemanticAnalyzer::type).toList(), List.of(), null);
     }
 
