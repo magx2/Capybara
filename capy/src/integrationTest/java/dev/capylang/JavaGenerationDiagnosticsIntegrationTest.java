@@ -649,6 +649,24 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesLegalJavaWhenOmittedVoidMethodDiscardsValueExpression() throws Exception {
+        writeSource("sample/DiscardValues.coo", """
+                class Discarder {
+                    def discard() = 1 + 2
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = outputDir().resolve("sample/DiscardValues.java");
+        assertThat(generated)
+                .exists()
+                .content()
+                .contains("((java.util.function.Supplier<java.lang.Object>) () -> (1 + 2)).get();");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
     void renamesModuleClassWhenTopLevelInterfaceHasTheSourceFileName() throws Exception {
         writeSource("paper-soccer/ui/UI.coo", """
                 interface UI {
