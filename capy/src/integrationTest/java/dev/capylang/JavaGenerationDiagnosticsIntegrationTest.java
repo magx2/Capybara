@@ -326,6 +326,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     void readsTopLevelRecordComponentsThroughAccessors() throws Exception {
         var source = writeSource("sample/Field.cfun", """
+                from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
+
                 data Field { width: int }
 
                 fun updated_width(value: Field): int = value.with(width: 2).width
@@ -336,6 +338,10 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     case _ -> false
 
                 fun equals_literal(value: Field): bool = value == Field { width: 7 }
+
+                fun equals_nested(value: Field): bool = [value] == [Field { width: 7 }]
+
+                fun reflected(value: data): DataValueInfo = reflection(value)
                 """);
         writeSource("sample/Field.coo", """
                 class Reader {
@@ -367,6 +373,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(generatedMethod(fieldClass, "updated_width__").invoke(null, field)).isEqualTo(2);
             assertThat(generatedMethod(fieldClass, "generic_data__").invoke(null, field)).isEqualTo(true);
             assertThat(generatedMethod(fieldClass, "equals_literal__").invoke(null, field)).isEqualTo(true);
+            assertThat(generatedMethod(fieldClass, "equals_nested__").invoke(null, field)).isEqualTo(true);
+            var reflected = (java.util.Map<?, ?>) generatedMethod(fieldClass, "reflected__").invoke(null, field);
+            assertThat(reflected.get("name")).isEqualTo("Field");
+            var reflectedFields = (java.util.List<?>) reflected.get("fields");
+            assertThat(((java.util.Map<?, ?>) reflectedFields.getFirst()).get("value")).isEqualTo(7);
         }
     }
 
