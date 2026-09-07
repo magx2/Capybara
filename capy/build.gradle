@@ -765,7 +765,11 @@ def prepareJavaGeneratorImplementation = tasks.register('prepareJavaGeneratorImp
                 .replace('package dev.capylang.generator;', 'package dev.capylang.generator.internal;')
                 .replace('public final class JavaGenerator {', 'public final class GeneratedJavaGenerator {')
                 .replace('private JavaGenerator() {}', 'private GeneratedJavaGenerator() {}')
-        implementation = replaceStringStub(implementation, 'java_data_helpers', bootstrapHelper('javaDataHelpers'))
+        def javaDataHelpers = bootstrapHelper('javaDataHelpers').replace(
+                'if (value instanceof java.util.Map<?, ?>) {',
+                'if (value instanceof java.util.Map<?, ?> || value instanceof java.lang.Record) {'
+        )
+        implementation = replaceStringStub(implementation, 'java_data_helpers', javaDataHelpers)
         implementation = replaceStringStub(implementation, 'java_collection_helpers', bootstrapHelper('javaCollectionHelpers'))
         bootstrapLoader.close()
         output.setText(optimizeGeneratedListSlices(implementation), 'UTF-8')

@@ -230,7 +230,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     void generatesSameNamedDataAsTopLevelRecordWithStaticModuleMethods() throws Exception {
         writeSource("paper-soccer/Field.cfun", """
-                from /capy/lang/Result import { Success, Error }
+                from /capy/lang/Result import { Result, Success, Error }
 
                 type field_size -> int with constructor {
                     if value < 1
@@ -247,6 +247,9 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     then Error { message: "invalid goal width" }
                     else Success { * { width, height, goal_width } }
                 }
+
+                fun create_field(width: field_size, height: field_size, goal_width: field_size): Result[Field] =
+                    Field { width, height, goal_width }
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
@@ -258,9 +261,17 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("public record Field(int width, int height, int goal_width) {")
                 .contains("public static java.lang.Object __capy_constructor_field_size__")
                 .contains("public static java.lang.Object __capy_constructor_Field__")
+                .contains("value instanceof java.lang.Record")
                 .doesNotContain("public final class Field")
                 .doesNotContain("private Field()");
-        assertJavaCompiles(field);
+        var classes = compileJava(field);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var fieldClass = loader.loadClass("paper_soccer.Field");
+            var result = (java.util.Map<?, ?>) generatedMethod(fieldClass, "create_field__").invoke(null, 5, 8, 3);
+
+            assertThat(result.get("__type")).isEqualTo("Success");
+            assertThat(result.get("value")).isInstanceOf(fieldClass);
+        }
     }
 
     @Test
