@@ -248,8 +248,14 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     else Success { * { width, height, goal_width } }
                 }
 
+                data Wrapper { value: Field } with constructor {
+                    Success { value }
+                }
+
                 fun create_field(width: field_size, height: field_size, goal_width: field_size): Result[Field] =
                     Field { width, height, goal_width }
+
+                fun create_wrapper(value: Field): Result[Wrapper] = Wrapper { value }
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
@@ -261,7 +267,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("public record Field(int width, int height, int goal_width) {")
                 .contains("public static java.lang.Object __capy_constructor_field_size__")
                 .contains("public static java.lang.Object __capy_constructor_Field__")
-                .contains("value instanceof java.lang.Record")
+                .contains("value instanceof java.lang.Record record && type.equals(record.getClass().getSimpleName())")
                 .doesNotContain("public final class Field")
                 .doesNotContain("private Field()");
         var classes = compileJava(field);
@@ -271,6 +277,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
             assertThat(result.get("__type")).isEqualTo("Success");
             assertThat(result.get("value")).isInstanceOf(fieldClass);
+
+            var wrapperResult = (java.util.Map<?, ?>) generatedMethod(fieldClass, "create_wrapper__")
+                    .invoke(null, result.get("value"));
+            var wrapper = (java.util.Map<?, ?>) wrapperResult.get("value");
+            assertThat(wrapper.get("__type")).isEqualTo("Wrapper");
+            assertThat(wrapper.get("value")).isSameAs(result.get("value"));
         }
     }
 
