@@ -204,9 +204,9 @@ class CapybaraCompilerLibrariesIntegrationTest {
         assertThat(generated.modules()).hasSize(1);
         var module = generated.modules().getFirst();
         assertThat(module.relativePath()).isEqualTo("foo/app/RegexConsumer.java");
-        assertThat(module.code()).contains("__capy_regex_matches(__capy_data(");
-        assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \"\\\\d+\")");
-        assertThat(module.code()).contains("java.util.Map.entry(\"pattern\", \",\")");
+        assertThat(module.code()).contains("__capy_regex_matches(new capy.lang.Regex(\"\\\\d+\", \"\")");
+        assertThat(module.code()).contains("new capy.lang.Regex(\",\", \"\")");
+        assertThat(module.code()).doesNotContain("__capy_data(\"Regex\"");
         assertThat(module.code()).doesNotContain(
                 "throw new UnsupportedOperationException(\"Unsupported CFUN expression at"
         );
