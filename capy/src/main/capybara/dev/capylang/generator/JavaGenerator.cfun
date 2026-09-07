@@ -316,7 +316,8 @@ private fun java_record_component_names_legal(fields: List[String]): bool =
     match fields[0] with
     case None -> true
     case Some { field } ->
-        java_record_component_name_legal(java_identifier(schema_field_name(field)))
+        schema_field_name(field) == java_identifier(schema_field_name(field))
+            & java_record_component_name_legal(java_identifier(schema_field_name(field)))
             & java_record_component_names_legal(fields[1:])
 
 /// Checks whether a Java component name avoids final zero-argument Object methods.
@@ -8255,7 +8256,7 @@ private fun data_field_entries_code(fields: List[CompiledDataField], env: List[J
 /// Emits generated code for data field entry.
 private fun data_field_entry_code(field: CompiledDataField, env: List[JavaBinding], dataType: /capy/lang/Option[String], bindings: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     if field.spread
-    then expression_code(field.value, env, expression_type(field.value, env, module, allModules), module, allModules)
+    then "__capy_record_data(" + expression_code(field.value, env, expression_type(field.value, env, module, allModules), module, allModules) + ")"
     else
         let fieldName = data_constructor_field_name(field.name, dataType, module, allModules)
         let fieldType = data_constructor_field_type(field.name, dataType, bindings, expression_type(field.value, env, module, allModules), module, allModules)

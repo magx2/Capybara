@@ -306,6 +306,21 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void retainsModuleClassWhenRecordComponentNameNeedsNormalization() throws Exception {
+        var source = writeSource("sample/Foo.cfun", """
+                data Foo { "foo-bar": int }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(source))
+                .content()
+                .contains("public final class Foo")
+                .doesNotContain("public record Foo(");
+        assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
     void retainsModuleClassWhenRecordAccessorCollidesWithZeroArgumentMethod() throws Exception {
         var source = writeSource("sample/Foo.cfun", """
                 data Foo { main: int }
@@ -329,6 +344,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 from /capy/meta_prog/Reflection import { DataValueInfo, reflection }
 
                 data Field { width: int }
+                data Extended { width: int, y: int }
 
                 fun updated_width(value: Field): int = value.with(width: 2).width
 
@@ -342,6 +358,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 fun equals_nested(value: Field): bool = [value] == [Field { width: 7 }]
 
                 fun reflected(value: data): DataValueInfo = reflection(value)
+
+                fun spread_width(value: Field): int = Extended { ...value, y: 2 }.width
                 """);
         writeSource("sample/Field.coo", """
                 class Reader {
@@ -378,6 +396,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(reflected.get("name")).isEqualTo("Field");
             var reflectedFields = (java.util.List<?>) reflected.get("fields");
             assertThat(((java.util.Map<?, ?>) reflectedFields.getFirst()).get("value")).isEqualTo(7);
+            assertThat(generatedMethod(fieldClass, "spread_width__").invoke(null, field)).isEqualTo(7);
         }
     }
 
