@@ -150,7 +150,8 @@ public final class NativeCompilerValidator {
             "contains", "is_subset_of", "is_proper_subset_of", "is_superset_of", "is_proper_superset_of",
             "union", "intersection", "difference", "symmetric_difference", "cartesian_product"
     );
-    private static final Set<String> NUMERIC_TYPES = Set.of("byte", "int", "long", "float", "double");
+    private static final List<String> NUMERIC_TYPE_ORDER = List.of("byte", "int", "long", "float", "double");
+    private static final Set<String> NUMERIC_TYPES = Set.copyOf(NUMERIC_TYPE_ORDER);
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
                     "map", Set.of(1),
@@ -783,7 +784,14 @@ public final class NativeCompilerValidator {
     ) {
         return variables.contains(name)
                 || knownFunction(context, module, name)
-                || context.hasConstructor(module, name);
+                || context.hasConstructor(module, name)
+                || knownQualifiedValueCall(context, module, name);
+    }
+
+    private boolean knownQualifiedValueCall(Context context, ParsedModule module, String name) {
+        var separator = name.lastIndexOf('.');
+        if (separator <= 0) return false;
+        return context.constantType(module, name.substring(0, separator)) != null;
     }
 
     private boolean visibleImportedSymbol(Context context, ParsedModule module, String name) {
@@ -1574,6 +1582,11 @@ public final class NativeCompilerValidator {
         }
         if (expectedName.equals("int") && Set.of("size", "index").contains(actualName)) {
             return true;
+        }
+        var expectedNumericRank = NUMERIC_TYPE_ORDER.indexOf(expectedName);
+        var actualNumericRank = NUMERIC_TYPE_ORDER.indexOf(actualName);
+        if (expectedNumericRank >= 0 && actualNumericRank >= 0) {
+            return actualNumericRank <= expectedNumericRank;
         }
         if (expectedName.equals(actualName)) {
             if (expected.arguments().isEmpty() || actual.arguments().isEmpty()) {

@@ -373,6 +373,57 @@ class CompilationTest {
     }
 
     @Test
+    void shouldAcceptContravariantFunctionReferenceParametersAndCovariantReturns() {
+        var program = compileProgram(List.of(rawModule("FunctionVariance", "", """
+                fun accepts_long(value: long): int = 1
+
+                fun compatible(): int => long = :accepts_long
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldResolveInheritedClassAndTraitMethods() {
+        var program = compileProgram(List.of(rawModule("InheritedMethods", "", """
+                open class Parent {
+                    open def describe(value: String): String = value
+                }
+
+                trait Bracketed {
+                    def bracket(value: String): String = "[" + value + "]"
+                }
+
+                class Child: Parent, Bracketed {
+                    def label(value: String): String = this.bracket(this.describe(value))
+                }
+                """, SourceKind.OBJECT_ORIENTED)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported COO expression at"));
+    }
+
+    @Test
+    void shouldResolveExtensionMethodCallsOnNamedConstants() {
+        var program = compileProgram(List.of(rawModule("ConstantReceiver", "", """
+                type digit -> int
+
+                const FOUR_DIGIT: digit = digit! { 4 }
+
+                fun digit.next(): digit = this
+
+                fun valid(): digit = FOUR_DIGIT.next()
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
     void shouldPreferAsyncOperatorAliasOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("AsyncExtensions", "", """
                 from /capy/lang/Async import { Async }

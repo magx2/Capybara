@@ -1,0 +1,1 @@
+fun invalid(flag: bool): int = if flag then "text" else 1
