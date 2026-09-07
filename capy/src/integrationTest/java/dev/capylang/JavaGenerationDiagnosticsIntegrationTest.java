@@ -30,6 +30,35 @@ class JavaGenerationDiagnosticsIntegrationTest {
     Path tempDir;
 
     @Test
+    void rejectsEffectBindingBlockWithResultBeforeJavaGeneration() throws Exception {
+        var source = writeSource("paper-soccer/Main.cfun", """
+                from /capy/lang/Effect import { Effect, pure }
+                from /capy/lang/Program import { Program }
+                from /capy/lang/Result import { Result, Success }
+
+                data UI {}
+
+                private fun build_ui(): Effect[UI] = pure(UI {})
+                private fun program(): Program = Program.Success {}
+                private fun parse(): Result[int] = Success { 1 }
+                private fun validate(value: int): Result[int] = Success { value }
+                private fun UI.draw_field(value: int): int = value
+
+                fun main(args: List[String]): Effect[Program] =
+                    let ui <- build_ui()
+                    parse()
+                        .flat_map(:validate)
+                        .map(value => ui.draw_field(value))
+                        .map(_ => program())
+                """);
+
+        assertThat(compileGenerateStderr()).contains(
+                "Function `main` returns `Effect[Result[Program]]`, but declares `Effect[Program]`."
+        );
+        assertThat(generatedPath(source)).doesNotExist();
+    }
+
+    @Test
     void doesNotGenerateModuleClassForInterfaceOnlySource() throws Exception {
         writeSource("paper-soccer/ui/UI.coo", """
                 interface UI {

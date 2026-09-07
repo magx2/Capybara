@@ -2124,6 +2124,39 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectResultFromEffectBindingBlockDuringCompilation() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Main", "/paper-soccer", """
+                        from /capy/lang/Effect import { Effect, pure }
+                        from /capy/lang/Program import { Program }
+                        from /capy/lang/Result import { Result, Success }
+
+                        data UI {}
+
+                        private fun build_ui(): Effect[UI] = pure(UI {})
+                        private fun program(): Program = Program.Success {}
+                        private fun parse(): Result[int] = Success { 1 }
+                        private fun validate(value: int): Result[int] = Success { value }
+                        private fun UI.draw_field(value: int): int = value
+
+                        fun main(args: List[String]): Effect[Program] =
+                            let ui <- build_ui()
+                            parse()
+                                .flat_map(:validate)
+                                .map(value => ui.draw_field(value))
+                                .map(_ => program())
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Function `main` returns `Effect[Result[Program]]`, but declares `Effect[Program]`.");
+    }
+
+    @Test
     void shouldGenerateJavaProgramMainEntrypointForSeqArguments() {
         var source = """
                 import /capy/collection/Seq
