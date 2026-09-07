@@ -785,7 +785,14 @@ public final class NativeCompilerValidator {
         return variables.contains(name)
                 || knownFunction(context, module, name)
                 || context.hasConstructor(module, name)
+                || knownObjectTypeIntrinsic(context, module, name)
                 || knownQualifiedValueCall(context, module, name);
+    }
+
+    private boolean knownObjectTypeIntrinsic(Context context, ParsedModule module, String name) {
+        var suffix = ".type";
+        return name.endsWith(suffix)
+                && context.objectTypeExists(module, name.substring(0, name.length() - suffix.length()));
     }
 
     private boolean knownQualifiedValueCall(Context context, ParsedModule module, String name) {
@@ -3788,6 +3795,28 @@ public final class NativeCompilerValidator {
             return objectMethodExists(module, receiverType, methodName, arity, new HashSet<>());
         }
 
+        private boolean objectTypeExists(ParsedModule module, String receiverType) {
+            var receiverName = unqualified(receiverType);
+            var qualifiedReceiver = receiverType.lastIndexOf('.') >= 0;
+            if (!qualifiedReceiver && hasLocalObjectType(module, receiverName)) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (!importExposesObjectReceiver(declaration, receiverType, receiverName)) {
+                    continue;
+                }
+                var parsedOwner = parsedModule(declaration.modulePath());
+                if (parsedOwner != null && hasLocalObjectType(parsedOwner, receiverName)) {
+                    return true;
+                }
+                var linkedOwner = linkedModule(declaration.modulePath());
+                if (linkedOwner != null && linkedObjectTypeExists(linkedOwner, receiverName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private boolean objectMethodExists(
                 ParsedModule module,
                 String receiverType,
@@ -4183,6 +4212,12 @@ public final class NativeCompilerValidator {
         private boolean hasLocalObjectClass(ParsedModule module, String typeName) {
             return module.objectOriented().classes().stream()
                     .anyMatch(objectClass -> objectClass.name().equals(typeName));
+        }
+
+        private boolean hasLocalObjectType(ParsedModule module, String typeName) {
+            return hasLocalObjectClass(module, typeName)
+                    || module.objectOriented().interfaces().stream()
+                    .anyMatch(objectInterface -> objectInterface.name().equals(typeName));
         }
 
         private boolean hasLocalFunction(ParsedModule module, String name) {
