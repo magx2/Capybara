@@ -1,0 +1,1 @@
+ARGUMENT_TYPE|Main.cfun|2|30|Argument 1 of `identity` has type `String`, but `int` is required.

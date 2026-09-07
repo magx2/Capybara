@@ -1,0 +1,2 @@
+private fun identity(value: int): int = value
+fun invalid(): int = identity("text")

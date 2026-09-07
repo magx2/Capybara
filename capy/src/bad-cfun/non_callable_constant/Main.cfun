@@ -1,0 +1,2 @@
+const ANSWER: int = 42
+fun invalid(): int = ANSWER()

@@ -87,9 +87,6 @@ public final class NativeCompilerValidator {
     }
 
     private static final Set<String> PIPE_OPERATORS = Set.of("|", "|-", "|*", "|!");
-    private static final Map<String, Map<String, Set<Integer>>> STANDARD_FUNCTION_ARITIES = Map.of(
-            "capy/collection/Seq", Map.of("to_seq", Set.of(1))
-    );
     private static final Map<String, Set<String>> JAVA_SUPPORTED_METHODS_BY_RECEIVER = Map.ofEntries(
             Map.entry("Effect", Set.of("map", "flat_map", "start")),
             Map.entry("Result", Set.of("map", "flat_map", "reduce", "reduce_left", "recover", "or_else", "or")),
@@ -153,49 +150,6 @@ public final class NativeCompilerValidator {
             "contains", "is_subset_of", "is_proper_subset_of", "is_superset_of", "is_proper_superset_of",
             "union", "intersection", "difference", "symmetric_difference", "cartesian_product"
     );
-    private static final Map<String, Set<Integer>> ASSERT_METHOD_ARITIES = Map.ofEntries(
-            Map.entry("is_equal_to", Set.of(1, 2, 3)),
-            Map.entry("is_true", Set.of(0)),
-            Map.entry("is_false", Set.of(0)),
-            Map.entry("is_greater_than", Set.of(1)),
-            Map.entry("is_less_than", Set.of(1)),
-            Map.entry("is_greater_or_equals_than", Set.of(1)),
-            Map.entry("is_less_or_equals_than", Set.of(1)),
-            Map.entry("is_zero", Set.of(0)),
-            Map.entry("is_one", Set.of(0)),
-            Map.entry("is_between", Set.of(2)),
-            Map.entry("starts_with", Set.of(1)),
-            Map.entry("does_not_start_with", Set.of(1)),
-            Map.entry("contains", Set.of(1)),
-            Map.entry("has_size", Set.of(1)),
-            Map.entry("is_empty", Set.of(0)),
-            Map.entry("succeeds", Set.of(0, 1)),
-            Map.entry("fails", Set.of(0, 1)),
-            Map.entry("has_day", Set.of(1)),
-            Map.entry("has_month", Set.of(1)),
-            Map.entry("has_year", Set.of(1)),
-            Map.entry("has_hour", Set.of(1)),
-            Map.entry("has_minute", Set.of(1)),
-            Map.entry("has_second", Set.of(1)),
-            Map.entry("has_offset_minutes", Set.of(1)),
-            Map.entry("has_date", Set.of(1, 3)),
-            Map.entry("has_time", Set.of(1, 3)),
-            Map.entry("has_years", Set.of(1)),
-            Map.entry("has_months", Set.of(1)),
-            Map.entry("has_days", Set.of(1)),
-            Map.entry("has_hours", Set.of(1)),
-            Map.entry("has_minutes", Set.of(1)),
-            Map.entry("has_seconds", Set.of(1)),
-            Map.entry("has_weeks", Set.of(1)),
-            Map.entry("has_start", Set.of(1)),
-            Map.entry("has_end", Set.of(1)),
-            Map.entry("has_duration", Set.of(1)),
-            Map.entry("fails_with_kind", Set.of(1, 2)),
-            Map.entry("does_not_contain", Set.of(1)),
-            Map.entry("contains_key", Set.of(1)),
-            Map.entry("does_not_contain_key", Set.of(1)),
-            Map.entry("contains_value", Set.of(1))
-    );
     private static final Set<String> NUMERIC_TYPES = Set.of("byte", "int", "long", "float", "double");
     private static final Map<String, Map<String, Set<Integer>>> STANDARD_METHOD_ARITIES = Map.ofEntries(
             Map.entry("Result", Map.of(
@@ -248,10 +202,52 @@ public final class NativeCompilerValidator {
         validateDefinitions(context, errors);
         validateObjectOriented(context, errors);
         validateNativeProviderManifest(nativeProviders, errors);
+        mergeStrictDiagnostics(errors, new StrictSemanticAnalyzer(modules, context.linkedModules).analyze());
+        suppressImportCascades(modules, errors);
+        errors.sort(java.util.Comparator
+                .comparing(CompilerError::moduleName)
+                .thenComparingInt(CompilerError::line)
+                .thenComparingInt(CompilerError::column)
+                .thenComparing(CompilerError::code));
         if (errors.isEmpty()) {
             rememberValidatedModules(modules);
         }
         return List.copyOf(errors);
+    }
+
+    private void suppressImportCascades(List<ParsedModule> modules, List<CompilerError> errors) {
+        var unresolvedImports = errors.stream()
+                .filter(error -> error.code().equals("IMPORT_NOT_FOUND") || error.code().equals("SYMBOL_NOT_EXPORTED"))
+                .toList();
+        if (unresolvedImports.isEmpty()) return;
+        var cascades = new HashSet<String>();
+        for (var module : modules) {
+            var file = moduleFileName(module);
+            for (var primary : unresolvedImports) {
+                if (!primary.moduleName().equals(file)) continue;
+                for (var declaration : module.imports()) {
+                    if (primary.message().contains("`/" + normalizeModulePath(declaration.modulePath()) + "`")) {
+                        declaration.importedNames().forEach(name -> cascades.add(file + "\n" + name));
+                    }
+                }
+            }
+        }
+        errors.removeIf(error -> (error.code().equals("NAME_NOT_FOUND") || error.code().equals("NOT_CALLABLE"))
+                && cascades.stream().anyMatch(key -> {
+                    var separator = key.indexOf('\n');
+                    return error.moduleName().equals(key.substring(0, separator))
+                            && error.message().contains("`" + key.substring(separator + 1) + "`");
+                }));
+    }
+
+    private void mergeStrictDiagnostics(List<CompilerError> errors, List<CompilerError> strictErrors) {
+        for (var strict : strictErrors) {
+            errors.removeIf(existing -> existing.code().equals(strict.code())
+                    && existing.moduleName().equals(strict.moduleName())
+                    && existing.line() == strict.line()
+                    && existing.column() == strict.column());
+            errors.add(strict);
+        }
     }
 
     private void validateGeneratedModulePaths(List<ParsedModule> modules, List<CompilerError> errors) {
@@ -479,7 +475,7 @@ public final class NativeCompilerValidator {
             }
             case DeriverDeclaration deriver -> {
                 for (var method : deriver.methods()) {
-                    validateFunction(context, module, method, errors, nativeProviderKeys);
+                    validateFunction(context, module, method, Set.of("receiver"), errors, nativeProviderKeys);
                 }
             }
             case EnumDeclaration ignored -> {
@@ -507,6 +503,17 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors,
             Set<String> nativeProviderKeys
     ) {
+        validateFunction(context, module, function, Set.of(), errors, nativeProviderKeys);
+    }
+
+    private void validateFunction(
+            Context context,
+            ParsedModule module,
+            FunctionDeclaration function,
+            Set<String> implicitVariables,
+            List<CompilerError> errors,
+            Set<String> nativeProviderKeys
+    ) {
         validatePublicFunctionSignatureVisibility(context, module, function, errors);
         if (function.visibility().equals("public")) {
             validateJavaPublicParameterNames(module, function.name(), function.parameters(), errors);
@@ -529,7 +536,7 @@ public final class NativeCompilerValidator {
                 context,
                 module,
                 function.body(),
-                functionVariableNames(function),
+                functionVariableNames(function, implicitVariables),
                 errors
         );
         if (javaBackendSelected()) {
@@ -602,8 +609,11 @@ public final class NativeCompilerValidator {
         return null;
     }
 
-    private Set<String> functionVariableNames(FunctionDeclaration function) {
-        var names = new LinkedHashSet<String>();
+    private Set<String> functionVariableNames(
+            FunctionDeclaration function,
+            Set<String> implicitVariables
+    ) {
+        var names = new LinkedHashSet<>(implicitVariables);
         function.parameters().stream().map(FunctionParameter::name).forEach(names::add);
         if (function.name().contains(".")) {
             names.add("this");
@@ -651,7 +661,7 @@ public final class NativeCompilerValidator {
             case FieldAccessExpression access ->
                     validateJavaBackendVariables(context, module, access.receiver(), variables, errors);
             case FunctionCallExpression call -> {
-                if (!knownJavaBackendVariable(context, module, call.name(), variables)) {
+                if (!knownJavaBackendCallable(context, module, call.name(), variables)) {
                     errors.add(error(
                             module,
                             call.location(),
@@ -758,9 +768,33 @@ public final class NativeCompilerValidator {
         return variables.contains(name)
                 || knownFunction(context, module, name)
                 || context.symbolExists(parsedModulePath(module), name)
+                || context.constantType(module, name) != null
+                || visibleImportedSymbol(context, module, name)
                 || context.hasConstructor(module, name)
                 || name.contains(".")
                 || name.contains("/");
+    }
+
+    private boolean knownJavaBackendCallable(
+            Context context,
+            ParsedModule module,
+            String name,
+            Set<String> variables
+    ) {
+        return variables.contains(name)
+                || knownFunction(context, module, name)
+                || context.hasConstructor(module, name);
+    }
+
+    private boolean visibleImportedSymbol(Context context, ParsedModule module, String name) {
+        for (var declaration : module.imports()) {
+            if (declaration.qualified() || declaration.excludedNames().contains(name)
+                    || (!declaration.wildcard() && !declaration.importedNames().contains(name))) {
+                continue;
+            }
+            if (context.symbolExists(declaration.modulePath(), name)) return true;
+        }
+        return false;
     }
 
     private String decodedLambdaParameterName(String parameter) {
@@ -1075,10 +1109,6 @@ public final class NativeCompilerValidator {
             return;
         }
         if (intrinsicCollectionMethod(receiverName, methodName, arguments)) {
-            return;
-        }
-        if (receiverName.equals("Assert")
-                && ASSERT_METHOD_ARITIES.getOrDefault(methodName, Set.of()).contains(arity)) {
             return;
         }
         if (arity == 0
@@ -2385,15 +2415,6 @@ public final class NativeCompilerValidator {
             Map<String, TypeReference> types,
             List<CompilerError> errors
     ) {
-        var standardArities = context.standardFunctionArities(module, call.name());
-        if (standardArities != null && !standardArities.contains(call.arguments().size())) {
-            errors.add(error(
-                    module,
-                    call.location(),
-                    "Function `" + call.name() + "` does not accept " + call.arguments().size() + " argument(s)."
-            ));
-            return;
-        }
         var function = context.functionDeclaration(module, call.name(), call.arguments().size());
         if (function == null) {
             var callableType = types.get(call.name());
@@ -3171,21 +3192,7 @@ public final class NativeCompilerValidator {
     }
 
     private boolean knownFunction(Context context, ParsedModule module, String name) {
-        if (context.moduleHasFunctionOrConstant(module, name)) {
-            return true;
-        }
-        for (var declaration : module.imports()) {
-            if (declaration.qualified()) {
-                continue;
-            }
-            if (declaration.wildcard() && context.moduleExists(declaration.modulePath()) && !declaration.excludedNames().contains(name)) {
-                return true;
-            }
-            if (declaration.importedNames().contains(name) && context.symbolExists(declaration.modulePath(), name)) {
-                return true;
-            }
-        }
-        return false;
+        return !context.functionArities(module, name).isEmpty();
     }
 
     private void validateObjectOriented(Context context, List<CompilerError> errors) {
@@ -3604,11 +3611,28 @@ public final class NativeCompilerValidator {
     }
 
     private CompilerError error(ParsedModule module, SourceLocation location, String message) {
-        return new CompilerError(message, moduleFileName(module), location.line(), location.column());
+        return new CompilerError(diagnosticCode(message), message, moduleFileName(module), location.line(), location.column());
     }
 
     private CompilerError globalError(String message) {
-        return new CompilerError(message, "", 0, 0);
+        return new CompilerError(diagnosticCode(message), message, "", 0, 0);
+    }
+
+    private String diagnosticCode(String message) {
+        if (message.contains("imports unknown module")) return "IMPORT_NOT_FOUND";
+        if (message.contains("does not export")) return "SYMBOL_NOT_EXPORTED";
+        if (message.startsWith("Unknown type")) return "TYPE_NOT_FOUND";
+        if (message.startsWith("Unresolved variable")) return "NAME_NOT_FOUND";
+        if (message.startsWith("Unresolved function")) return "NOT_CALLABLE";
+        if (message.startsWith("Argument ")) return "ARGUMENT_TYPE";
+        if (message.contains("does not accept") || message.contains("expects ")) return "CALL_ARITY";
+        if (message.startsWith("Function `") && message.contains(" returns ")) return "RETURN_TYPE";
+        if (message.startsWith("Binding `") || message.startsWith("Field `")) return "ASSIGNMENT_TYPE";
+        if (message.startsWith("Method `") && message.contains("not defined")) return "METHOD_NOT_FOUND";
+        if (message.startsWith("Method `") && message.contains("receiver")) return "RECEIVER_TYPE";
+        if (message.startsWith("Tuple ") || message.startsWith("Index ") || message.startsWith("Slice ")) return "OPERATOR_TYPE";
+        if (message.startsWith("Duplicate")) return "AMBIGUOUS_SYMBOL";
+        return "SEMANTIC_ERROR";
     }
 
     private String moduleFileName(ParsedModule module) {
@@ -3713,10 +3737,7 @@ public final class NativeCompilerValidator {
             if (linked != null) {
                 return linkedSymbolExists(linked, name);
             }
-            if (stdlibImport(path)) {
-                return true;
-            }
-            return libraryModule(path);
+            return false;
         }
 
         private boolean linkedSymbolExists(CompiledModule module, String name) {
@@ -4083,18 +4104,6 @@ public final class NativeCompilerValidator {
                     .findFirst();
         }
 
-        private boolean moduleHasFunctionOrConstant(ParsedModule module, String name) {
-            for (var definition : module.definitions()) {
-                if (definition instanceof FunctionDefinition function && function.function().name().equals(name)) {
-                    return true;
-                }
-                if (definition instanceof ConstantDefinition constant && constant.constant().name().equals(name)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         private TypeReference constantType(ParsedModule module, String name) {
             var local = localConstantType(module, name);
             if (local != null) {
@@ -4135,7 +4144,7 @@ public final class NativeCompilerValidator {
 
         private boolean hasConstructor(ParsedModule module, String typeName) {
             var constructorName = "__capy_constructor|" + typeName;
-            if (hasLocalFunction(module, constructorName)) {
+            if (hasLocalFunction(module, constructorName) || hasLocalObjectClass(module, typeName)) {
                 return true;
             }
             for (var declaration : module.imports()) {
@@ -4145,7 +4154,8 @@ public final class NativeCompilerValidator {
                     continue;
                 }
                 var parsed = parsedModule(declaration.modulePath());
-                if (parsed != null && hasLocalFunction(parsed, constructorName)) {
+                if (parsed != null
+                        && (hasLocalFunction(parsed, constructorName) || hasLocalObjectClass(parsed, typeName))) {
                     return true;
                 }
                 var linked = linkedModule(declaration.modulePath());
@@ -4155,6 +4165,11 @@ public final class NativeCompilerValidator {
                 }
             }
             return false;
+        }
+
+        private boolean hasLocalObjectClass(ParsedModule module, String typeName) {
+            return module.objectOriented().classes().stream()
+                    .anyMatch(objectClass -> objectClass.name().equals(typeName));
         }
 
         private boolean hasLocalFunction(ParsedModule module, String name) {
@@ -4198,6 +4213,16 @@ public final class NativeCompilerValidator {
         private Set<Integer> functionArities(ParsedModule module, String name) {
             var arities = new LinkedHashSet<Integer>();
             collectParsedFunctionArities(module, null, name, arities);
+            var separator = name.lastIndexOf('.');
+            if (separator > 0) {
+                collectQualifiedFunctionArities(
+                        module,
+                        name.substring(0, separator),
+                        name.substring(separator + 1),
+                        arities
+                );
+                return arities;
+            }
             for (var declaration : module.imports()) {
                 if (declaration.qualified()
                         || declaration.excludedNames().contains(name)
@@ -4218,6 +4243,46 @@ public final class NativeCompilerValidator {
                 }
             }
             return arities;
+        }
+
+        private void collectQualifiedFunctionArities(
+                ParsedModule module,
+                String qualifier,
+                String name,
+                Set<Integer> arities
+        ) {
+            String modulePath = null;
+            if (qualifier.startsWith("/")) {
+                modulePath = qualifier;
+            } else {
+                for (var declaration : module.imports()) {
+                    if (declaration.qualified()
+                            && unqualified(declaration.modulePath()).equals(qualifier)) {
+                        modulePath = declaration.modulePath();
+                        break;
+                    }
+                }
+            }
+            if (modulePath == null) return;
+            var parsed = parsedModule(modulePath);
+            if (parsed != null) {
+                parsed.definitions().stream()
+                        .filter(FunctionDefinition.class::isInstance)
+                        .map(FunctionDefinition.class::cast)
+                        .map(FunctionDefinition::function)
+                        .filter(function -> function.name().equals(name))
+                        .filter(function -> !function.visibility().equals("private"))
+                        .map(function -> function.parameters().size())
+                        .forEach(arities::add);
+            }
+            var linked = linkedModule(modulePath);
+            if (linked != null) {
+                linked.functions().stream()
+                        .filter(function -> function.name().equals(name))
+                        .filter(function -> !function.visibility().equals("private"))
+                        .map(function -> function.parameters().size())
+                        .forEach(arities::add);
+            }
         }
 
         private void collectParsedFunctionArities(
@@ -4535,28 +4600,6 @@ public final class NativeCompilerValidator {
             var typeName = unqualified(name);
             var genericStart = typeName.indexOf('[');
             return genericStart < 0 ? typeName : typeName.substring(0, genericStart);
-        }
-
-        private Set<Integer> standardFunctionArities(ParsedModule module, String name) {
-            if (moduleHasFunctionOrConstant(module, name)) {
-                return null;
-            }
-            for (var declaration : module.imports()) {
-                if (declaration.qualified()
-                        || declaration.excludedNames().contains(name)
-                        || (!declaration.wildcard() && !declaration.importedNames().contains(name))) {
-                    continue;
-                }
-                var functions = STANDARD_FUNCTION_ARITIES.get(normalizeModulePath(declaration.modulePath()));
-                if (functions == null) {
-                    continue;
-                }
-                var arities = functions.get(name);
-                if (arities != null) {
-                    return arities;
-                }
-            }
-            return null;
         }
 
         private DataDeclaration dataDeclaration(ParsedModule module, String name) {

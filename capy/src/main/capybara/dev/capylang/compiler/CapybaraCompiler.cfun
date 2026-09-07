@@ -120,6 +120,7 @@ fun compile(
 ): Effect[Either[CompiledProgram, List[CompilerError]]] =
     if rawModules.is_empty()
     then pure(Right { [CompilerError {
+        code: "COMPILATION_INPUT",
         message: "No Capybara source modules found.",
         moduleName: "",
         line: 0,
@@ -345,6 +346,7 @@ private fun compiler_data_literal_field_type_errors(fields: List[CompiledDataFie
                         if compiler_nominal_type_name(actual.name) == compiler_nominal_type_name(expected)
                         then rest
                         else [CompilerError {
+                            code: "ASSIGNMENT_TYPE",
                             message: "Field `" + compiler_schema_field_name(schema) + "` of data `" + compiler_unqualified_type_name(dataType)
                                 + "` has type `" + actual.name + "`, but requires primitive-backed type `" + expected
                                 + "`; construct `" + expected + "` explicitly and unwrap its `Result` before constructing `"
@@ -491,6 +493,7 @@ private fun compiler_tuple_access_errors(receiverType: CompiledTypeReference, st
 
 private fun compiler_tuple_error(message: String, location: CompiledSourceLocation, context: CompilerTypeValidationContext): CompilerError =
     CompilerError {
+        code: "OPERATOR_TYPE",
         message: message,
         moduleName: backend_module_file_name(context.module),
         line: location.line,
@@ -635,6 +638,7 @@ private fun native_provider_backend_errors(
         (if native_provider_backend_binding_present(declaration, bindings, outputType)
         then []
         else [CompilerError {
+            code: "NATIVE_PROVIDER",
             message: "NotWired: No native provider registered for interface `" + declaration.interfaceId
                 + "` with qualifier `" + declaration.qualifier + "` for backend `"
                 + native_provider_backend_name(outputType) + "` (provider `" + declaration.providerName + "`).",
@@ -852,6 +856,7 @@ private fun backend_java_variable_errors(variable: CompiledVariableExpression, c
     if backend_known_variable(variable.name, context)
     then []
     else [CompilerError {
+        code: "NAME_NOT_FOUND",
         message: "Unresolved variable `" + variable.name + "`.",
         moduleName: context.moduleName,
         line: variable.location.line,
@@ -996,6 +1001,7 @@ private fun backend_java_method_errors(call: CompiledMethodCallExpression, conte
                     | backend_known_function(context.knownFunctions, receiverType + "." + call.name)))
         then []
         else [CompilerError {
+            code: "METHOD_NOT_FOUND",
             message: "Method `" + call.name + "` on `" + receiverType + "` is not supported by the Java backend.",
             moduleName: context.moduleName,
             line: call.location.line,

@@ -1,0 +1,2 @@
+from /missing/Tools import { work }
+fun invalid(): int = work()

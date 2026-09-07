@@ -329,11 +329,42 @@ class CompilationTest {
     }
 
     @Test
-    void shouldPreferAssertMethodOverExtensionMethodWithDifferentArity() {
-        var program = compileProgram(List.of(rawModule("AssertExtensions", "", """
+    void shouldRejectAssertExtensionMethodWithWrongArityWithoutNameBasedExceptions() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("AssertExtensions", "", """
                 fun Assert.is_true(extra: int): Assert = this
 
-                fun valid(value: Assert): Assert = value.is_true()
+                fun invalid(value: Assert): Assert = value.is_true()
+                """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `is_true` on receiver type `Assert` expects 1 argument, but received 0.");
+    }
+
+    @Test
+    void shouldResolveArbitraryAssertExtensionMethodFromItsDeclaration() {
+        var program = compileProgram(List.of(rawModule("AssertExtensions", "", """
+                fun Assert.matches_domain(expected: String): Assert = this
+
+                fun valid(value: Assert): Assert = value.matches_domain("orders")
+                """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldResolveImplicitDeriverReceiverFromDeclarationContext() {
+        var program = compileProgram(List.of(rawModule("IdentityDeriver", "", """
+                deriver Identity {
+                    fun identity(): any = receiver
+                }
                 """)));
 
         assertThat(JavaGenerator.javaGenerator(program).modules())

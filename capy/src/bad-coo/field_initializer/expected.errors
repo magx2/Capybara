@@ -1,0 +1,1 @@
+ASSIGNMENT_TYPE|Bad.coo|1|12|Field `count` has type `String`, but `int` is required.

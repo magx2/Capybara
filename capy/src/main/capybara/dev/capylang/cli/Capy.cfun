@@ -762,6 +762,7 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
     validate_input_directory(inputPath, rawInput).flat_map(inputResult =>
         match inputResult with
         case Error { message } -> pure(Right { [CompilerError {
+            code: "COMPILATION_INPUT",
             message: message,
             moduleName: "",
             line: 0,
@@ -771,6 +772,7 @@ private fun compile_source_directory(inputPath: Path, rawInput: String, configur
             read_source_modules(inputPath, rawInput).flat_map(modulesResult =>
                 match modulesResult with
                 case Error { message } -> pure(Right { [CompilerError {
+                    code: "COMPILATION_INPUT",
                     message: message,
                     moduleName: "",
                     line: 0,
@@ -2798,7 +2800,7 @@ private fun compiler_error_text(error: CompilerError): String =
         if error.moduleName.is_empty()
         then ""
         else error.moduleName + ":" + error.line + ":" + error.column + ": "
-    location + error.message
+    location + "[" + error.code + "] " + error.message
 
 private fun runtime_error(message: String): Effect[/capy/lang/Program] =
     println_error(message)
