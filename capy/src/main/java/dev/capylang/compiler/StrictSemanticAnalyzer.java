@@ -39,6 +39,7 @@ import dev.capylang.compiler.parser.Expression.WithExpression;
 import dev.capylang.compiler.parser.FunctionDeclaration;
 import dev.capylang.compiler.parser.ImportDeclaration;
 import dev.capylang.compiler.parser.ObjectOrientedClass;
+import dev.capylang.compiler.parser.ObjectOrientedInterface;
 import dev.capylang.compiler.parser.ObjectOrientedMethod;
 import dev.capylang.compiler.parser.ParsedModule;
 import dev.capylang.compiler.parser.SourceKind;
@@ -355,7 +356,7 @@ final class StrictSemanticAnalyzer {
             if (candidates.size() == 1) {
                 var candidate = candidates.getFirst();
                 var actual = function(candidate.parameters, candidate.result);
-                if (!assignable(expected, actual)) {
+                if (!assignable(actual, expected)) {
                     report(module, reference.location(), "ARGUMENT_TYPE",
                             "Function reference `:" + reference.name() + "` has type `" + actual + "`, but `" + expected + "` is required.");
                 }
@@ -532,6 +533,10 @@ final class StrictSemanticAnalyzer {
         var thenType = infer(module, conditional.thenBranch(), expected, env.copy());
         var elseType = infer(module, conditional.elseBranch(), expected, env.copy());
         if (expected != null) {
+            requireAssignable(module, location(conditional.thenBranch()), "ASSIGNMENT_TYPE",
+                    thenType, expected, "If then branch");
+            requireAssignable(module, location(conditional.elseBranch()), "ASSIGNMENT_TYPE",
+                    elseType, expected, "If else branch");
             return expected;
         }
         if (assignable(thenType, elseType)) return thenType;
@@ -804,13 +809,33 @@ final class StrictSemanticAnalyzer {
             collectFunctions(resolveParsed(declaration.modulePath()), receiver + "." + name, result);
             collectFunctions(resolveLinked(declaration.modulePath()), receiver + "." + name, result);
         }
-        var owner = objectClass(module, receiver);
-        if (owner != null) owner.methods().stream().filter(method -> method.name().equals(name))
-                .map(method -> signature(receiver, method)).forEach(result::add);
-        module.objectOriented().interfaces().stream().filter(value -> value.name().equals(unqualified(receiver)))
-                .flatMap(value -> value.methods().stream()).filter(method -> method.name().equals(name))
-                .map(method -> signature(receiver, method)).forEach(result::add);
+        collectObjectMethods(module, receiver, name, result, new HashSet<>());
         return deduplicate(result);
+    }
+
+    private void collectObjectMethods(
+            ParsedModule module,
+            String receiver,
+            String name,
+            List<FunctionSig> target,
+            Set<String> visited
+    ) {
+        var nominal = unqualified(receiver);
+        if (!visited.add(nominal)) return;
+        var owner = objectClass(module, nominal);
+        if (owner != null) {
+            owner.methods().stream().filter(method -> method.name().equals(name))
+                    .map(method -> signature(nominal, method)).forEach(target::add);
+            owner.parents().forEach(parent -> collectObjectMethods(
+                    module, parent.name(), name, target, visited));
+        }
+        var objectInterface = objectInterface(module, nominal);
+        if (objectInterface != null) {
+            objectInterface.methods().stream().filter(method -> method.name().equals(name))
+                    .map(method -> signature(nominal, method)).forEach(target::add);
+            objectInterface.parents().forEach(parent -> collectObjectMethods(
+                    module, parent.name(), name, target, visited));
+        }
     }
 
     private List<FunctionSig> deduplicate(List<FunctionSig> values) {
@@ -934,6 +959,21 @@ final class StrictSemanticAnalyzer {
             var imported = resolveParsed(declaration.modulePath());
             if (imported == null) continue;
             local = imported.objectOriented().classes().stream().filter(value -> value.name().equals(unqualified(name))).findFirst().orElse(null);
+            if (local != null) return local;
+        }
+        return null;
+    }
+
+    private ObjectOrientedInterface objectInterface(ParsedModule module, String name) {
+        var nominal = unqualified(name);
+        var local = module.objectOriented().interfaces().stream()
+                .filter(value -> value.name().equals(nominal)).findFirst().orElse(null);
+        if (local != null) return local;
+        for (var declaration : module.imports()) {
+            var imported = resolveParsed(declaration.modulePath());
+            if (imported == null) continue;
+            local = imported.objectOriented().interfaces().stream()
+                    .filter(value -> value.name().equals(nominal)).findFirst().orElse(null);
             if (local != null) return local;
         }
         return null;
