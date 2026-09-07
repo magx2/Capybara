@@ -4849,7 +4849,7 @@ public final class NativeCompilerValidator {
                     var index = Integer.parseInt(function.name().substring(prefix.length()));
                     fields.put(index, new LinkedDataField(
                             schema.value().substring(0, separator),
-                            new TypeReference(schema.value().substring(separator + 1), List.of())
+                            NativeCapybaraParser.parseTypeReference(schema.value().substring(separator + 1))
                     ));
                 } catch (NumberFormatException ignored) {
                     // Ignore malformed linked schema entries; linked JSON compatibility checks handle them.

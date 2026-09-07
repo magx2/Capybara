@@ -1488,6 +1488,28 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void allowsIndexingParameterizedFieldFromLinkedDataForEveryBackend() throws Exception {
+        var source = writeSource("sample/LinkedDataFieldIndex.cfun", """
+                from /capy/collection/List import { * }
+                from /capy/lang/Option import { Option }
+                from /capy/meta_prog/Reflection import { DataValueInfo, FieldValueInfo }
+
+                fun first_field(info: DataValueInfo): Option[FieldValueInfo] = info.fields[0]
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEmpty();
+            var extension = switch (outputType) {
+                case "java" -> ".java";
+                case "javascript" -> ".js";
+                case "python" -> ".py";
+                default -> throw new IllegalStateException("Unexpected output type: " + outputType);
+            };
+            assertThat(generatedPath(source, extension)).exists();
+        }
+    }
+
+    @Test
     void allowsIndexingThroughPrimitiveBackedReceiverForEveryBackend() throws Exception {
         var source = writeSource("sample/PrimitiveBackedIndex.cfun", """
                 from /capy/lang/Option import { Option }
