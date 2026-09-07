@@ -62,12 +62,14 @@ backend_cli_name() {
 
 prepare_linked_input() {
     local output_dir="$1"
+    local backend="$2"
     local jar
     jar="$(capy_jar)"
     rm -rf "${output_dir}"
     mkdir -p "${output_dir}"
-    java -jar "${jar}" compile \
+    java -jar "${jar}" compile-generate "$(backend_cli_name "${backend}")" \
         --input "${PROJECT_SRC_DIR}" \
-        --output "${output_dir}" \
+        --output "${PROJECT_BUILD_DIR}/generated/prepare-linked/${backend}" \
+        --linked-output "${output_dir}" \
         --log WARN
 }
