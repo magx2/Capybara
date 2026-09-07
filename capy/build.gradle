@@ -767,7 +767,7 @@ def prepareJavaGeneratorImplementation = tasks.register('prepareJavaGeneratorImp
                 .replace('private JavaGenerator() {}', 'private GeneratedJavaGenerator() {}')
         def javaDataHelpers = bootstrapHelper('javaDataHelpers').replace(
                 'if (value instanceof java.util.Map<?, ?>) {',
-                'if (value instanceof java.util.Map<?, ?> || value instanceof java.lang.Record) {'
+                'if (value instanceof java.util.Map<?, ?> || (value instanceof java.lang.Record record && type.equals(record.getClass().getSimpleName()))) {'
         )
         implementation = replaceStringStub(implementation, 'java_data_helpers', javaDataHelpers)
         implementation = replaceStringStub(implementation, 'java_collection_helpers', bootstrapHelper('javaCollectionHelpers'))
