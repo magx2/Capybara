@@ -284,8 +284,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 fun updated_nested_values(field: Field): Game =
                     let point = Point { x: 3, y: 4 }
                     Game {
-                        field: field.with(width: 15),
-                        moves: [point.with(x: 8)],
+                        field: field.with(width: 15, height: field.height),
+                        moves: [point.with(x: 8, y: point.y)],
                         to_move: Player.PLAYER_B,
                     }
 
