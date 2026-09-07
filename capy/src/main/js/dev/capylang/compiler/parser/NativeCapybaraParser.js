@@ -430,12 +430,12 @@ function object_constructor_parameters(ctx) {
 
 function object_oriented_method(ctx) {
     var visibility = (ctx_has(ctx, "visibility") ? text(ctx_call(ctx, "visibility")) : "public");
-    return data("ObjectOrientedMethod", { name: text(ctx_call(ctx, "identifier")), visibility: visibility, parameters: (ctx_has(ctx, "parameters") ? object_parameters(ctx_call(ctx, "parameters")) : []), returnType: (ctx_has(ctx, "functionType") ? parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type"))) : missing_type()), body: object_method_body(ctx_call(ctx, "methodBody")), annotations: object_annotation_applications(ctx_list(ctx, "annotationBlock")), location: source_location(ctx) });
+    return data("ObjectOrientedMethod", { name: text(ctx_call(ctx, "identifier")), visibility: visibility, parameters: (ctx_has(ctx, "parameters") ? object_parameters(ctx_call(ctx, "parameters")) : []), returnType: (ctx_has(ctx, "functionType") ? parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type"))) : type_ref("void", [])), body: object_method_body(ctx_call(ctx, "methodBody")), annotations: object_annotation_applications(ctx_list(ctx, "annotationBlock")), location: source_location(ctx) });
 }
 
 function object_oriented_interface_method(ctx) {
     var visibility = (ctx_has(ctx, "visibility") ? text(ctx_call(ctx, "visibility")) : "public");
-    return data("ObjectOrientedMethod", { name: text(ctx_call(ctx, "identifier")), visibility: visibility, parameters: (ctx_has(ctx, "parameters") ? object_parameters(ctx_call(ctx, "parameters")) : []), returnType: (ctx_has(ctx, "functionType") ? parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type"))) : missing_type()), body: unsupported(ctx), annotations: object_annotation_applications(ctx_list(ctx, "annotationBlock")), location: source_location(ctx) });
+    return data("ObjectOrientedMethod", { name: text(ctx_call(ctx, "identifier")), visibility: visibility, parameters: (ctx_has(ctx, "parameters") ? object_parameters(ctx_call(ctx, "parameters")) : []), returnType: (ctx_has(ctx, "functionType") ? parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type"))) : type_ref("void", [])), body: unsupported(ctx), annotations: object_annotation_applications(ctx_list(ctx, "annotationBlock")), location: source_location(ctx) });
 }
 
 function object_parameters(ctx) {

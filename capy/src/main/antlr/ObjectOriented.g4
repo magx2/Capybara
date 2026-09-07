@@ -30,10 +30,10 @@ memberDeclaration: fieldDeclaration
 traitMemberDeclaration: methodDeclaration;
 interfaceMemberDeclaration: interfaceMethodDeclaration;
 fieldDeclaration: docComment* annotationBlock* visibility? 'field' identifier ':' type ('=' expression)?;
-methodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType methodBody?;
+methodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType? methodBody?;
 methodBody: '=' expression
           | statementBlock;
-interfaceMethodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType;
+interfaceMethodDeclaration: docComment* annotationBlock* visibility? methodModifier* 'def' identifier '(' parameters? ')' functionType?;
 initBlock: docComment* annotationBlock* 'init' statementBlock;
 statementBlock: '{' statement* '}';
 statement: letStatement

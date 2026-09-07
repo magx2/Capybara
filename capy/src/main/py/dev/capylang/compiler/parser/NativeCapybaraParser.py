@@ -479,7 +479,7 @@ def object_oriented_method(ctx):
         parameters=object_parameters(ctx_call(ctx, "parameters")) if ctx_has(ctx, "parameters") else [],
         returnType=parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type")))
         if ctx_has(ctx, "functionType")
-        else missing_type(),
+        else type_ref("void", []),
         body=object_method_body(ctx_call(ctx, "methodBody")),
         annotations=object_annotation_applications(ctx_list(ctx, "annotationBlock")),
         location=source_location(ctx),
@@ -495,7 +495,7 @@ def object_oriented_interface_method(ctx):
         parameters=object_parameters(ctx_call(ctx, "parameters")) if ctx_has(ctx, "parameters") else [],
         returnType=parse_type_reference(text(ctx_call(ctx_call(ctx, "functionType"), "type")))
         if ctx_has(ctx, "functionType")
-        else missing_type(),
+        else type_ref("void", []),
         body=unsupported(ctx),
         annotations=object_annotation_applications(ctx_list(ctx, "annotationBlock")),
         location=source_location(ctx),

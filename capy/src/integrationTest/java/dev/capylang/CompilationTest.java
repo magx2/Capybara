@@ -3142,15 +3142,51 @@ class CompilationTest {
     }
 
     @Test
-    void shouldNormalizeUnitObjectMethodReturnTypeToVoid() {
+    void shouldAcceptUnitAndVoidObjectMethodReturnTypes() {
         var program = compileProgram(List.of(rawModule("UI", "/sample", """
                 interface UI {
                     def refresh(): Unit
+                    def close(): void
                 }
                 """, SourceKind.OBJECT_ORIENTED)));
 
-        assertThat(program.objectOrientedModules().getFirst().interfaces().getFirst().methods().getFirst().returnType().name())
-                .isEqualTo("void");
+        assertThat(program.objectOrientedModules().getFirst().interfaces().getFirst().methods())
+                .extracting(method -> method.returnType().name())
+                .containsExactly("void", "void");
+    }
+
+    @Test
+    void shouldDefaultOmittedObjectMethodReturnTypesToVoid() {
+        var program = compileProgram(List.of(rawModule("UI", "/sample", """
+                interface UI {
+                    def draw_field(game: String)
+                }
+
+                trait Resettable {
+                    def reset()
+                }
+
+                class ConsoleUI: UI, Resettable {
+                    field label: String = "console"
+
+                    override def draw_field(game: String) = game.size()
+                    override def reset() = this.label.size()
+                }
+                """, SourceKind.OBJECT_ORIENTED)));
+        var objects = program.objectOrientedModules().getFirst();
+
+        assertThat(objects.interfaces())
+                .flatExtracting(objectInterface -> objectInterface.methods())
+                .extracting(method -> method.returnType().name())
+                .containsExactly("void", "void");
+        assertThat(objects.classes().getFirst().methods())
+                .extracting(method -> method.returnType().name())
+                .containsExactly("void", "void");
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .extracting(module -> module.code())
+                .anySatisfy(code -> assertThat(code).contains("void draw_field(java.lang.String game)"))
+                .anySatisfy(code -> assertThat(code).contains("void reset()"));
     }
 
     @Test

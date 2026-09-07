@@ -59,10 +59,12 @@ def main():
                 "dev/capylang/smoke",
                 "interface Clock {\n"
                 "  def now(): int\n"
+                "  def reset()\n"
                 "}\n"
                 "class FixedClock(value: int): Clock {\n"
                 '  field name: String = "fixed"\n'
                 "  def now(): int = value\n"
+                "  def reset() = value\n"
                 "}\n",
                 "OBJECT_ORIENTED",
             ),
@@ -77,6 +79,16 @@ def main():
     assert_equal(parsed["modules"][0]["definitions"][2]["function"]["body"]["right"]["parameters"][0], "__capy_typed_lambda|value|String", "typed lambda parameter")
     assert_equal(parsed["modules"][1]["objectOriented"]["interfaces"][0]["name"], "Clock", "object interface")
     assert_equal(parsed["modules"][1]["objectOriented"]["classes"][0]["name"], "FixedClock", "object class")
+    assert_equal(
+        parsed["modules"][1]["objectOriented"]["interfaces"][0]["methods"][1]["returnType"]["name"],
+        "void",
+        "omitted interface return type",
+    )
+    assert_equal(
+        parsed["modules"][1]["objectOriented"]["classes"][0]["methods"][1]["returnType"]["name"],
+        "void",
+        "omitted class return type",
+    )
 
     try:
         parser_impl.parse(
