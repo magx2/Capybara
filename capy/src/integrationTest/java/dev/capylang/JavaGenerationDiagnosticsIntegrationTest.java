@@ -209,7 +209,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
-    void keepsNestedDataConstantsCompatibleWithMapBackedValues() throws Exception {
+    void generatesNestedDataConstantsAsNominalRecords() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
 
@@ -222,9 +222,134 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(generatedPath(source))
                 .content()
-                .contains("public static final java.lang.Object CURRENT = __capy_data(\"Path\"")
-                .doesNotContain("new Path(");
+                .contains("public static final Path CURRENT = new Path(")
+                .doesNotContain("__capy_data(\"Path\"");
         assertJavaCompiles(generatedPath(source));
+    }
+
+    @Test
+    void constructsNestedGeneratedDataAsNominalRecords() throws Exception {
+        var source = writeSource("sample/Games.cfun", """
+                from /capy/lang/Result import { Result, Success }
+
+                enum Player { PLAYER_A, PLAYER_B }
+
+                data Point {
+                    x: int,
+                    y: int,
+                }
+
+                data Field {
+                    width: int,
+                    height: int,
+                }
+
+                data Game {
+                    field: Field,
+                    moves: List[Point],
+                    to_move: Player,
+                }
+
+                fun initial_game(field: Field): Game =
+                    Game {
+                        field,
+                        moves: [],
+                        to_move: Player.PLAYER_A,
+                    }
+
+                fun game_with_move(field: Field): Game =
+                    Game {
+                        field,
+                        moves: [Point { x: 3, y: 4 }],
+                        to_move: Player.PLAYER_B,
+                    }
+
+                fun wrapped_game(field: Field): Result[Game] =
+                    Success {
+                        Game {
+                            field,
+                            moves: [Point { x: 5, y: 6 }],
+                            to_move: Player.PLAYER_A,
+                        }
+                    }
+
+                fun field_width(game: Game): int = game.field.width
+                fun first_move_x(game: Game): int = game.moves[0].or_else(Point { x: 0, y: 0 }).x
+                fun current_player(game: Game): Player = game.to_move
+                fun same_game(left: Game, right: Game): bool = left == right
+                """);
+        writeSource("sample/UI.coo", """
+                from /sample/Games import { Game }
+
+                interface UI {
+                    def draw_field(game: Game): Unit
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var games = generatedPath(source);
+        var ui = outputDir().resolve("sample/UI.java");
+        assertThat(games)
+                .content()
+                .contains("public record Point(int x, int y)")
+                .contains("public record Field(int width, int height)")
+                .contains("public record Game(Field field, java.util.List<Point> moves, Player to_move)")
+                .contains("new Game(")
+                .contains("new Point(3, 4)")
+                .doesNotContain("__capy_data(\"Game\"")
+                .doesNotContain("__capy_data(\"Point\"");
+        assertThat(ui).content().contains("void draw_field(Games.Game game);");
+
+        var implementation = tempDir.resolve("implementation/sample/JavaUI.java");
+        Files.createDirectories(implementation.getParent());
+        Files.writeString(implementation, """
+                package sample;
+
+                public final class JavaUI implements UI {
+                    public Games.Game received;
+
+                    @Override
+                    public void draw_field(Games.Game game) {
+                        received = game;
+                    }
+                }
+                """);
+
+        var classes = compileJava(games, ui, implementation);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var gamesClass = loader.loadClass("sample.Games");
+            var fieldClass = loader.loadClass("sample.Games$Field");
+            var gameClass = loader.loadClass("sample.Games$Game");
+            var pointClass = loader.loadClass("sample.Games$Point");
+            var playerClass = loader.loadClass("sample.Games$Player");
+            var field = fieldClass.getConstructor(int.class, int.class).newInstance(12, 8);
+
+            var initial = generatedMethod(gamesClass, "initial_game__").invoke(null, field);
+            assertThat(initial).isInstanceOf(gameClass);
+            assertThat(gameClass.getMethod("field").invoke(initial)).isSameAs(field);
+            assertThat((List<?>) gameClass.getMethod("moves").invoke(initial)).isEmpty();
+            assertThat(gameClass.getMethod("to_move").invoke(initial)).isEqualTo(playerClass.getEnumConstants()[0]);
+            assertThat(generatedMethod(gamesClass, "field_width__").invoke(null, initial)).isEqualTo(12);
+            assertThat(generatedMethod(gamesClass, "current_player__").invoke(null, initial)).isEqualTo(playerClass.getEnumConstants()[0]);
+
+            var withMove = generatedMethod(gamesClass, "game_with_move__").invoke(null, field);
+            var moves = (List<?>) gameClass.getMethod("moves").invoke(withMove);
+            assertThat(moves).singleElement().isInstanceOf(pointClass);
+            assertThat(pointClass.getMethod("x").invoke(moves.getFirst())).isEqualTo(3);
+            assertThat(generatedMethod(gamesClass, "first_move_x__").invoke(null, withMove)).isEqualTo(3);
+            assertThat(generatedMethod(gamesClass, "same_game__").invoke(null, withMove, withMove)).isEqualTo(true);
+
+            var wrapped = (java.util.Map<?, ?>) generatedMethod(gamesClass, "wrapped_game__").invoke(null, field);
+            assertThat(wrapped.get("__type")).isEqualTo("Success");
+            assertThat(wrapped.get("value")).isInstanceOf(gameClass);
+
+            var uiClass = loader.loadClass("sample.UI");
+            var javaUiClass = loader.loadClass("sample.JavaUI");
+            var javaUi = javaUiClass.getConstructor().newInstance();
+            uiClass.getMethod("draw_field", gameClass).invoke(javaUi, withMove);
+            assertThat(javaUiClass.getField("received").get(javaUi)).isSameAs(withMove);
+        }
     }
 
     @Test
