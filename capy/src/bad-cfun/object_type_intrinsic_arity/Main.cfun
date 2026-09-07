@@ -1,0 +1,3 @@
+from /support/Workflow import { Workflow }
+
+fun invalid(value: int): String = Workflow.type(value).name
