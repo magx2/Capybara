@@ -1480,13 +1480,20 @@ public final class NativeCompilerValidator {
             }
             return;
         }
-        var actual = validationExpressionType(context, module, function.body(), parameterTypes(function));
+        var parameterTypes = parameterTypes(function);
+        var actual = validationExpressionType(context, module, function.body(), parameterTypes);
+        if (actual != null
+                && function.body() instanceof BlockExpression block
+                && effectBindingBlock(context, module, block, parameterTypes)
+                && !unqualified(actual.name()).equals("Effect")) {
+            actual = new TypeReference("Effect", List.of(actual));
+        }
         if (actual == null || returnTypeAssignable(context, module, function.returnType(), actual)) {
             return;
         }
         if (!distinctSequenceListMismatch(function.returnType(), actual)
                 && !definiteNestedTypeMismatch(function.returnType(), actual)
-                && !definiteEffectMismatch(function.returnType(), actual, function.body())
+                && !definiteEffectMismatch(function.returnType(), actual)
                 && !returnTypeAssignable(context, module, actual, function.returnType())) {
             return;
         }
@@ -1646,15 +1653,31 @@ public final class NativeCompilerValidator {
         return false;
     }
 
-    private boolean definiteEffectMismatch(TypeReference expected, TypeReference actual, Expression body) {
+    private boolean definiteEffectMismatch(TypeReference expected, TypeReference actual) {
         return unqualified(expected.name()).equals("Effect")
-                && !unqualified(actual.name()).equals("Effect")
-                && !effectfulBlock(body);
+                && !unqualified(actual.name()).equals("Effect");
     }
 
-    private boolean effectfulBlock(Expression expression) {
-        return expression instanceof BlockExpression block
-                && block.bindings().stream().anyMatch(binding -> binding.operator().equals("<-"));
+    private boolean effectBindingBlock(
+            Context context,
+            ParsedModule module,
+            BlockExpression block,
+            Map<String, TypeReference> types
+    ) {
+        var blockTypes = new LinkedHashMap<>(types);
+        for (var binding : block.bindings()) {
+            var valueType = validationExpressionType(context, module, binding.value(), blockTypes);
+            if (binding.operator().equals("<-")
+                    && valueType != null
+                    && unqualified(valueType.name()).equals("Effect")) {
+                return true;
+            }
+            var bindingType = validationBindingType(binding, valueType);
+            if (bindingType != null) {
+                blockTypes.put(binding.name(), bindingType);
+            }
+        }
+        return false;
     }
 
     private boolean definiteTypeArgumentMismatch(TypeReference expected, TypeReference actual) {
@@ -2044,14 +2067,25 @@ public final class NativeCompilerValidator {
     ) {
         var blockTypes = new LinkedHashMap<>(types);
         for (var binding : block.bindings()) {
-            var bindingType = binding.typeReference().name().isBlank()
-                    ? validationExpressionType(context, module, binding.value(), blockTypes)
-                    : binding.typeReference();
+            var valueType = validationExpressionType(context, module, binding.value(), blockTypes);
+            var bindingType = validationBindingType(binding, valueType);
             if (bindingType != null) {
                 blockTypes.put(binding.name(), bindingType);
             }
         }
         return validationExpressionType(context, module, block.result(), blockTypes);
+    }
+
+    private TypeReference validationBindingType(LetBinding binding, TypeReference valueType) {
+        if (!binding.typeReference().name().isBlank()) {
+            return binding.typeReference();
+        }
+        if (binding.operator().equals("<-")
+                && valueType != null
+                && valueType.arguments().size() == 1) {
+            return valueType.arguments().getFirst();
+        }
+        return valueType;
     }
 
     private TypeReference validationMethodCallType(
@@ -2089,13 +2123,16 @@ public final class NativeCompilerValidator {
                 return extensionReturnType;
             }
         }
-        if (call.arguments().size() != 1
-                || !(call.arguments().getFirst() instanceof LambdaExpression mapper)
-                || receiverType.arguments().size() != 1) {
+        if (call.arguments().size() != 1 || receiverType.arguments().size() != 1) {
             return null;
         }
-        var mapperTypes = validationLambdaTypes(mapper, receiverType.arguments().getFirst(), types);
-        var mapperReturnType = validationExpressionType(context, module, mapper.body(), mapperTypes);
+        var mapperReturnType = validationMapperReturnType(
+                context,
+                module,
+                call.arguments().getFirst(),
+                receiverType.arguments().getFirst(),
+                types
+        );
         if (mapperReturnType == null) {
             return null;
         }
@@ -2108,6 +2145,24 @@ public final class NativeCompilerValidator {
         }
         if ((receiverName.equals("List") || receiverName.equals("Seq")) && call.name().equals("map")) {
             return new TypeReference("Seq", List.of(mapperReturnType));
+        }
+        return null;
+    }
+
+    private TypeReference validationMapperReturnType(
+            Context context,
+            ParsedModule module,
+            Expression mapper,
+            TypeReference valueType,
+            Map<String, TypeReference> types
+    ) {
+        if (mapper instanceof LambdaExpression lambda) {
+            var mapperTypes = validationLambdaTypes(lambda, valueType, types);
+            return validationExpressionType(context, module, lambda.body(), mapperTypes);
+        }
+        if (mapper instanceof FunctionReferenceExpression reference) {
+            var function = context.functionDeclaration(module, reference.name(), 1);
+            return function == null ? null : function.returnType();
         }
         return null;
     }
