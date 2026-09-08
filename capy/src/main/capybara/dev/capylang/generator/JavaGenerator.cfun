@@ -3392,11 +3392,12 @@ private fun result_map_pipe_code(binary: CompiledBinaryExpression, leftType: Com
     let leftCode = expression_code(binary.left, env, leftType, module, allModules)
     match binary.right with
     case CompiledLambdaExpression lambda ->
+        let lambdaEnv = result_pipe_lambda_env(lambda, valueType, env)
         "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
-        + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
-        + "                return __capy_data(\"Success\", __capy_value_fields(" + expression_code(lambda.body, result_pipe_lambda_env(lambda, valueType, env), bodyExpectedType, module, allModules) + "));" + newline()
+        + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ", lambdaEnv)
+        + "                return __capy_data(\"Success\", __capy_value_fields(" + expression_code(lambda.body, lambdaEnv, bodyExpectedType, module, allModules) + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
         + "        }).get()"
@@ -3421,11 +3422,12 @@ private fun result_flat_pipe_code(binary: CompiledBinaryExpression, leftType: Co
     let leftCode = expression_code(binary.left, env, leftType, module, allModules)
     match binary.right with
     case CompiledLambdaExpression lambda ->
+        let lambdaEnv = result_pipe_lambda_env(lambda, valueType, env)
         "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
         + "            java.lang.Object " + resultName + " = " + leftCode + ";" + newline()
         + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
-        + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ")
-        + "                java.lang.Object " + mappedName + " = " + expression_code(lambda.body, result_pipe_lambda_env(lambda, valueType, env), bodyExpectedType, module, allModules) + ";" + newline()
+        + result_pipe_binding_statement(lambda.parameters, valueType, resultName, "                ", lambdaEnv)
+        + "                java.lang.Object " + mappedName + " = " + expression_code(lambda.body, lambdaEnv, bodyExpectedType, module, allModules) + ";" + newline()
         + "                return ((" + boxed_java_type(resultType) + ") __capy_result_value(" + mappedName + "));" + newline()
         + "            }" + newline()
         + "            return ((" + boxed_java_type(resultType) + ") " + resultName + ");" + newline()
@@ -3461,7 +3463,7 @@ private fun result_flat_pipe_body_expected_type(resultType: CompiledTypeReferenc
     else object_type()
 
 /// Emits one generated statement for result pipe binding.
-private fun result_pipe_binding_statement(parameters: List[String], valueType: CompiledTypeReference, resultName: String, indent: String): String =
+private fun result_pipe_binding_statement(parameters: List[String], valueType: CompiledTypeReference, resultName: String, indent: String, lambdaEnv: List[JavaBinding]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
@@ -3469,8 +3471,13 @@ private fun result_pipe_binding_statement(parameters: List[String], valueType: C
         if name == "_"
         then ""
         else if decoded_lambda_parameter_type(parameter).name.is_empty()
-        then indent + "java.lang.Object " + java_identifier(name) + " = __capy_result_success_value(" + resultName + ");" + newline()
-        else indent + java_type(valueType) + " " + java_identifier(name) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+        then indent + "java.lang.Object " + result_pipe_binding_java_name(name, lambdaEnv) + " = __capy_result_success_value(" + resultName + ");" + newline()
+        else indent + java_type(valueType) + " " + result_pipe_binding_java_name(name, lambdaEnv) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+
+/// Resolves the emitted local name for a Result lambda binding.
+private fun result_pipe_binding_java_name(name: String, lambdaEnv: List[JavaBinding]): String =
+    let javaName = lookup_binding_java_name(name, lambdaEnv)
+    if dynamic_java_binding(javaName) then dynamic_java_binding_value_name(javaName) else javaName
 
 /// Collects Result lambda bindings whose untyped values are cast only at their use sites.
 private fun result_pipe_lambda_env(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding]): List[JavaBinding] =
@@ -5866,14 +5873,16 @@ private fun result_reduce_method_code(call: CompiledMethodCallExpression, env: L
     let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     let successLambda = result_reduce_lambda_argument(argument(call.arguments, 0))
     let errorLambda = result_reduce_lambda_argument(argument(call.arguments, 1))
+    let successEnv = declared_lambda_value_env(successLambda, valueType, env)
+    let errorEnv = declared_lambda_value_env(errorLambda, error_type(), env)
     "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
     + "            java.lang.Object " + resultName + " = " + receiverCode + ";" + newline()
     + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
-    + result_reduce_success_binding_statement(successLambda.parameters, valueType, resultName, "                ")
-    + "                return " + expression_code(successLambda.body, lambda_value_env(successLambda.parameters, valueType, env), resultType, module, allModules) + ";" + newline()
+    + result_reduce_success_binding_statement(successLambda.parameters, valueType, resultName, "                ", successEnv)
+    + "                return " + expression_code(successLambda.body, successEnv, resultType, module, allModules) + ";" + newline()
     + "            }" + newline()
-    + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ")
-    + "            return " + expression_code(errorLambda.body, lambda_value_env(errorLambda.parameters, error_type(), env), resultType, module, allModules) + ";" + newline()
+    + result_reduce_error_binding_statement(errorLambda.parameters, resultName, "            ", errorEnv)
+    + "            return " + expression_code(errorLambda.body, errorEnv, resultType, module, allModules) + ";" + newline()
     + "        }).get()"
 
 /// Emits Result.recover for both the value-returning and Result-returning overloads.
@@ -5884,6 +5893,7 @@ private fun result_recover_method_code(call: CompiledMethodCallExpression, env: 
     let resultName = "__capy_result_recover_" + call.location.line + "_" + call.location.column
     let receiverCode = expression_code(call.receiver, env, receiverType, module, allModules)
     let recoverLambda = result_reduce_lambda_argument(argument(call.arguments, 0))
+    let recoverEnv = declared_lambda_value_env(recoverLambda, error_type(), env)
     let preservesResult = result_type_name(inferredType.name)
     let successCode = if preservesResult then resultName else "__capy_result_success_value(" + resultName + ")"
     "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
@@ -5891,8 +5901,8 @@ private fun result_recover_method_code(call: CompiledMethodCallExpression, env: 
     + "            if (__capy_result_is_success(" + resultName + ")) {" + newline()
     + "                return ((" + boxed_java_type(resultType) + ") " + successCode + ");" + newline()
     + "            }" + newline()
-    + result_reduce_error_binding_statement(recoverLambda.parameters, resultName, "            ")
-    + "            return " + expression_code(recoverLambda.body, lambda_value_env(recoverLambda.parameters, error_type(), env), resultType, module, allModules) + ";" + newline()
+    + result_reduce_error_binding_statement(recoverLambda.parameters, resultName, "            ", recoverEnv)
+    + "            return " + expression_code(recoverLambda.body, recoverEnv, resultType, module, allModules) + ";" + newline()
     + "        }).get()"
 
 /// Emits generated code for result or else method.
@@ -5948,24 +5958,24 @@ private fun result_reduce_lambda_argument(expression: CompiledExpression): Compi
     }
 
 /// Emits one generated statement for result reduce success binding.
-private fun result_reduce_success_binding_statement(parameters: List[String], valueType: CompiledTypeReference, resultName: String, indent: String): String =
+private fun result_reduce_success_binding_statement(parameters: List[String], valueType: CompiledTypeReference, resultName: String, indent: String, lambdaEnv: List[JavaBinding]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
         let name = decoded_lambda_parameter_name(parameter)
         if name == "_"
         then ""
-        else indent + java_type(valueType) + " " + java_identifier(name) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
+        else indent + java_type(valueType) + " " + lookup_binding_java_name(name, lambdaEnv) + " = ((" + boxed_java_type(valueType) + ") __capy_result_success_value(" + resultName + "));" + newline()
 
 /// Emits one generated statement for result reduce error binding.
-private fun result_reduce_error_binding_statement(parameters: List[String], resultName: String, indent: String): String =
+private fun result_reduce_error_binding_statement(parameters: List[String], resultName: String, indent: String, lambdaEnv: List[JavaBinding]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
         let name = decoded_lambda_parameter_name(parameter)
         if name == "_"
         then ""
-        else indent + java_type(error_type()) + " " + java_identifier(name) + " = ((" + boxed_java_type(error_type()) + ") __capy_result_error_value(" + resultName + "));" + newline()
+        else indent + java_type(error_type()) + " " + lookup_binding_java_name(name, lambdaEnv) + " = ((" + boxed_java_type(error_type()) + ") __capy_result_error_value(" + resultName + "));" + newline()
 
 /// Resolves expression metadata for result map method binary.
 private fun result_map_method_binary(call: CompiledMethodCallExpression): CompiledBinaryExpression =
