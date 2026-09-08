@@ -1870,6 +1870,60 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsEffectFlatMapReturningResultDuringCompilationForEveryBackend() throws Exception {
+        var source = writeSource("sample/EffectFlatMapTypeFailure.cfun", """
+                from /capy/lang/Effect import { Effect }
+                from /capy/lang/Result import { Result, Success }
+
+                private fun validate(value: int): Result[int] = Success { value }
+
+                fun broken_lambda(effect: Effect[int]): Effect[int] =
+                    effect.flat_map(value => Success { value })
+
+                fun broken_reference(effect: Effect[int]): Effect[int] =
+                    effect.flat_map(:validate)
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 2 error(s):
+                    /sample/EffectFlatMapTypeFailure.cfun:7:4: Effect.flat_map mapper must return `Effect`, but it returns `Result[int]`.
+                    /sample/EffectFlatMapTypeFailure.cfun:10:4: Effect.flat_map mapper must return `Effect`, but it returns `Result[int]`.
+                    """);
+        }
+
+        assertThat(generatedPath(source)).doesNotExist();
+        assertThat(generatedPath(source, ".js")).doesNotExist();
+        assertThat(generatedPath(source, ".py")).doesNotExist();
+    }
+
+    @Test
+    void acceptsValidEffectCallbacksDuringCompilationForEveryBackend() throws Exception {
+        var source = writeSource("sample/ValidEffectCallbacks.cfun", """
+                from /capy/lang/Effect import { Effect, pure }
+                from /capy/lang/Result import { Result, Success }
+
+                private fun effect_callback(value: int): Effect[int] = pure(value)
+                private fun result_callback(value: int): Result[int] = Success { value }
+
+                fun flat_map_effect(effect: Effect[int]): Effect[int] =
+                    effect.flat_map(:effect_callback)
+
+                fun map_result(effect: Effect[int]): Effect[Result[int]] =
+                    effect.map(:result_callback)
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEmpty();
+            assertThat(generatedPath(source, switch (outputType) {
+                case "javascript" -> ".js";
+                case "python" -> ".py";
+                default -> ".java";
+            })).exists();
+        }
+    }
+
+    @Test
     void rejectsImplicitConversionsBetweenSeqAndListForEveryBackend() throws Exception {
         var source = writeSource("sample/DistinctCollections.cfun", """
                 fun list_as_seq(values: List[int]): Seq[int] = values

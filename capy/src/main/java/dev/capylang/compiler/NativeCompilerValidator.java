@@ -953,7 +953,7 @@ public final class NativeCompilerValidator {
             case MethodCallExpression call -> {
                 validateTupleGetCall(context, module, call, types, errors);
                 validateKnownExtensionMethodReceiver(context, module, call, types, errors);
-                validateResultFlatMapMapper(context, module, call, types, errors);
+                validateFlatMapMapper(context, module, call, types, errors);
                 validateCallableMethodArgument(context, module, call, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, call.receiver(), types, errors);
                 var receiverType = validationExpressionType(context, module, call.receiver(), types);
@@ -1754,7 +1754,7 @@ public final class NativeCompilerValidator {
         return false;
     }
 
-    private void validateResultFlatMapMapper(
+    private void validateFlatMapMapper(
             Context context,
             ParsedModule module,
             MethodCallExpression call,
@@ -1762,26 +1762,36 @@ public final class NativeCompilerValidator {
             List<CompilerError> errors
     ) {
         if (!call.name().equals("flat_map")
-                || call.arguments().size() != 1
-                || !(call.arguments().getFirst() instanceof LambdaExpression mapper)) {
+                || call.arguments().size() != 1) {
             return;
         }
         var receiverType = validationExpressionType(context, module, call.receiver(), types);
-        if (receiverType == null || !"Result".equals(unqualified(receiverType.name()))) {
+        if (receiverType == null) {
             return;
         }
-        var mapperTypes = new LinkedHashMap<>(types);
-        if (receiverType.arguments().size() == 1 && mapper.parameters().size() == 1) {
-            mapperTypes.put(decodedLambdaParameterName(mapper.parameters().getFirst()), receiverType.arguments().getFirst());
+        var receiverName = unqualified(receiverType.name());
+        if (!Set.of("Result", "Effect").contains(receiverName)) {
+            return;
         }
-        var mapperReturnType = validationExpressionType(context, module, mapper.body(), mapperTypes);
-        if (mapperReturnType == null || resultCompatibleType(mapperReturnType)) {
+        var valueType = receiverType.arguments().size() == 1
+                ? receiverType.arguments().getFirst()
+                : new TypeReference("any", List.of());
+        var mapperReturnType = validationMapperReturnType(
+                context,
+                module,
+                call.arguments().getFirst(),
+                valueType,
+                types
+        );
+        if (mapperReturnType == null
+                || (receiverName.equals("Result") && resultCompatibleType(mapperReturnType))
+                || (receiverName.equals("Effect") && unqualified(mapperReturnType.name()).equals("Effect"))) {
             return;
         }
         errors.add(error(
                 module,
                 call.location(),
-                "Result.flat_map mapper must return `Result`, but it returns `"
+                receiverName + ".flat_map mapper must return `" + receiverName + "`, but it returns `"
                         + displayType(mapperReturnType) + "`."
         ));
     }
@@ -2215,6 +2225,10 @@ public final class NativeCompilerValidator {
         if (mapper instanceof FunctionReferenceExpression reference) {
             var function = context.functionDeclaration(module, reference.name(), 1);
             return function == null ? null : function.returnType();
+        }
+        var mapperType = validationExpressionType(context, module, mapper, types);
+        if (mapperType != null && functionTypeName(mapperType.name())) {
+            return functionTypeReturnType(mapperType);
         }
         return null;
     }
