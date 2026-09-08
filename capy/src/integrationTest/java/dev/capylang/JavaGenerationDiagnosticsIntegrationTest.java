@@ -1905,12 +1905,16 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
                 private fun effect_callback(value: int): Effect[int] = pure(value)
                 private fun result_callback(value: int): Result[int] = Success { value }
+                private fun nothing_callback(value: int): nothing = nothing_callback(value)
 
                 fun flat_map_effect(effect: Effect[int]): Effect[int] =
                     effect.flat_map(:effect_callback)
 
                 fun map_result(effect: Effect[int]): Effect[Result[int]] =
                     effect.map(:result_callback)
+
+                fun flat_map_nothing(effect: Effect[int]): Effect[int] =
+                    effect.flat_map(:nothing_callback)
                 """);
 
         for (var outputType : List.of("java", "javascript", "python")) {
