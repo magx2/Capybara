@@ -303,6 +303,27 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void doesNotEmitJavaEnumConstantsForMapBackedSameNamedEnums() throws Exception {
+        var source = writeSource("sample/Ordering.cfun", """
+                enum Ordering { LESS, EQUAL }
+
+                fun reverse(ordering: Ordering): Ordering =
+                    match ordering with
+                    case LESS -> EQUAL
+                    case EQUAL -> LESS
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_data_is(__capy_match_value")
+                .doesNotContain("java.lang.Object.LESS", "java.lang.Object.EQUAL");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
     void generatesNestedDataConstantsAsNominalRecords() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
