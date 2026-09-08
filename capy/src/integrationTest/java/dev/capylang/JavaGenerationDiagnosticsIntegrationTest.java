@@ -364,6 +364,28 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void doesNotTreatTypedRecordMatchAsSameNamedEnumValue() throws Exception {
+        var source = writeSource("sample/Collision.cfun", """
+                enum Status { READY }
+
+                data READY {}
+
+                fun match_ready(value: READY): int =
+                    match value with
+                    case READY {} -> 1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_data_is(__capy_match_value_")
+                .doesNotContain("== Collision.Status.READY", "== Collision.READY");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
     void generatesNestedDataConstantsAsNominalRecords() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
