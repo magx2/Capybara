@@ -9199,12 +9199,22 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
 
 /// Checks whether a match case selects one value of a generated Java enum.
 private fun java_enum_value_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    enum_type_exists(valueType.name, module, allModules)
-        & enum_value_exists(valueType.name, match_case_enum_value_name(matchCase), module, allModules)
+    let typeName = type_unqualified_name(valueType.name)
+    match java_enum_value_match_owner(valueType, module, allModules) with
+    case Some { owner } ->
+        enum_type_exists_in_functions(typeName, owner.functions)
+            & enum_value_exists(typeName, match_case_enum_value_name(matchCase), owner, allModules)
+    case None -> false
+
+/// Resolves the declaring module for a local, imported, or absolute enum type.
+private fun java_enum_value_match_owner(valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if qualified_call_name(valueType.name) | java_generator_string_has_prefix(valueType.name, "/")
+    then top_level_qualified_data_type_owner(valueType.name, module, allModules)
+    else data_type_owner_module(type_unqualified_name(valueType.name), module, allModules)
 
 /// Emits a direct comparison with a generated Java enum constant.
 private fun java_enum_value_match_condition_code(matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    valueCode + " == " + java_data_type_reference_name(valueType, module, allModules) + "."
+    valueCode + " == " + top_level_java_type(valueType, module, allModules) + "."
         + java_identifier(match_case_enum_value_name(matchCase))
 
 /// Resolves the value segment from an unqualified or type-qualified enum pattern.
