@@ -414,6 +414,35 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void doesNotTreatErasedPromotedRecordMatchAsSameNamedEnumValue() throws Exception {
+        var collisionSource = writeSource("sample/READY.cfun", """
+                enum Status { READY }
+
+                data READY {}
+                data Box {}
+
+                fun Box.value(): any = READY {}
+                """);
+        var source = writeSource("sample/Main.cfun", """
+                from /sample/READY import { * }
+
+                fun match_ready(box: Box): int =
+                    match box.value() with
+                    case READY {} -> 1
+                    case _ -> 0
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("java.lang.Object __capy_match_value_", "instanceof READY")
+                .doesNotContain("== sample.READY.READY");
+        assertJavaCompiles(generatedPath(collisionSource), generated);
+    }
+
+    @Test
     void generatesNestedDataConstantsAsNominalRecords() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }
