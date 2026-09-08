@@ -30,6 +30,27 @@ class JavaGenerationDiagnosticsIntegrationTest {
     Path tempDir;
 
     @Test
+    void renamesLambdaParametersThatShadowEnclosingParameters() throws Exception {
+        var source = writeSource("sample/LambdaShadow.cfun", """
+                from /capy/collection/Seq import { Seq }
+                from /capy/lang/Option import { Option }
+
+                data Game { value: int }
+
+                fun last_game(game: Game, games: Seq[Game]): Option[Game] =
+                    games.fold((_, game) => game)
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("(__, game__lambda_1) -> game__lambda_1");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
     void rejectsEffectBindingBlockWithResultBeforeJavaGeneration() throws Exception {
         var source = writeSource("paper-soccer/Main.cfun", """
                 from /capy/lang/Effect import { Effect, pure }
