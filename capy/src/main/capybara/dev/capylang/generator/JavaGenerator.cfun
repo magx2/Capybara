@@ -9192,9 +9192,9 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else if java_enum_value_match_case(matchCase, valueType, module, allModules)
     then java_enum_value_match_condition_code(matchCase, valueCode, valueType, module, allModules)
-    else if enum_value_binding_exists(matchCase.typeName, module, allModules)
+    else if erased_match_value_type(valueType) & generated_enum_value_binding_exists(matchCase.typeName, module, allModules)
     then valueCode + " == " + enum_match_value_code(matchCase.typeName, module, allModules)
-    else if qualified_enum_value_name(matchCase.typeName, module, allModules)
+    else if erased_match_value_type(valueType) & generated_qualified_enum_value_name(matchCase.typeName, module, allModules)
     then valueCode + " == " + enum_qualified_value_code(matchCase.typeName, module, allModules)
     else if java_top_level_record_match_case(matchCase, module, allModules)
     then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
@@ -9227,6 +9227,29 @@ private fun match_case_enum_value_name(matchCase: CompiledMatchCase): String =
     if qualified_call_name(matchCase.typeName)
     then enum_qualified_member_name(matchCase.typeName)
     else matchCase.typeName
+
+/// Checks whether match value type information was erased before Java generation.
+private fun erased_match_value_type(valueType: CompiledTypeReference): bool =
+    valueType.name.is_empty() | valueType.name == "any"
+
+/// Checks whether an erased match case resolves to an enum with a generated Java representation.
+private fun generated_enum_value_binding_exists(valueName: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match enum_value_binding(valueName, module, allModules) with
+    case Some { binding } -> generated_enum_value_binding(binding, module, allModules)
+    case None -> false
+
+/// Checks whether a resolved enum binding has a generated Java representation.
+private fun generated_enum_value_binding(binding: JavaEnumValueBinding, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    if binding.moduleClassName.is_empty()
+    then java_data_type_generated(binding.typeName, module, allModules)
+    else match find_module_by_class(binding.moduleClassName, allModules) with
+        case Some { owner } -> java_data_type_generated(binding.typeName, owner, allModules)
+        case None -> false
+
+/// Checks whether a qualified enum value names a generated Java enum.
+private fun generated_qualified_enum_value_name(name: String, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    qualified_enum_value_name(name, module, allModules)
+        & java_data_type_generated_in_scope(enum_qualified_type_name(name), module, allModules)
 
 /// Checks whether a data pattern names a promoted top-level record.
 private fun java_top_level_record_match_case(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
