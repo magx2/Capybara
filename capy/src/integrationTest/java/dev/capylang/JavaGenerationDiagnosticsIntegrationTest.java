@@ -51,6 +51,25 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void keepsResultBindingDeclarationsInSyncWithRenamedLambdaBindings() throws Exception {
+        var source = writeSource("sample/ResultLambdaShadow.cfun", """
+                from /capy/lang/Result import { Result, Success }
+
+                fun increment(value: int): Result[int] =
+                    Success { 1 } | value: int => value + 1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("int value__lambda_1 =")
+                .contains("(value__lambda_1 + 1)");
+        assertJavaCompiles(generated);
+    }
+
+    @Test
     void rejectsEffectBindingBlockWithResultBeforeJavaGeneration() throws Exception {
         var source = writeSource("paper-soccer/Main.cfun", """
                 from /capy/lang/Effect import { Effect, pure }
