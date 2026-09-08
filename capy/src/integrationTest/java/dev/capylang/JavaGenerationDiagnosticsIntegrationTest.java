@@ -447,6 +447,27 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void declaresFreeTypeVariablesInGeneratedObjectMethodSignatures() throws Exception {
+        writeSource("sample/Mapper.coo", """
+                interface Mapper {
+                    def keep(value: T): T
+                }
+
+                class MapperImpl: Mapper {
+                    override def keep(value: T): T = value
+                }
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var mapper = outputDir().resolve("sample/Mapper.java");
+        var implementation = outputDir().resolve("sample/Mapper_.java");
+        assertThat(mapper).content().contains("<T> T keep(T value);");
+        assertThat(implementation).content().contains("public <T> T keep(T value)");
+        assertJavaCompiles(mapper, implementation);
+    }
+
+    @Test
     void generatesSameNamedDataAsTopLevelRecordWithStaticModuleMethods() throws Exception {
         writeSource("paper-soccer/Field.cfun", """
                 from /capy/lang/Result import { Result, Success, Error }
