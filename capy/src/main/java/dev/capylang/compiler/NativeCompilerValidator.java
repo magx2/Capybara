@@ -1585,6 +1585,7 @@ public final class NativeCompilerValidator {
                 || actualName.isBlank()
                 || expectedName.equals("any")
                 || actualName.equals("any")
+                || actualName.equals("nothing")
                 || isSingleLetterGeneric(expectedName)
                 || isSingleLetterGeneric(actualName)) {
             return true;
@@ -1783,9 +1784,13 @@ public final class NativeCompilerValidator {
                 valueType,
                 types
         );
+        var expectedReturnType = new TypeReference(
+                receiverType.name(),
+                List.of(new TypeReference("any", List.of()))
+        );
         if (mapperReturnType == null
                 || (receiverName.equals("Result") && resultCompatibleType(mapperReturnType))
-                || (receiverName.equals("Effect") && unqualified(mapperReturnType.name()).equals("Effect"))) {
+                || returnTypeAssignable(context, module, expectedReturnType, mapperReturnType)) {
             return;
         }
         errors.add(error(
