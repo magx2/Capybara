@@ -251,7 +251,14 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
     void matchesGeneratedJavaEnumsUsingEnumConstants() throws Exception {
+        var enumSource = writeSource("sample/Enums.cfun", """
+                enum Move { UP, DOWN }
+
+                fun next(up: bool): Move = if up then UP else DOWN
+                """);
         var source = writeSource("sample/Games.cfun", """
+                import /sample/Enums
+
                 enum Move { UP, DOWN }
 
                 fun qualified_move(move: Move): int =
@@ -263,6 +270,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     match move with
                     case UP -> 1
                     case DOWN -> -1
+
+                fun qualified_call_move(up: bool): int =
+                    match Enums.next(up) with
+                    case Enums.UP -> 1
+                    case Enums.DOWN -> -1
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
@@ -270,10 +282,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
         var generated = generatedPath(source);
         assertThat(generated)
                 .content()
-                .contains("== Move.UP", "== Move.DOWN")
+                .contains("== Games.Move.UP", "== Games.Move.DOWN")
+                .contains("== Enums.Move.UP", "== Enums.Move.DOWN")
                 .doesNotContain("__capy_data_is(__capy_match_value");
 
-        var classes = compileJava(generated);
+        var classes = compileJava(generatedPath(enumSource), generated);
         try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
             var gamesClass = loader.loadClass("sample.Games");
             var moveClass = (Class<? extends Enum>) loader.loadClass("sample.Games$Move");
@@ -284,6 +297,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(generatedMethod(gamesClass, "qualified_move__").invoke(null, down)).isEqualTo(-1);
             assertThat(generatedMethod(gamesClass, "unqualified_move__").invoke(null, up)).isEqualTo(1);
             assertThat(generatedMethod(gamesClass, "unqualified_move__").invoke(null, down)).isEqualTo(-1);
+            assertThat(generatedMethod(gamesClass, "qualified_call_move__").invoke(null, true)).isEqualTo(1);
+            assertThat(generatedMethod(gamesClass, "qualified_call_move__").invoke(null, false)).isEqualTo(-1);
         }
     }
 
