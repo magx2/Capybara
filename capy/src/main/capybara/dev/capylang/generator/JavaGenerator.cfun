@@ -12165,7 +12165,8 @@ private fun enum_value_binding_in_import(valueName: String, declaration: Compile
     case Some { importedModule } ->
         match enum_value_type_in_functions(valueName, importedModule.functions) with
         case Some { typeName } ->
-            if import_includes_name(valueName, declaration) | data_import_matches(typeName, declaration)
+            if !string_list_contains(declaration.excludedNames, valueName)
+                & (import_includes_name(valueName, declaration) | data_import_matches(typeName, declaration))
             then /capy/lang/Option.Some { JavaEnumValueBinding { moduleClassName: className, typeName: typeName } }
             else /capy/lang/Option.None {}
         case None -> /capy/lang/Option.None {}
