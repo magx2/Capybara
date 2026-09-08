@@ -353,8 +353,14 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("public record Point(int x, int y)")
                 .contains("public record Field(int width, int height)")
                 .contains("public record Game(Field field, java.util.List<Point> moves, Player to_move)")
+                .contains("public static Games.Game initial_game__")
+                .contains("(Games.Field field)")
+                .contains("public static Games.Player current_player__")
+                .contains("(Games.Game game)")
                 .contains("new Game(")
                 .contains("new Point(3, 4)")
+                .doesNotContain("java.lang.Object initial_game__")
+                .doesNotContain("current_player__(java.lang.Object game)")
                 .doesNotContain("__capy_data(\"Game\"")
                 .doesNotContain("__capy_data(\"Point\"");
         assertThat(ui).content().contains("void draw_field(Games.Game game);");
@@ -420,6 +426,24 @@ class JavaGenerationDiagnosticsIntegrationTest {
             uiClass.getMethod("draw_field", gameClass).invoke(javaUi, withMove);
             assertThat(javaUiClass.getField("received").get(javaUi)).isSameAs(withMove);
         }
+    }
+
+    @Test
+    void preservesFreeTypeVariablesInGeneratedJavaMethodSignatures() throws Exception {
+        var source = writeSource("sample/GenericValues.cfun", """
+                fun keep(values: List[T]): List[T] = values
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("public static <T> java.util.List<T> keep__")
+                .contains("(java.util.List<T> values)")
+                .doesNotContain("java.util.List<java.lang.Object> keep__")
+                .doesNotContain("java.util.List<?> keep__");
+        assertJavaCompiles(generated);
     }
 
     @Test
@@ -536,7 +560,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(generatedPath(source))
                 .content()
-                .contains("((java.util.List<java.lang.Object>) (java.lang.Object) __capy_data_field(");
+                .contains("((java.util.List<Game.Point>) (java.lang.Object) __capy_data_field(")
+                .doesNotContain("java.util.List<java.lang.Object> add_move__");
         assertJavaCompiles(generatedPath(source));
     }
 
@@ -754,8 +779,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
             var readerClass = loader.loadClass("sample.Field$Reader");
             var reader = readerClass.getConstructor().newInstance();
 
-            assertThat(readerClass.getMethod("width", Object.class).invoke(reader, field)).isEqualTo(7);
-            assertThat(readerClass.getMethod("matched", Object.class).invoke(reader, field)).isEqualTo(7);
+            assertThat(readerClass.getMethod("width", fieldClass).invoke(reader, field)).isEqualTo(7);
+            assertThat(readerClass.getMethod("matched", fieldClass).invoke(reader, field)).isEqualTo(7);
             assertThat(generatedMethod(fieldClass, "updated_width__").invoke(null, field)).isEqualTo(2);
             assertThat(generatedMethod(fieldClass, "updated_widened__").invoke(null, field)).isEqualTo(3);
             assertThat(generatedMethod(fieldClass, "widened_width__").invoke(null, field)).isEqualTo(7);
@@ -971,7 +996,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .contains("record User(")
                 .contains("interface Account")
                 .contains("java.util.function.Function<java.lang.Object, java.lang.Object>")
-                .contains("__CapyFunction3<java.lang.Object")
+                .contains("__CapyFunction3<TypedLambdaModels.User")
                 .doesNotContain("__capy_typed_lambda|");
         assertJavaCompiles(generatedPath(source));
 

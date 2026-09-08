@@ -3362,7 +3362,7 @@ class CompilationTest {
                 .code();
 
         assertThat(code)
-                .contains("java.lang.Object userValue")
+                .contains("Models.User userValue")
                 .contains("return userValue;")
                 .doesNotContain("user_value")
                 .contains("private static int keep_private__")
