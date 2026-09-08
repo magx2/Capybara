@@ -9202,7 +9202,8 @@ private fun java_enum_value_match_case(matchCase: CompiledMatchCase, valueType: 
     let typeName = type_unqualified_name(valueType.name)
     match java_enum_value_match_owner(valueType, module, allModules) with
     case Some { owner } ->
-        enum_type_exists_in_functions(typeName, owner.functions)
+        java_data_type_generated(typeName, owner, allModules)
+            & enum_type_exists_in_functions(typeName, owner.functions)
             & enum_value_exists(typeName, match_case_enum_value_name(matchCase), owner, allModules)
     case None -> false
 
