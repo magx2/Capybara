@@ -942,13 +942,14 @@ private fun java_object_top_level_interface_methods(methods: List[CompiledObject
 
 /// Formats Java source text for object top-level interface method.
 private fun java_object_top_level_interface_method(method: CompiledObjectOrientedMethod, objectInterface: CompiledObjectOrientedInterface, module: CompiledModule, allModules: List[CompiledModule]): String =
+    let typeParameters = java_method_type_parameters(method.parameters, method.returnType)
     if objectInterface.kind == "trait"
     then
         let env = java_object_interface_method_bindings(method.parameters, objectInterface, module)
-        "    default " + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ") {" + newline()
+        "    default " + typeParameters + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ") {" + newline()
         + java_object_interface_method_body(method, env, module, allModules, "        ")
         + "    }" + newline()
-    else "    " + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ");" + newline()
+    else "    " + typeParameters + java_object_interface_type(method.returnType, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_interface_parameters(method.parameters, module, allModules) + ");" + newline()
 
 /// Formats parameters exposed by a generated top-level Java interface.
 private fun java_object_interface_parameters(parameters: List[CompiledFunctionParameter], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -1141,7 +1142,7 @@ private fun java_object_method(method: CompiledObjectOrientedMethod, objectClass
     let publicParameters = method.visibility == "public"
     let interfaceSignature = java_object_method_implements_interface(method, objectClass.parents, module, allModules)
     let env = java_object_method_bindings(method.parameters, objectClass, module, publicParameters) + constantBindings
-    "        " + java_visibility_prefix(method.visibility) + java_object_method_signature_type(method.returnType, interfaceSignature, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_method_signature_parameters(method.parameters, interfaceSignature, publicParameters, module, allModules) + ") {" + newline()
+    "        " + java_visibility_prefix(method.visibility) + java_method_type_parameters(method.parameters, method.returnType) + java_object_method_signature_type(method.returnType, interfaceSignature, module, allModules) + " " + java_method_name(method.name) + "(" + java_object_method_signature_parameters(method.parameters, interfaceSignature, publicParameters, module, allModules) + ") {" + newline()
     + java_object_method_body(method, env, module, allModules)
     + "        }" + newline()
 
@@ -1831,13 +1832,16 @@ private fun java_constant_with_type(constant: CompiledFunction, type: CompiledTy
 
 /// Preserves nominal generated data and enum types on Java constants.
 private fun java_constant_type(type: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let name = type_unqualified_name(type.name)
-    match data_type_owner_module(name, module, allModules) with
-    case Some { owner } ->
-        if java_data_type_has_direct_value(name, owner, allModules)
-        then java_data_type_java_type(type, module, allModules)
-        else top_level_java_type(type, module, allModules)
-    case None -> top_level_java_type(type, module, allModules)
+    if java_type_has_parameter(type)
+    then "java.lang.Object"
+    else
+        let name = type_unqualified_name(type.name)
+        match data_type_owner_module(name, module, allModules) with
+        case Some { owner } ->
+            if java_data_type_has_direct_value(name, owner, allModules)
+            then java_data_type_java_type(type, module, allModules)
+            else top_level_java_type(type, module, allModules)
+        case None -> top_level_java_type(type, module, allModules)
 
 /// Checks whether values of a generated data type are emitted as nominal Java values.
 private fun java_data_type_has_direct_value(typeName: String, owner: CompiledModule, allModules: List[CompiledModule]): bool =
@@ -1966,6 +1970,31 @@ private fun java_function_type_parameters(function: CompiledFunction, returnType
     if parameters.is_empty()
     then ""
     else java_data_type_parameters(parameters) + " "
+
+/// Emits the free Capybara type variables used by an OO method.
+private fun java_method_type_parameters(parameters: List[CompiledFunctionParameter], returnType: CompiledTypeReference): String =
+    let candidates = java_function_parameter_type_parameter_names(parameters)
+        + java_type_parameter_names([returnType])
+    let names = java_unique_type_parameter_names(candidates, [])
+    if names.is_empty()
+    then ""
+    else java_data_type_parameters(names) + " "
+
+/// Checks recursively whether a type contains a free Capybara type variable.
+private fun java_type_has_parameter(type: CompiledTypeReference): bool =
+    if type_parameter(type)
+    then true
+    else if function_type(type)
+    then java_types_have_parameter(function_type_parameters(type))
+        | java_type_has_parameter(function_type_return_type(type))
+        | java_types_have_parameter(type.arguments)
+    else java_types_have_parameter(type.arguments)
+
+/// Checks recursively whether any type in a list contains a type variable.
+private fun java_types_have_parameter(types: List[CompiledTypeReference]): bool =
+    match types[0] with
+    case None -> false
+    case Some { type } -> java_type_has_parameter(type) | java_types_have_parameter(types[1:])
 
 /// Collects type variables used by function parameters.
 private fun java_function_parameter_type_parameter_names(parameters: List[CompiledFunctionParameter]): List[String] =
@@ -4629,7 +4658,8 @@ private fun partial_extension_parameter_expression_list_code(declaredParameters:
     case Some { expression } ->
         let fallback = expression_type(expression, env, module, allModules)
         let declaredType = parameter_type_at(declaredParameters, 0, fallback)
-        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        let candidateType = parameter_type_at(boundParameters, 0, fallback)
+        let boundType = if java_type_has_parameter(candidateType) then fallback else candidateType
         if partial_placeholder_expression(expression)
         then partial_extension_argument_code(partial_argument_name(names), declaredType, boundType)
             + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names[1:], env, module, allModules)
@@ -4643,7 +4673,8 @@ private fun partial_extension_parameter_expression_list_tail(declaredParameters:
     case Some { expression } ->
         let fallback = expression_type(expression, env, module, allModules)
         let declaredType = parameter_type_at(declaredParameters, 0, fallback)
-        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        let candidateType = parameter_type_at(boundParameters, 0, fallback)
+        let boundType = if java_type_has_parameter(candidateType) then fallback else candidateType
         if partial_placeholder_expression(expression)
         then ", " + partial_extension_argument_code(partial_argument_name(names), declaredType, boundType)
             + partial_extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], names[1:], env, module, allModules)
@@ -6322,9 +6353,9 @@ private fun regex_method_code(call: CompiledMethodCallExpression, env: List[Java
     if call.name == "matches"
     then "__capy_regex_matches(" + receiverCode + ", " + argumentCode + ")"
     else if call.name == "find"
-    then "__capy_regex_find(" + receiverCode + ", " + argumentCode + ")"
+    then "((java.util.Optional<" + top_level_boxed_java_type(regex_match_type(), module, allModules) + ">) (java.util.Optional<?>) __capy_regex_find(" + receiverCode + ", " + argumentCode + "))"
     else if call.name == "find_all"
-    then "__capy_regex_find_all_seq(" + receiverCode + ", " + argumentCode + ")"
+    then "((capy.collection.Seq<" + top_level_boxed_java_type(regex_match_type(), module, allModules) + ">) (capy.collection.Seq<?>) __capy_regex_find_all_seq(" + receiverCode + ", " + argumentCode + "))"
     else if call.name == "replace"
     then "__capy_regex_replacer(" + receiverCode + ", " + argumentCode + ")"
     else "__capy_regex_split(" + receiverCode + ", " + argumentCode + ")"
@@ -7032,7 +7063,8 @@ private fun extension_parameter_expression_list_code(declaredParameters: List[Co
     case Some { expression } ->
         let fallback = expression_type(expression, env, module, allModules)
         let declaredType = parameter_type_at(declaredParameters, 0, fallback)
-        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        let candidateType = parameter_type_at(boundParameters, 0, fallback)
+        let boundType = if java_type_has_parameter(candidateType) then fallback else candidateType
         extension_argument_code(expression, declaredType, boundType, env, module, allModules)
         + extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], env, module, allModules)
 
@@ -7043,7 +7075,8 @@ private fun extension_parameter_expression_list_tail(declaredParameters: List[Co
     case Some { expression } ->
         let fallback = expression_type(expression, env, module, allModules)
         let declaredType = parameter_type_at(declaredParameters, 0, fallback)
-        let boundType = parameter_type_at(boundParameters, 0, fallback)
+        let candidateType = parameter_type_at(boundParameters, 0, fallback)
+        let boundType = if java_type_has_parameter(candidateType) then fallback else candidateType
         ", " + extension_argument_code(expression, declaredType, boundType, env, module, allModules)
         + extension_parameter_expression_list_tail(declaredParameters[1:], boundParameters[1:], expressions[1:], env, module, allModules)
 
@@ -7051,7 +7084,7 @@ private fun extension_parameter_expression_list_tail(declaredParameters: List[Co
 private fun extension_argument_code(expression: CompiledExpression, declaredType: CompiledTypeReference, boundType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let code = expression_code(expression, env, boundType, module, allModules)
     if extension_function_argument_needs_erased_cast(declaredType, boundType)
-    then "((" + java_type(declaredType) + ") (" + raw_java_functional_type(declaredType) + ") " + code + ")"
+    then "((" + top_level_boxed_java_type(boundType, module, allModules) + ") (" + raw_java_functional_type(boundType) + ") " + code + ")"
     else code
 
 /// Checks whether a function matches the extension function argument needs erased cast metadata.
@@ -7627,7 +7660,11 @@ private fun block_expression_code(block: CompiledBlockExpression, env: List[Java
 private fun block_expression_result_type(block: CompiledBlockExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let resultEnv = block_env(block.bindings, env, module, allModules)
     let rawResultType = expression_type(block.result, resultEnv, module, allModules)
-    if result_block_wraps_success(block, env, expectedType, rawResultType, module, allModules)
+    if result_bindings(block.bindings, env, module, allModules)
+    then object_type()
+    else if result_block_wraps_success(block, env, expectedType, rawResultType, module, allModules)
+    then expectedType
+    else if java_type_has_parameter(expectedType) | value_assignable(expectedType, rawResultType, module, allModules)
     then expectedType
     else rawResultType
 
@@ -8892,20 +8929,20 @@ private fun reduce_expression_code(reduce: CompiledReduceExpression, env: List[J
     if option_type_name(receiverType.name)
     then option_reduce_expression_code(reduce, receiverType, valueType, resultType, accumulatorSnapshot, reduceEnv, env, module, allModules)
     else if receiverType.name == "Dict"
-    then "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
-        + "            " + java_type(resultType) + " " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.initial, env, resultType, module, allModules) + ";" + newline()
-        + "            for (java.util.Map.Entry<java.lang.String, " + boxed_java_type(valueType) + "> __capy_entry : " + expression_code(reduce.receiver, env, receiverType, module, allModules) + ".entrySet()) {" + newline()
+    then "((java.util.function.Supplier<" + top_level_boxed_java_type(resultType, module, allModules) + ">) () -> {" + newline()
+        + "            " + top_level_java_type(resultType, module, allModules) + " " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.initial, env, resultType, module, allModules) + ";" + newline()
+        + "            for (java.util.Map.Entry<java.lang.String, " + top_level_boxed_java_type(valueType, module, allModules) + "> __capy_entry : " + expression_code(reduce.receiver, env, receiverType, module, allModules) + ".entrySet()) {" + newline()
         + reduce_key_statement(reduce.keyName, "                ")
-        + "                " + java_type(valueType) + " " + java_identifier(reduce.valueName) + " = __capy_entry.getValue();" + newline()
-        + "                final " + java_type(resultType) + " " + accumulatorSnapshot + " = " + java_identifier(reduce.accumulatorName) + ";" + newline()
+        + "                " + top_level_java_type(valueType, module, allModules) + " " + java_identifier(reduce.valueName) + " = __capy_entry.getValue();" + newline()
+        + "                final " + top_level_java_type(resultType, module, allModules) + " " + accumulatorSnapshot + " = " + java_identifier(reduce.accumulatorName) + ";" + newline()
         + "                " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.body, reduceEnv, resultType, module, allModules) + ";" + newline()
         + "            }" + newline()
         + "            return " + java_identifier(reduce.accumulatorName) + ";" + newline()
         + "        }).get()"
-    else "((java.util.function.Supplier<" + boxed_java_type(resultType) + ">) () -> {" + newline()
-        + "            " + java_type(resultType) + " " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.initial, env, resultType, module, allModules) + ";" + newline()
-        + "            for (" + java_type(valueType) + " " + java_identifier(reduce.valueName) + " : " + receiverIterableCode + ") {" + newline()
-        + "                final " + java_type(resultType) + " " + accumulatorSnapshot + " = " + java_identifier(reduce.accumulatorName) + ";" + newline()
+    else "((java.util.function.Supplier<" + top_level_boxed_java_type(resultType, module, allModules) + ">) () -> {" + newline()
+        + "            " + top_level_java_type(resultType, module, allModules) + " " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.initial, env, resultType, module, allModules) + ";" + newline()
+        + "            for (" + top_level_java_type(valueType, module, allModules) + " " + java_identifier(reduce.valueName) + " : " + receiverIterableCode + ") {" + newline()
+        + "                final " + top_level_java_type(resultType, module, allModules) + " " + accumulatorSnapshot + " = " + java_identifier(reduce.accumulatorName) + ";" + newline()
         + "                " + java_identifier(reduce.accumulatorName) + " = " + expression_code(reduce.body, reduceEnv, resultType, module, allModules) + ";" + newline()
         + "            }" + newline()
         + "            return " + java_identifier(reduce.accumulatorName) + ";" + newline()
@@ -8933,7 +8970,8 @@ private fun reduce_receiver_iterable_code(receiver: CompiledExpression, receiver
 
 /// Computes the compiled type for reduce result.
 private fun reduce_result_type(reduce: CompiledReduceExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    if empty_collection_literal_assignable(expectedType, reduce.initial)
+    if java_type_has_parameter(expectedType)
+        | empty_collection_literal_assignable(expectedType, reduce.initial)
         | result_empty_collection_literal_assignable(expectedType, reduce.initial)
     then expectedType
     else reduce_natural_result_type(reduce, env, module, allModules)
@@ -9073,11 +9111,31 @@ private fun match_expression_code(matchExpression: CompiledMatchExpression, env:
     let valueCode = expression_code(matchExpression.value, env, valueType, module, allModules)
     let matchValueName = "__capy_match_value_" + matchExpression.location.line + "_" + matchExpression.location.column
     let cases = ordered_match_cases(matchExpression.cases)
-    "((java.util.function.Supplier<" + top_level_boxed_java_type(expectedType, module, allModules) + ">) () -> {" + newline()
+    let emittedType = if match_cases_have_dynamic_result(cases, valueType, env, module, allModules) then object_type() else expectedType
+    "((java.util.function.Supplier<" + top_level_boxed_java_type(emittedType, module, allModules) + ">) () -> {" + newline()
     + "            " + top_level_java_type(valueType, module, allModules) + " " + matchValueName + " = " + valueCode + ";" + newline()
-    + match_case_statements(cases, matchValueName, valueType, env, expectedType, module, allModules, "            ")
+    + match_case_statements(cases, matchValueName, valueType, env, emittedType, module, allModules, "            ")
     + "            return unsupported(\"match\");" + newline()
     + "        }).get()"
+
+/// Checks whether any match branch can propagate the map-backed Result representation.
+private fun match_cases_have_dynamic_result(cases: List[CompiledMatchCase], valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match cases[0] with
+    case None -> false
+    case Some { matchCase } ->
+        let caseEnv = match_env(matchCase.bindings, matchCase, valueType, 0, env, module, allModules)
+        expression_has_dynamic_result(matchCase.body, caseEnv, module, allModules)
+            | match_cases_have_dynamic_result(cases[1:], valueType, env, module, allModules)
+
+/// Checks whether an expression can exit through a map-backed Result value.
+private fun expression_has_dynamic_result(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match expression with
+    case CompiledBlockExpression block ->
+        result_bindings(block.bindings, env, module, allModules)
+            | expression_has_dynamic_result(block.result, block_env(block.bindings, env, module, allModules), module, allModules)
+    case CompiledMatchExpression nested -> match_cases_have_dynamic_result(ordered_match_cases(nested.cases), object_type(), env, module, allModules)
+    case CompiledDataLiteral literal -> result_success_constructor(literal.typeName) | result_error_constructor(literal.typeName)
+    case _ -> result_type_name(expression_type(expression, env, module, allModules).name)
 
 /// Collects ordered match cases for compiler processing.
 private fun ordered_match_cases(cases: List[CompiledMatchCase]): List[CompiledMatchCase] =
@@ -10599,7 +10657,7 @@ private fun stdlib_path_function_call(call: CompiledFunctionCallExpression, modu
 
 /// Emits generated code for standard-library path function call.
 private fun stdlib_path_function_call_code(call: CompiledFunctionCallExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    "((java.lang.Object) dev.capylang.PathUtil.fromString("
+    "((capy.io.Path) dev.capylang.PathUtil.fromString("
         + expression_code(argument(call.arguments, 0), env, string_type(), module, allModules)
         + "))"
 
@@ -13961,8 +14019,6 @@ private fun type_assignable(target: CompiledTypeReference, source: CompiledTypeR
     else if primitive_numeric_widening_assignable(target, source)
     then true
     else if stdlib_type_reference_assignable(target, source)
-    then true
-    else if generated_data_object_type(target) & generated_data_object_type(source)
     then true
     else if target.name == "data" & generated_data_object_type(source)
     then true
