@@ -249,6 +249,45 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void matchesGeneratedJavaEnumsUsingEnumConstants() throws Exception {
+        var source = writeSource("sample/Games.cfun", """
+                enum Move { UP, DOWN }
+
+                fun qualified_move(move: Move): int =
+                    match move with
+                    case Move.UP -> 1
+                    case Move.DOWN -> -1
+
+                fun unqualified_move(move: Move): int =
+                    match move with
+                    case UP -> 1
+                    case DOWN -> -1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("== Move.UP", "== Move.DOWN")
+                .doesNotContain("__capy_data_is(__capy_match_value");
+
+        var classes = compileJava(generated);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var gamesClass = loader.loadClass("sample.Games");
+            var moveClass = (Class<? extends Enum>) loader.loadClass("sample.Games$Move");
+            var up = Enum.valueOf(moveClass, "UP");
+            var down = Enum.valueOf(moveClass, "DOWN");
+
+            assertThat(generatedMethod(gamesClass, "qualified_move__").invoke(null, up)).isEqualTo(1);
+            assertThat(generatedMethod(gamesClass, "qualified_move__").invoke(null, down)).isEqualTo(-1);
+            assertThat(generatedMethod(gamesClass, "unqualified_move__").invoke(null, up)).isEqualTo(1);
+            assertThat(generatedMethod(gamesClass, "unqualified_move__").invoke(null, down)).isEqualTo(-1);
+        }
+    }
+
+    @Test
     void generatesNestedDataConstantsAsNominalRecords() throws Exception {
         var source = writeSource("sample/Path.cfun", """
                 enum PathRoot { RELATIVE, ABSOLUTE }

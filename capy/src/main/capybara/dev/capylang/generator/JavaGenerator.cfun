@@ -9190,10 +9190,28 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then collection_match_condition_code(matchCase.typeName, valueCode)
     else if primitive_match_type(matchCase.typeName)
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
+    else if java_enum_value_match_case(matchCase, valueType, module, allModules)
+    then java_enum_value_match_condition_code(matchCase, valueCode, valueType, module, allModules)
     else if java_top_level_record_match_case(matchCase, module, allModules)
     then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
         + valueCode + " instanceof " + java_top_level_record_match_java_type(matchCase, module, allModules) + ")"
     else "__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\")"
+
+/// Checks whether a match case selects one value of a generated Java enum.
+private fun java_enum_value_match_case(matchCase: CompiledMatchCase, valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    enum_type_exists(valueType.name, module, allModules)
+        & enum_value_exists(valueType.name, match_case_enum_value_name(matchCase), module, allModules)
+
+/// Emits a direct comparison with a generated Java enum constant.
+private fun java_enum_value_match_condition_code(matchCase: CompiledMatchCase, valueCode: String, valueType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
+    valueCode + " == " + java_data_type_reference_name(valueType, module, allModules) + "."
+        + java_identifier(match_case_enum_value_name(matchCase))
+
+/// Resolves the value segment from an unqualified or type-qualified enum pattern.
+private fun match_case_enum_value_name(matchCase: CompiledMatchCase): String =
+    if qualified_call_name(matchCase.typeName)
+    then enum_qualified_member_name(matchCase.typeName)
+    else matchCase.typeName
 
 /// Checks whether a data pattern names a promoted top-level record.
 private fun java_top_level_record_match_case(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
