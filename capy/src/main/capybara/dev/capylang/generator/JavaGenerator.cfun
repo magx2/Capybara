@@ -3296,13 +3296,13 @@ private fun option_pipe_code(binary: CompiledBinaryExpression, leftType: Compile
 private fun option_filter_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
     let bodyCode = "!(" + truthy_expression_code(lambda.body, lambdaEnv, module, allModules) + ")"
-    lambda_code_with_result(lambda.parameters, valueType, bodyCode)
+    lambda_code_with_result(lambda.parameters, valueType, bodyCode, lambdaEnv)
 
 /// Emits generated code for option flat map lambda.
 private fun option_flat_map_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
     let bodyType = expression_type(lambda.body, lambdaEnv, module, allModules)
-    lambda_code_with_result(lambda.parameters, valueType, expression_code(lambda.body, lambdaEnv, bodyType, module, allModules))
+    lambda_code_with_result(lambda.parameters, valueType, expression_code(lambda.body, lambdaEnv, bodyType, module, allModules), lambdaEnv)
 
 /// Computes the compiled type for option pipe value.
 private fun option_pipe_value_type(left: CompiledExpression, leftType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
@@ -3973,7 +3973,7 @@ private fun collection_map_expected_value_type(binary: CompiledBinaryExpression,
 /// Emits generated code for reject lambda.
 private fun reject_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
-    lambda_code_with_result(lambda.parameters, valueType, "!(" + truthy_expression_code(lambda.body, lambdaEnv, module, allModules) + ")")
+    lambda_code_with_result(lambda.parameters, valueType, "!(" + truthy_expression_code(lambda.body, lambdaEnv, module, allModules) + ")", lambdaEnv)
 
 /// Emits generated code for predicate function reference lambda.
 private fun predicate_function_reference_lambda_code(reference: CompiledFunctionReferenceExpression, valueType: CompiledTypeReference, negate: bool, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -6201,15 +6201,14 @@ private fun collection_fold_method_code(call: CompiledMethodCallExpression, env:
     let receiverType = expression_type(call.receiver, env, module, allModules)
     let valueType = collection_value_type(receiverType)
     let reducer = collection_fold_reducer(call)
-    let foldEnv = [
-        java_binding(reducer.accumulatorName, valueType),
-        java_binding(reducer.valueName, valueType),
-    ] + env
+    let valueBinding = lambda_java_binding(reducer.valueName, valueType, env)
+    let accumulatorBinding = lambda_java_binding(reducer.accumulatorName, valueType, [valueBinding] + env)
+    let foldEnv = [accumulatorBinding, valueBinding] + env
     reduce_receiver_iterable_code(call.receiver, receiverType, env, module, allModules)
         + ".stream().reduce(("
-        + java_identifier(reducer.accumulatorName)
+        + accumulatorBinding.javaName
         + ", "
-        + java_identifier(reducer.valueName)
+        + valueBinding.javaName
         + ") -> "
         + expression_code(reducer.body, foldEnv, valueType, module, allModules)
         + ")"
@@ -7191,8 +7190,8 @@ private fun enum_name_method_call(call: CompiledMethodCallExpression, env: List[
 
 /// Emits generated code for lambda.
 private fun lambda_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
-    let params = lambda_parameters(lambda.parameters)
     let lambdaEnv = declared_lambda_env(lambda, env)
+    let params = lambda_parameters(lambda.parameters, lambdaEnv)
     params + " -> " + expression_code(lambda.body, lambdaEnv, expression_type(lambda.body, lambdaEnv, module, allModules), module, allModules)
 
 /// Emits generated code for lambda expression.
@@ -7209,16 +7208,17 @@ private fun lambda_expression_code(lambda: CompiledLambdaExpression, env: List[J
 
 /// Emits generated code for supplier lambda expression.
 private fun supplier_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    lambda_parameters(lambda.parameters)
+    let lambdaEnv = declared_lambda_env(lambda, env)
+    lambda_parameters(lambda.parameters, lambdaEnv)
         + " -> "
-        + expression_code(lambda.body, declared_lambda_env(lambda, env), expectedType, module, allModules)
+        + expression_code(lambda.body, lambdaEnv, expectedType, module, allModules)
 
 /// Emits generated code for typed lambda expression.
 private fun typed_lambda_expression_code(lambda: CompiledLambdaExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let parameters = function_type_parameters(expectedType)
     let lambdaEnv = declared_typed_lambda_env(lambda, parameters, env)
     "((" + top_level_boxed_java_type(expectedType, module, allModules) + ") ("
-        + lambda_parameters(lambda.parameters)
+        + lambda_parameters(lambda.parameters, lambdaEnv)
         + " -> "
         + expression_code(lambda.body, lambdaEnv, function_type_return_type(expectedType), module, allModules)
         + "))"
@@ -7256,7 +7256,27 @@ private fun declared_lambda_bindings(parameters: List[String], contextualTypes: 
         let name = decoded_lambda_parameter_name(parameter)
         let type = declared_lambda_parameter_type(parameter, contextualTypes)
         let rest = declared_lambda_bindings(parameters[1:], type_reference_tail(contextualTypes), env)
-        if name == "_" then rest else [java_binding(name, type)] + rest
+        if name == "_" then rest else [lambda_java_binding(name, type, rest)] + rest
+
+/// Creates a lambda binding whose Java name does not shadow an enclosing binding.
+private fun lambda_java_binding(name: String, type: CompiledTypeReference, env: List[JavaBinding]): JavaBinding =
+    let javaName = java_identifier(name)
+    if java_binding_name_exists(javaName, env)
+    then java_binding_with_java_name(name, type, available_lambda_java_name(javaName, env, 1))
+    else java_binding_with_java_name(name, type, javaName)
+
+/// Computes an available Java name for a shadowing lambda parameter.
+private fun available_lambda_java_name(base: String, env: List[JavaBinding], idx: int): String =
+    let candidate = base + "__lambda_" + idx
+    if java_binding_name_exists(candidate, env)
+    then available_lambda_java_name(base, env, idx + 1)
+    else candidate
+
+/// Checks whether a generated Java binding name is already in scope.
+private fun java_binding_name_exists(javaName: String, env: List[JavaBinding]): bool =
+    match env[0] with
+    case None -> false
+    case Some { binding } -> binding.javaName == javaName | java_binding_name_exists(javaName, env[1:])
 
 /// Selects the declared lambda parameter type when present, then its contextual type.
 private fun declared_lambda_parameter_type(parameter: String, contextualTypes: List[CompiledTypeReference]): CompiledTypeReference =
@@ -7295,7 +7315,7 @@ private fun decoded_lambda_parameter_type(parameter: String): CompiledTypeRefere
 private fun lambda_code_for_value(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, expectedType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     let lambdaEnv = declared_lambda_value_env(lambda, valueType, env)
     let bodyCode = expression_code(lambda.body, lambdaEnv, expectedType, module, allModules)
-    lambda_code_with_result(lambda.parameters, valueType, bodyCode)
+    lambda_code_with_result(lambda.parameters, valueType, bodyCode, lambdaEnv)
 
 /// Emits generated code for flat map lambda.
 private fun flat_map_lambda_code(lambda: CompiledLambdaExpression, valueType: CompiledTypeReference, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7306,24 +7326,24 @@ private fun flat_map_lambda_code(lambda: CompiledLambdaExpression, valueType: Co
         if collection_receiver_type(bodyType)
         then seq_receiver_code(lambda.body, bodyType, lambdaEnv, module, allModules)
         else bodyCode
-    lambda_code_with_result(lambda.parameters, valueType, resultCode)
+    lambda_code_with_result(lambda.parameters, valueType, resultCode, lambdaEnv)
 
 /// Emits source code for lambda code with result.
-private fun lambda_code_with_result(parameters: List[String], valueType: CompiledTypeReference, resultCode: String): String =
+private fun lambda_code_with_result(parameters: List[String], valueType: CompiledTypeReference, resultCode: String, lambdaEnv: List[JavaBinding]): String =
     if tuple_lambda_parameters(parameters)
-    then tuple_lambda_code(parameters, valueType, resultCode)
-    else lambda_parameters(parameters) + " -> " + resultCode
+    then tuple_lambda_code(parameters, valueType, resultCode, lambdaEnv)
+    else lambda_parameters(parameters, lambdaEnv) + " -> " + resultCode
 
 /// Emits generated code for tuple lambda.
-private fun tuple_lambda_code(parameters: List[String], valueType: CompiledTypeReference, resultCode: String): String =
-    let tupleName = "__capy_tuple"
+private fun tuple_lambda_code(parameters: List[String], valueType: CompiledTypeReference, resultCode: String, lambdaEnv: List[JavaBinding]): String =
+    let tupleName = if java_binding_name_exists("__capy_tuple", lambdaEnv) then available_lambda_java_name("__capy_tuple", lambdaEnv, 1) else "__capy_tuple"
     tupleName + " -> {" + newline()
-    + tuple_lambda_binding_statements(parameters, valueType.arguments, tupleName, 0, "            ")
+    + tuple_lambda_binding_statements(parameters, valueType.arguments, tupleName, 0, "            ", lambdaEnv)
     + "            return " + resultCode + ";" + newline()
     + "        }"
 
 /// Emits generated statements for tuple lambda binding.
-private fun tuple_lambda_binding_statements(parameters: List[String], types: List[CompiledTypeReference], tupleName: String, idx: int, indent: String): String =
+private fun tuple_lambda_binding_statements(parameters: List[String], types: List[CompiledTypeReference], tupleName: String, idx: int, indent: String, lambdaEnv: List[JavaBinding]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
@@ -7332,29 +7352,32 @@ private fun tuple_lambda_binding_statements(parameters: List[String], types: Lis
         let statement =
             if name == "_"
             then ""
-            else indent + java_type(type) + " " + java_identifier(name) + " = ((" + boxed_java_type(type) + ") ((java.util.List<?>) " + tupleName + ").get(" + idx + "));" + newline()
-        statement + tuple_lambda_binding_statements(parameters[1:], types[1:], tupleName, idx + 1, indent)
+            else indent + java_type(type) + " " + lookup_binding_java_name(name, lambdaEnv) + " = ((" + boxed_java_type(type) + ") ((java.util.List<?>) " + tupleName + ").get(" + idx + "));" + newline()
+        statement + tuple_lambda_binding_statements(parameters[1:], types[1:], tupleName, idx + 1, indent, lambdaEnv)
 
 /// Formats lambda parameters for generated emission.
-private fun lambda_parameters(parameters: List[String]): String =
+private fun lambda_parameters(parameters: List[String], lambdaEnv: List[JavaBinding]): String =
     if parameters.is_empty()
     then "()"
-    else "(" + lambda_parameter_list(parameters, 0) + ")"
+    else "(" + lambda_parameter_list(parameters, 0, lambdaEnv) + ")"
 
 /// Formats lambda parameters with unique names for repeated discard placeholders.
-private fun lambda_parameter_list(parameters: List[String], idx: int): String =
+private fun lambda_parameter_list(parameters: List[String], idx: int, lambdaEnv: List[JavaBinding]): String =
     match parameters[0] with
     case None -> ""
     case Some { parameter } ->
         let name = decoded_lambda_parameter_name(parameter)
-        java_identifier(if name == "_" then "__capy_ignored_" + idx else name)
-            + lambda_parameter_tail(parameters[1:], idx + 1)
+        let javaName =
+            if name == "_"
+            then if java_binding_name_exists("__capy_ignored_" + idx, lambdaEnv) then available_lambda_java_name("__capy_ignored_" + idx, lambdaEnv, 1) else "__capy_ignored_" + idx
+            else lookup_binding_java_name(name, lambdaEnv)
+        javaName + lambda_parameter_tail(parameters[1:], idx + 1, lambdaEnv)
 
 /// Formats the remaining lambda parameters.
-private fun lambda_parameter_tail(parameters: List[String], idx: int): String =
+private fun lambda_parameter_tail(parameters: List[String], idx: int, lambdaEnv: List[JavaBinding]): String =
     if parameters.is_empty()
     then ""
-    else ", " + lambda_parameter_list(parameters, idx)
+    else ", " + lambda_parameter_list(parameters, idx, lambdaEnv)
 
 /// Collects lambda environmentironment for compiler processing.
 private fun lambda_env(parameters: List[String], env: List[JavaBinding]): List[JavaBinding] =
