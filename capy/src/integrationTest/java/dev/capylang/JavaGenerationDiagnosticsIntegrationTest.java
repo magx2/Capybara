@@ -343,6 +343,34 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void doesNotExposeExcludedMemberThroughImportedEnumType() throws Exception {
+        var gameSource = writeSource("sample/Game.cfun", """
+                enum GameState { IN_PROGRESS, PLAYER_A_WON }
+
+                data Game {}
+
+                fun Game.state() = PLAYER_A_WON
+                """);
+        var source = writeSource("sample/Main.cfun", """
+                from /sample/Game import { * } except { PLAYER_A_WON }
+
+                fun excluded_state(game: Game): int =
+                    match game.state() with
+                    case PLAYER_A_WON -> 1
+                    case _ -> 0
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_data_is(__capy_match_value_")
+                .doesNotContain("== sample.Game.PLAYER_A_WON");
+        assertJavaCompiles(generatedPath(gameSource), generated);
+    }
+
+    @Test
     void doesNotEmitJavaEnumConstantsForMapBackedSameNamedEnums() throws Exception {
         var source = writeSource("sample/Ordering.cfun", """
                 enum Ordering { LESS, EQUAL }
