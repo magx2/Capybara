@@ -9192,6 +9192,10 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else if java_enum_value_match_case(matchCase, valueType, module, allModules)
     then java_enum_value_match_condition_code(matchCase, valueCode, valueType, module, allModules)
+    else if enum_value_binding_exists(matchCase.typeName, module, allModules)
+    then valueCode + " == " + enum_match_value_code(matchCase.typeName, module, allModules)
+    else if qualified_enum_value_name(matchCase.typeName, module, allModules)
+    then valueCode + " == " + enum_qualified_value_code(matchCase.typeName, module, allModules)
     else if java_top_level_record_match_case(matchCase, module, allModules)
     then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
         + valueCode + " instanceof " + java_top_level_record_match_java_type(matchCase, module, allModules) + ")"
@@ -12125,23 +12129,24 @@ private fun enum_value_binding_in_imports(valueName: String, imports: List[Compi
     match imports[0] with
     case None -> /capy/lang/Option.None {}
     case Some { declaration } ->
-        if !declaration.qualified & import_includes_name(valueName, declaration)
-        then
-            let className = imported_module_class(module, declaration.modulePath)
-            enum_value_binding_in_imported_module(valueName, imports, module, allModules, className)
-        else enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+        if declaration.qualified
+        then enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+        else match enum_value_binding_in_import(valueName, declaration, module, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
 
-/// Resolves an enum value from one imported module without nesting match expressions.
-private fun enum_value_binding_in_imported_module(valueName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String): /capy/lang/Option[JavaEnumValueBinding] =
+/// Resolves an enum value explicitly imported by name or exposed through its imported enum type.
+private fun enum_value_binding_in_import(valueName: String, declaration: CompiledImportDeclaration, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[JavaEnumValueBinding] =
+    let className = imported_module_class(module, declaration.modulePath)
     match find_module_by_class(className, allModules) with
-    case Some { importedModule } -> enum_value_binding_in_imported_functions(valueName, imports, module, allModules, className, importedModule.functions)
-    case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
-
-/// Resolves an enum value in imported function metadata and otherwise continues import lookup.
-private fun enum_value_binding_in_imported_functions(valueName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule], className: String, functions: List[CompiledFunction]): /capy/lang/Option[JavaEnumValueBinding] =
-    match enum_value_type_in_functions(valueName, functions) with
-    case Some { typeName } -> /capy/lang/Option.Some { JavaEnumValueBinding { moduleClassName: className, typeName: typeName } }
-    case None -> enum_value_binding_in_imports(valueName, imports[1:], module, allModules)
+    case Some { importedModule } ->
+        match enum_value_type_in_functions(valueName, importedModule.functions) with
+        case Some { typeName } ->
+            if import_includes_name(valueName, declaration) | data_import_matches(typeName, declaration)
+            then /capy/lang/Option.Some { JavaEnumValueBinding { moduleClassName: className, typeName: typeName } }
+            else /capy/lang/Option.None {}
+        case None -> /capy/lang/Option.None {}
+    case None -> /capy/lang/Option.None {}
 
 /// Finds the enum type that declares a value in compiled schema metadata.
 private fun enum_value_type_in_functions(valueName: String, functions: List[CompiledFunction]): /capy/lang/Option[String] =
@@ -12165,6 +12170,12 @@ private fun enum_value_binding_code(valueName: String, binding: JavaEnumValueBin
     if binding.moduleClassName.is_empty()
     then java_identifier(valueName)
     else binding.moduleClassName + "." + java_identifier(valueName)
+
+/// Emits an enum match value after resolving its local or imported binding.
+private fun enum_match_value_code(valueName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
+    match enum_value_binding(valueName, module, allModules) with
+    case Some { binding } -> enum_value_binding_code(valueName, binding)
+    case None -> java_identifier(valueName)
 
 /// Computes value metadata for enum values.
 private fun enum_values(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =

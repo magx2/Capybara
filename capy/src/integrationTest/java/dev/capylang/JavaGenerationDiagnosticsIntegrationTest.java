@@ -303,6 +303,46 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void matchesQualifiedEnumReturnedByImportedInferredExtensionMethod() throws Exception {
+        var gameSource = writeSource("sample/Game.cfun", """
+                enum GameState { IN_PROGRESS, PLAYER_A_WON, PLAYER_B_WON }
+
+                data Game {}
+
+                fun Game.state(finished: bool) =
+                    if finished then PLAYER_A_WON else IN_PROGRESS
+                """);
+        var source = writeSource("sample/Main.cfun", """
+                from /sample/Game import { Game, GameState }
+
+                fun qualified_state(game: Game, finished: bool): int =
+                    match game.state(finished) with
+                    case GameState.IN_PROGRESS -> 0
+                    case PLAYER_A_WON, PLAYER_B_WON -> 1
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("java.lang.Object __capy_match_value_")
+                .contains("== sample.Game.IN_PROGRESS", "== sample.Game.PLAYER_A_WON", "== sample.Game.PLAYER_B_WON")
+                .doesNotContain("__capy_data_is(__capy_match_value_")
+                .doesNotContain("\"GameState.IN_PROGRESS\"");
+
+        var classes = compileJava(generatedPath(gameSource), generated);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var gameClass = loader.loadClass("sample.Game");
+            var game = gameClass.getDeclaredConstructor().newInstance();
+            var mainClass = loader.loadClass("sample.Main");
+
+            assertThat(generatedMethod(mainClass, "qualified_state__").invoke(null, game, false)).isEqualTo(0);
+            assertThat(generatedMethod(mainClass, "qualified_state__").invoke(null, game, true)).isEqualTo(1);
+        }
+    }
+
+    @Test
     void doesNotEmitJavaEnumConstantsForMapBackedSameNamedEnums() throws Exception {
         var source = writeSource("sample/Ordering.cfun", """
                 enum Ordering { LESS, EQUAL }
