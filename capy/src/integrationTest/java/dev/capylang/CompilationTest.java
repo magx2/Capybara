@@ -312,6 +312,32 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectAddingAnIncompatibleElementToList() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("ListElementType", "", """
+                        data Point { x: int, y: int }
+                        data Foo { foo: String }
+
+                        fun append(points: List[Point], point: Point): List[Point] = points + point
+                        fun concatenate(points: List[Point], other: List[Point]): List[Point] = points + other
+
+                        fun invalid(points: List[Point]): List[Point] =
+                            points + Foo { foo: "not a point" }
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        var errors = (List<?>) ((Either.Right<?, ?>) result).value();
+        assertThat(errors).hasSize(1);
+        assertThat(errors.toString())
+                .contains("Operator `+` on `List[Point]` requires another `List[Point]` or a compatible `Point` element, "
+                        + "but the right operand has type `Foo`.");
+    }
+
+    @Test
     void shouldPreferSeqNodeMethodOverExtensionMethodWithDifferentArity() {
         var program = compileProgram(List.of(rawModule("SeqExtensions", "", """
                 from /capy/collection/Seq import { Seq, Cons, End }
