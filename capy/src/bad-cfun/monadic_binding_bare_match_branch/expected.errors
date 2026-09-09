@@ -1,1 +1,2 @@
-ASSIGNMENT_TYPE|Main.cfun|8|4|Binding `point` uses `<-`, but its value has type `Point`; expected Effect, Result, Option, or Either.
+ASSIGNMENT_TYPE|Main.cfun|11|31|Match branch has type `Result[Point]`, but `Point` is required.
+ASSIGNMENT_TYPE|Main.cfun|18|29|Match branch has type `Point`, but `Result[Point]` is required.

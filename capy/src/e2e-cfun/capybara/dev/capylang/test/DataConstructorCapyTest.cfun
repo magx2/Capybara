@@ -6,11 +6,13 @@ from DataConstructor import { * }
 fun tests(): Effect[TestFile] =
     test_file("/dev/capylang/test/DataConstructor.cfun", [
         test("constructor returns protected data directly", () => constructor_returns_protected_data_directly()),
+        test("raw constructor keeps unannotated binding type", () => raw_constructor_keeps_unannotated_binding_type()),
         test("constructor can return result of protected data", () => constructor_can_return_result_of_protected_data()),
         test("same file can bypass result-returning data constructor", () => same_file_can_bypass_result_returning_data_constructor()),
         test("type constructor runs before data constructor", () => type_constructor_runs_before_data_constructor()),
         test("type constructor wraps data without own constructor", () => type_constructor_wraps_data_without_own_constructor()),
         test("shared subtype applies all parent type constructors", () => shared_subtype_applies_all_parent_type_constructors()),
+        test("inherited constructors support result binding", () => inherited_constructors_support_result_binding()),
     ])
 
 fun constructor_returns_protected_data_directly(): Assert =
@@ -18,6 +20,9 @@ fun constructor_returns_protected_data_directly(): Assert =
         assert_that(odd_number(3)).is_equal_to(3),
         assert_that(odd_number(4)).is_equal_to(5),
     ])
+
+fun raw_constructor_keeps_unannotated_binding_type(): Assert =
+    assert_that(odd_numbers(4)[0].map(value => value.number).or_else(0)).is_equal_to(5)
 
 fun constructor_can_return_result_of_protected_data(): Assert =
     assert_all([
@@ -49,4 +54,12 @@ fun shared_subtype_applies_all_parent_type_constructors(): Assert =
         assert_that(validated_profile("Ada", "admin")).is_equal_to("ok:Ada:admin"),
         assert_that(validated_profile("", "admin")).is_equal_to("err:Profile name was empty"),
         assert_that(validated_profile("Ada", "")).is_equal_to("err:Profile role was empty"),
+    ])
+
+fun inherited_constructors_support_result_binding(): Assert =
+    assert_all([
+        assert_that(bound_validated_profile("Ada", "admin")).succeeds(
+            value => assert_that(value.name + ":" + value.role).is_equal_to("Ada:admin")),
+        assert_that(bound_validated_profile("", "admin")).fails_with_message_containing("Profile name was empty"),
+        assert_that(bound_validated_profile("Ada", "")).fails_with_message_containing("Profile role was empty"),
     ])
