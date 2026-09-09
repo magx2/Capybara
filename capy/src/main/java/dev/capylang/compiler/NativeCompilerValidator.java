@@ -2791,8 +2791,8 @@ public final class NativeCompilerValidator {
             return name;
         }
         start += marker.length();
-        var end = name.indexOf("__", start);
-        return end < 0 ? name.substring(start) : name.substring(start, end);
+        var end = name.lastIndexOf("__");
+        return end < start ? name.substring(start) : name.substring(start, end);
     }
 
     private boolean acceptsMappedFunction(TypeReference expected) {
