@@ -3483,6 +3483,37 @@ class CompilationTest {
     }
 
     @Test
+    void shouldPreferObjectMethodEffectOverIdenticalFunctionalExtension() {
+        var program = compileProgram(List.of(
+                rawModule("Games", "/paper_soccer", """
+                        data Game {}
+                        data MoveDirection {}
+                        """),
+                rawModule("UI", "/paper_soccer/ui", """
+                        from /paper_soccer/Games import { Game, MoveDirection }
+
+                        interface UI {
+                            def allow_player_to_move(game: Game): MoveDirection
+                        }
+                        """, SourceKind.OBJECT_ORIENTED),
+                rawModule("Main", "/paper_soccer", """
+                        from /capy/lang/Effect import { Effect, pure }
+                        from /paper_soccer/Games import { Game, MoveDirection }
+                        from /paper_soccer/ui/UI import { UI }
+
+                        private fun UI.allow_player_to_move(game: Game): MoveDirection = MoveDirection {}
+
+                        private fun move(ui: UI, game: Game): Effect[MoveDirection] =
+                            let move_direction: MoveDirection <- ui.allow_player_to_move(game)
+                            pure(move_direction)
+                        """)));
+
+        assertThat(program.modules())
+                .extracting(CompiledModule::name)
+                .contains("Main");
+    }
+
+    @Test
     void shouldDefaultOmittedObjectMethodReturnTypesToVoid() {
         var program = compileProgram(List.of(rawModule("UI", "/sample", """
                 interface UI {
