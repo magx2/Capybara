@@ -83,6 +83,7 @@ final class StrictSemanticAnalyzer {
             Map.entry("Async", 1), Map.entry("array", 1)
     );
 
+    private final List<ParsedModule> analysisModules;
     private final List<ParsedModule> modules;
     private final List<CompiledModule> linkedModules;
     private final Map<String, ParsedModule> modulesByPath = new LinkedHashMap<>();
@@ -90,6 +91,15 @@ final class StrictSemanticAnalyzer {
     private final List<CompilerError> errors = new ArrayList<>();
 
     StrictSemanticAnalyzer(List<ParsedModule> modules, List<CompiledModule> linkedModules) {
+        this(modules, modules, linkedModules);
+    }
+
+    StrictSemanticAnalyzer(
+            List<ParsedModule> analysisModules,
+            List<ParsedModule> modules,
+            List<CompiledModule> linkedModules
+    ) {
+        this.analysisModules = analysisModules;
         this.modules = modules;
         this.linkedModules = linkedModules;
         modules.forEach(module -> modulesByPath.put(modulePath(module), module));
@@ -97,7 +107,7 @@ final class StrictSemanticAnalyzer {
     }
 
     List<CompilerError> analyze() {
-        for (var module : modules) {
+        for (var module : analysisModules) {
             // The standard library is the compiler's trusted signature source. Its implementation
             // contains primitive-backed/native representations which are intentionally opaque to
             // source-level checking; callers are still checked against the linked declarations.
@@ -895,8 +905,7 @@ final class StrictSemanticAnalyzer {
 
     private boolean constructorPipelineReturnsResult(ParsedModule module, String literalType) {
         var constructorResults = new LinkedHashMap<String, Boolean>();
-        for (var candidate : modules) {
-            if (!moduleVisibleFrom(module, modulePath(candidate))) continue;
+        for (var candidate : visibleParsedConstructorModules(module)) {
             for (var definition : candidate.definitions()) {
                 if (!(definition instanceof FunctionDefinition constructor)
                         || !constructor.function().name().startsWith("__capy_constructor|")) {
@@ -911,8 +920,7 @@ final class StrictSemanticAnalyzer {
                 }
             }
         }
-        for (var candidate : linkedModules) {
-            if (!moduleVisibleFrom(module, modulePath(candidate))) continue;
+        for (var candidate : visibleLinkedConstructorModules(module)) {
             for (var constructor : candidate.functions()) {
                 if (!constructor.name().startsWith("__capy_constructor|")) continue;
                 var constructorType = constructor.name().substring("__capy_constructor|".length());
@@ -927,12 +935,27 @@ final class StrictSemanticAnalyzer {
         return constructorResults.values().stream().anyMatch(Boolean::booleanValue);
     }
 
-    private boolean moduleVisibleFrom(ParsedModule module, String candidatePath) {
-        if (modulePath(module).equals(candidatePath)) return true;
-        return moduleFragments(module).stream().flatMap(fragment -> fragment.imports().stream())
+    private List<ParsedModule> visibleParsedConstructorModules(ParsedModule module) {
+        var result = new LinkedHashSet<ParsedModule>(moduleFragments(module));
+        moduleFragments(module).stream().flatMap(fragment -> fragment.imports().stream())
                 .map(ImportDeclaration::modulePath)
-                .map(StrictSemanticAnalyzer::normalize)
-                .anyMatch(candidatePath::equals);
+                .map(this::resolveParsed)
+                .filter(java.util.Objects::nonNull)
+                .map(this::moduleFragments)
+                .forEach(result::addAll);
+        return List.copyOf(result);
+    }
+
+    private List<CompiledModule> visibleLinkedConstructorModules(ParsedModule module) {
+        var result = new LinkedHashSet<CompiledModule>();
+        var local = resolveLinked(modulePath(module));
+        if (local != null) result.add(local);
+        moduleFragments(module).stream().flatMap(fragment -> fragment.imports().stream())
+                .map(ImportDeclaration::modulePath)
+                .map(this::resolveLinked)
+                .filter(java.util.Objects::nonNull)
+                .forEach(result::add);
+        return List.copyOf(result);
     }
 
     private boolean parsedConstructorReturnsResult(ParsedModule owner, FunctionDeclaration constructor) {

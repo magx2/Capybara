@@ -195,6 +195,7 @@ public final class NativeCompilerValidator {
             List<String> libraryModules,
             NativeProviderManifest nativeProviders
     ) {
+        retainCurrentLibraryModules(libraryModules);
         var context = new Context(modules, libraryModules);
         VALIDATED_MODULES.get().clear();
         var errors = new ArrayList<CompilerError>();
@@ -203,7 +204,13 @@ public final class NativeCompilerValidator {
         validateDefinitions(context, errors);
         validateObjectOriented(context, errors);
         validateNativeProviderManifest(nativeProviders, errors);
-        mergeStrictDiagnostics(errors, new StrictSemanticAnalyzer(modules, context.linkedModules).analyze());
+        var strictModules = new LinkedHashSet<>(context.previouslyValidatedModules);
+        strictModules.addAll(modules);
+        mergeStrictDiagnostics(errors, new StrictSemanticAnalyzer(
+                modules,
+                List.copyOf(strictModules),
+                context.linkedModules
+        ).analyze());
         suppressImportCascades(modules, errors);
         errors.sort(java.util.Comparator
                 .comparing(CompilerError::moduleName)
@@ -214,6 +221,11 @@ public final class NativeCompilerValidator {
             rememberValidatedModules(modules);
         }
         return List.copyOf(errors);
+    }
+
+    private void retainCurrentLibraryModules(List<String> libraryModules) {
+        var current = libraryModules.stream().map(this::normalizeModulePath).collect(Collectors.toSet());
+        VALIDATED_MODULES.get().keySet().removeIf(path -> !current.contains(normalizeModulePath(path)));
     }
 
     private void suppressImportCascades(List<ParsedModule> modules, List<CompilerError> errors) {
