@@ -7,7 +7,10 @@ open class GreeterBase {
     open def describe(name: String): String = prefix + " " + name
 }
 
-interface Printable {
+interface Named {
+}
+
+interface Printable: Named {
     def print(): String
 }
 
@@ -23,6 +26,21 @@ class Person(name: String): GreeterBase, Printable, BracketNaming {
     field name: String = name
 
     def greet(): String = this.describe(this.name)
+
+    def as_greeter(): GreeterBase {
+        let greeter: GreeterBase = this
+        return greeter
+    }
+
+    def as_printable(): Printable {
+        let printable: Printable = this
+        return printable
+    }
+
+    def as_named(): Named {
+        let named: Named = this
+        return named
+    }
 
     def mutable(): String {
         def x = "a"

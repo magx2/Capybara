@@ -1087,19 +1087,37 @@ final class StrictSemanticAnalyzer {
     }
 
     private boolean subtype(ParsedModule module, String actual, String expected, Set<String> visited) {
-        if (!visited.add(modulePath(module))) return false;
         var actualName = unqualified(actual);
         var expectedName = unqualified(expected);
         if (actualName.equals(expectedName)) return true;
+        if (!visited.add(moduleFileName(module) + "\n" + actualName + "\n" + expectedName)) return false;
         for (var definition : module.definitions()) {
             if (definition instanceof TypeDeclaration union
                     && union.name().equals(expectedName)
                     && union.variants().stream().anyMatch(variant -> unqualified(variant.name()).equals(actualName))) {
                 return true;
             }
-            if (definition instanceof DataDeclaration data
-                    && data.name().equals(actualName)
-                    && data.parents().stream().anyMatch(parent -> unqualified(parent.typeReference().name()).equals(expectedName))) {
+            if (definition instanceof DataDeclaration data && data.name().equals(actualName)) {
+                for (var parent : data.parents()) {
+                    if (subtype(module, parent.typeReference().name(), expectedName, visited)) return true;
+                }
+            }
+        }
+        for (var objectClass : module.objectOriented().classes()) {
+            if (!objectClass.name().equals(actualName)) continue;
+            for (var parent : objectClass.parents()) {
+                if (subtype(module, parent.name(), expectedName, visited)) return true;
+            }
+        }
+        for (var objectInterface : module.objectOriented().interfaces()) {
+            if (!objectInterface.name().equals(actualName)) continue;
+            for (var parent : objectInterface.parents()) {
+                if (subtype(module, parent.name(), expectedName, visited)) return true;
+            }
+        }
+        for (var fragment : modules) {
+            if (fragment != module && modulePath(fragment).equals(modulePath(module))
+                    && subtype(fragment, actual, expected, visited)) {
                 return true;
             }
         }
