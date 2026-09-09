@@ -398,7 +398,10 @@ final class StrictSemanticAnalyzer {
             var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
             checkArguments(module, call.name(), call.arguments(), parameters, env, call.location());
             checkCallableArguments(module, call.name(), call.arguments(), parameters, env);
-            return substitute(chosen.result, substitutions);
+            var result = substitute(chosen.result, substitutions);
+            return chosen.objectMethod && module.sourceKind() == SourceKind.FUNCTIONAL
+                    ? wrapperType("Effect", result)
+                    : result;
         }
         if (BUILTIN_METHODS.contains(call.name())) {
             call.arguments().forEach(argument -> infer(module, argument, null, env));
@@ -1317,7 +1320,7 @@ final class StrictSemanticAnalyzer {
         module.functions().stream().filter(function -> extensionMethodMatches(function.name(), receiver, name))
                 .map(function -> new FunctionSig(
                         function.name(), function.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
-                        type(function.returnType()), ownerType(function.name())))
+                        type(function.returnType()), ownerType(function.name()), false))
                 .forEach(target::add);
     }
 
@@ -1374,7 +1377,7 @@ final class StrictSemanticAnalyzer {
         if (module == null) return;
         module.functions().stream().filter(function -> function.name().equals(name)).map(function -> new FunctionSig(
                 function.name(), function.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
-                type(function.returnType()), ownerType(function.name()))).forEach(target::add);
+                type(function.returnType()), ownerType(function.name()), false)).forEach(target::add);
     }
 
     private void collectPublicFunctions(ParsedModule module, String name, List<FunctionSig> target) {
@@ -1391,18 +1394,18 @@ final class StrictSemanticAnalyzer {
                 .filter(function -> !function.visibility().equals("private"))
                 .map(function -> new FunctionSig(function.name(),
                         function.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
-                        type(function.returnType()), ownerType(function.name())))
+                        type(function.returnType()), ownerType(function.name()), false))
                 .forEach(target::add);
     }
 
     private FunctionSig signature(FunctionDeclaration function) {
         return new FunctionSig(function.name(), function.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
-                type(function.returnType()), ownerType(function.name()));
+                type(function.returnType()), ownerType(function.name()), false);
     }
 
     private FunctionSig signature(String owner, ObjectOrientedMethod method) {
         return new FunctionSig(owner + "." + method.name(), method.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
-                type(method.returnType()), simple(owner));
+                type(method.returnType()), simple(owner), true);
     }
 
     private Type ownerType(String name) {
@@ -1735,7 +1738,7 @@ final class StrictSemanticAnalyzer {
         };
     }
 
-    private record FunctionSig(String name, List<Type> parameters, Type result, Type owner) { }
+    private record FunctionSig(String name, List<Type> parameters, Type result, Type owner, boolean objectMethod) { }
     private record Type(String name, List<Type> arguments, List<Type> parameters, Type functionResult) {
         @Override public String toString() {
             if (functionResult != null) return (parameters.size() == 1 ? parameters.getFirst().toString() : "(" + join(parameters) + ")") + " => " + functionResult;
