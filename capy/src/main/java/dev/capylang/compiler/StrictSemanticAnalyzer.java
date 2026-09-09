@@ -565,8 +565,10 @@ final class StrictSemanticAnalyzer {
         }
         var left = infer(module, binary.left(), null, env);
         var right = infer(module, binary.right(), left, env);
-        var effectiveLeft = primitiveBackedEffectiveType(left);
-        var effectiveRight = primitiveBackedEffectiveType(right);
+        var overloaded = overloadedBinaryType(module, binary, left, env);
+        if (overloaded != null) return overloaded;
+        var effectiveLeft = primitiveBackedEffectiveType(module, left);
+        var effectiveRight = primitiveBackedEffectiveType(module, right);
         if (COMPARISON.contains(binary.operator())) {
             if (!comparable(left, right)) report(module, binary.location(), "OPERATOR_TYPE",
                     "Operator `" + binary.operator() + "` cannot compare `" + left + "` with `" + right + "`.");
@@ -597,13 +599,27 @@ final class StrictSemanticAnalyzer {
         return expected == null ? UNKNOWN : expected;
     }
 
+    private Type overloadedBinaryType(ParsedModule module, BinaryExpression binary, Type receiver, Env env) {
+        var candidates = visibleMethods(module, receiver.name, binary.operator()).stream()
+                .filter(candidate -> candidate.parameters.size() == 1)
+                .toList();
+        if (candidates.isEmpty()) return null;
+        var arguments = List.of(binary.right());
+        var chosen = bestMethodCandidate(module, candidates, receiver, arguments, env);
+        if (chosen == null) return UNKNOWN;
+        var substitutions = new HashMap<String, Type>();
+        bind(chosen.owner, receiver, substitutions);
+        inferMethodSubstitutions(module, chosen, arguments, env, substitutions);
+        return substitute(chosen.result, substitutions);
+    }
+
     private Type unaryType(ParsedModule module, UnaryExpression unary, Env env) {
         var operand = infer(module, unary.expression(), null, env);
         if (unary.operator().equals("!")) {
             requireAssignable(module, unary.location(), "OPERATOR_TYPE", operand, BOOL, "Unary `!` operand");
             return BOOL;
         }
-        var effectiveOperand = primitiveBackedEffectiveType(operand);
+        var effectiveOperand = primitiveBackedEffectiveType(module, operand);
         if (!numeric(effectiveOperand)) report(module, unary.location(), "OPERATOR_TYPE",
                 "Unary operator `" + unary.operator() + "` requires a numeric operand, but received `" + operand + "`.");
         return effectiveOperand;
@@ -1125,24 +1141,35 @@ final class StrictSemanticAnalyzer {
         return primitiveBacked(module, unqualified(name), new HashSet<>());
     }
 
-    private Type primitiveBackedEffectiveType(Type type) {
+    private Type primitiveBackedEffectiveType(ParsedModule module, Type type) {
         if (type == null || numeric(type)) return type;
         var nominal = unqualified(type.name);
-        for (var candidate : modules) {
-            var backingType = candidate.definitions().stream()
-                    .filter(Definition.PrimitiveBackedTypeDeclaration.class::isInstance)
-                    .map(Definition.PrimitiveBackedTypeDeclaration.class::cast)
-                    .filter(declaration -> declaration.name().equals(nominal))
-                    .map(Definition.PrimitiveBackedTypeDeclaration::backingType)
-                    .findFirst()
-                    .orElse(null);
-            if (backingType != null) return type(backingType);
+        var matches = new ArrayList<Type>();
+        var local = primitiveBackingType(module, nominal);
+        if (local != null) matches.add(local);
+        for (var declaration : module.imports()) {
+            var parsed = resolveParsed(declaration.modulePath());
+            var backing = primitiveBackingType(parsed, nominal);
+            if (backing == null) {
+                var linked = resolveLinked(declaration.modulePath());
+                var primitive = linked == null ? null : linked.visiblePrimitiveBackedTypes().get(nominal);
+                backing = primitive == null ? null : type(primitive.backingType());
+            }
+            if (backing != null) matches.add(backing);
         }
-        for (var candidate : linkedModules) {
-            var primitive = candidate.visiblePrimitiveBackedTypes().get(nominal);
-            if (primitive != null) return type(primitive.backingType());
-        }
-        return type;
+        return matches.size() == 1 ? matches.getFirst() : type;
+    }
+
+    private Type primitiveBackingType(ParsedModule module, String nominal) {
+        if (module == null) return null;
+        var backingType = module.definitions().stream()
+                .filter(Definition.PrimitiveBackedTypeDeclaration.class::isInstance)
+                .map(Definition.PrimitiveBackedTypeDeclaration.class::cast)
+                .filter(declaration -> declaration.name().equals(nominal))
+                .map(Definition.PrimitiveBackedTypeDeclaration::backingType)
+                .findFirst()
+                .orElse(null);
+        return backingType == null ? null : type(backingType);
     }
 
     private boolean primitiveBacked(ParsedModule module, String nominal, Set<String> visited) {
