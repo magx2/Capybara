@@ -1,0 +1,12 @@
+from /capy/lang/Result import { Result, Success, error_kind }
+
+enum Choice { VALUE, FAILURE }
+
+data Point { x: int }
+
+fun invalid(choice: Choice): Result[Point] =
+    let point: Point <-
+        match choice with
+        case Choice.VALUE -> Point { x: 1 }
+        case Choice.FAILURE -> error_kind("failed", "No point")
+    Success { point }

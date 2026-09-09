@@ -470,11 +470,12 @@ final class StrictSemanticAnalyzer {
             literal.fields().forEach(field -> infer(module, field.value(), null, env));
             return expected;
         }
+        var implicitWrapper = implicitDataLiteralWrapperType(module, literal, result, env);
         var promotedResult = expected != null && subtype(module, result.name, expected.name) ? expected : result;
         var fields = dataFields(module, result.name);
         if (fields.isEmpty()) {
             literal.fields().forEach(field -> infer(module, field.value(), null, env));
-            return promotedResult;
+            return expected == null && implicitWrapper != null ? implicitWrapper : promotedResult;
         }
         var seen = new HashSet<String>();
         var positional = 0;
@@ -504,7 +505,24 @@ final class StrictSemanticAnalyzer {
             fields.stream().filter(field -> !seen.contains(field.name())).forEach(field -> report(module, literal.location(),
                     "CONSTRUCTOR_FIELD", "Data `" + result.name + "` requires field `" + field.name() + "`."));
         }
-        return promotedResult;
+        return expected == null && implicitWrapper != null ? implicitWrapper : promotedResult;
+    }
+
+    private Type implicitDataLiteralWrapperType(
+            ParsedModule module,
+            DataLiteral literal,
+            Type result,
+            Env env
+    ) {
+        if (hasConstructor(module, result.name)) {
+            return new Type("Result", List.of(result), List.of(), null);
+        }
+        var name = unqualified(result.name);
+        if (literal.fields().isEmpty() || !Set.of("Success", "Some").contains(name)) {
+            return null;
+        }
+        var payload = probe(module, literal.fields().getFirst().value(), null, env);
+        return new Type(name.equals("Success") ? "Result" : "Option", List.of(payload), List.of(), null);
     }
 
     private Type collectionType(ParsedModule module, String name, List<Expression> values, SourceLocation location, Type expected, Env env) {
@@ -629,10 +647,18 @@ final class StrictSemanticAnalyzer {
         var env = outer.copy();
         for (var binding : block.bindings()) {
             var declared = binding.typeReference().name().isBlank() ? null : type(binding.typeReference());
-            var actual = infer(module, binding.value(), declared, env);
+            // A `<-` annotation describes the unwrapped local value, not the wrapper expression.
+            // Inferring the expression against that payload type can hide an invalid bare value,
+            // especially when a match also has an Error branch.
+            var actual = infer(module, binding.value(), binding.operator().equals("<-") ? null : declared, env);
             if (binding.operator().equals("<-") && !dynamic(actual)) {
                 if (!Set.of("Effect", "Result", "Option", "Either").contains(actual.name) || actual.arguments.isEmpty()) {
-                    actual = UNKNOWN; // The established effect/result validator owns this diagnostic.
+                    if (actual != ERROR) {
+                        report(module, binding.location(), "ASSIGNMENT_TYPE",
+                                "Binding `" + binding.name() + "` uses `<-`, but its value has type `" + actual
+                                        + "`; expected Effect, Result, Option, or Either.");
+                    }
+                    actual = ERROR;
                 } else {
                     actual = actual.arguments.getLast();
                 }
@@ -735,7 +761,7 @@ final class StrictSemanticAnalyzer {
             branch.bindings().stream().filter(name -> !name.equals("_")).forEach(name -> branchEnv.values.put(name, ANY));
             if (branch.hasGuard()) requireAssignable(module, branch.location(), "CONDITION_TYPE",
                     infer(module, branch.guard(), BOOL, branchEnv), BOOL, "Match guard");
-            var branchType = infer(module, branch.body(), expected, branchEnv);
+            var branchType = infer(module, branch.body(), result, branchEnv);
             if (result == null) result = branchType;
             else { /* Control-flow-aware validation owns branch compatibility. */ }
         }
@@ -777,6 +803,35 @@ final class StrictSemanticAnalyzer {
             default -> false;
         }) || module.objectOriented().classes().stream().anyMatch(value -> value.name().equals(name))
                 || module.objectOriented().interfaces().stream().anyMatch(value -> value.name().equals(name));
+    }
+
+    private boolean hasConstructor(ParsedModule module, String name) {
+        var constructorName = "__capy_constructor|" + unqualified(name);
+        if (moduleFragments(module).stream().anyMatch(fragment -> fragment.definitions().stream()
+                .anyMatch(definition -> definition instanceof FunctionDefinition function
+                        && function.function().name().equals(constructorName)))) {
+            return true;
+        }
+        for (var declaration : moduleFragments(module).stream()
+                .flatMap(fragment -> fragment.imports().stream()).toList()) {
+            if (declaration.qualified()
+                    || (!declaration.wildcard() && !declaration.importedNames().contains(unqualified(name)))
+                    || declaration.excludedNames().contains(unqualified(name))) {
+                continue;
+            }
+            var parsed = resolveParsed(declaration.modulePath());
+            if (parsed != null && moduleFragments(parsed).stream().anyMatch(fragment -> fragment.definitions().stream()
+                    .anyMatch(definition -> definition instanceof FunctionDefinition function
+                            && function.function().name().equals(constructorName)))) {
+                return true;
+            }
+            var linked = resolveLinked(declaration.modulePath());
+            if (linked != null && linked.functions().stream()
+                    .anyMatch(function -> function.name().equals(constructorName))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean localUnionType(ParsedModule module, String name) {
