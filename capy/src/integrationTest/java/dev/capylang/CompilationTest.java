@@ -648,6 +648,35 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectUnionTypeAsConstructorPattern() throws Exception {
+        var resource = CompilationTest.class.getResourceAsStream("/capy/lang/Option.json");
+        if (resource == null) {
+            fail("Missing bundled /capy/lang/Option.json");
+        }
+        var option = LinkedJsonCodec.read(
+                new String(resource.readAllBytes(), StandardCharsets.UTF_8),
+                CompiledModule.class
+        );
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("OptionPattern", "", """
+                        from /capy/lang/Option import { Option, Some, None }
+
+                        fun invalid(value: Option[int]): int =
+                            match value with
+                            case None -> 0
+                            case Option { position } -> position
+                        """)),
+                new LinkedHashSet<>(List.of(option)),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Union type `Option` cannot be used as a constructor pattern; match one of its variants instead.");
+    }
+
+    @Test
     void shouldPropagateGenericTypesAcrossLocallyDeclaredExtensionMethods() {
         compileProgram(List.of(rawModule("GenericExtensionChain", "", """
                 data Box[T] { value: T }

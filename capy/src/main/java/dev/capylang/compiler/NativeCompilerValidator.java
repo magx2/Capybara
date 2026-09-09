@@ -385,7 +385,7 @@ public final class NativeCompilerValidator {
         return path.isBlank() ? module.name() : path + "/" + module.name();
     }
 
-    private Optional<CompiledModule> bundledModule(String modulePath) {
+    static Optional<CompiledModule> bundledModule(String modulePath) {
         return BUNDLED_MODULES.computeIfAbsent(modulePath, path -> {
             try (var input = NativeCompilerValidator.class.getResourceAsStream("/" + path + ".json")) {
                 if (input == null) {
