@@ -2480,7 +2480,7 @@ public final class NativeCompilerValidator {
                 errors.add(error(
                         module,
                         call.location(),
-                        "Function `" + call.name() + "` does not accept "
+                        "Function `" + localFunctionDisplayName(call.name()) + "` does not accept "
                                 + call.arguments().size() + " argument(s)."
                 ));
             }
