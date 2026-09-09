@@ -1,0 +1,1 @@
+PATTERN_TYPE|Main.cfun|10|4|Union type `Option` cannot be used as a constructor pattern; match one of its variants instead.

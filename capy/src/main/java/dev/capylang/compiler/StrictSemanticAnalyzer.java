@@ -676,6 +676,10 @@ final class StrictSemanticAnalyzer {
         infer(module, match.value(), null, env);
         Type result = expected;
         for (var branch : match.cases()) {
+            if (!branch.bindsWholeValue() && unionType(module, branch.typeName())) {
+                report(module, branch.location(), "PATTERN_TYPE", "Union type `" + unqualified(branch.typeName())
+                        + "` cannot be used as a constructor pattern; match one of its variants instead.");
+            }
             var branchEnv = env.copy();
             branch.bindings().stream().filter(name -> !name.equals("_")).forEach(name -> branchEnv.values.put(name, ANY));
             if (branch.hasGuard()) requireAssignable(module, branch.location(), "CONDITION_TYPE",
@@ -685,6 +689,38 @@ final class StrictSemanticAnalyzer {
             else { /* Control-flow-aware validation owns branch compatibility. */ }
         }
         return result == null ? UNKNOWN : result;
+    }
+
+    private boolean unionType(ParsedModule module, String name) {
+        if (name.isBlank()) return false;
+        var typeName = unqualified(name);
+        if (localUnionType(module, typeName)) return true;
+        for (var declaration : module.imports()) {
+            if (declaration.qualified() || !exposes(declaration, typeName)) continue;
+            var imported = resolveParsed(declaration.modulePath());
+            if (imported != null && localUnionType(imported, typeName)) return true;
+            var linked = resolveLinked(declaration.modulePath());
+            if (linked != null && linkedSchemaValue(linked, "__capy_schema_kind|" + typeName).equals("union")) return true;
+        }
+        return false;
+    }
+
+    private boolean localUnionType(ParsedModule module, String name) {
+        return module != null && module.definitions().stream()
+                .filter(TypeDeclaration.class::isInstance)
+                .map(TypeDeclaration.class::cast)
+                .anyMatch(union -> union.name().equals(name));
+    }
+
+    private String linkedSchemaValue(CompiledModule module, String name) {
+        return module.functions().stream()
+                .filter(function -> function.name().equals(name))
+                .map(function -> function.body())
+                .filter(CompiledExpression.CompiledStringLiteral.class::isInstance)
+                .map(CompiledExpression.CompiledStringLiteral.class::cast)
+                .map(CompiledExpression.CompiledStringLiteral::value)
+                .findFirst()
+                .orElse("");
     }
 
     private Type tryCatchType(ParsedModule module, TryCatchExpression attempt, Type expected, Env env) {
@@ -1151,8 +1187,12 @@ final class StrictSemanticAnalyzer {
 
     private CompiledModule resolveLinked(String path) {
         var normalized = normalize(path);
-        return linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
+        var linked = linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
                 || entry.getKey().endsWith("/" + normalized) || entry.getValue().name().equals(path)).map(Map.Entry::getValue).findFirst().orElse(null);
+        if (linked != null) return linked;
+        return normalized.startsWith("capy/")
+                ? NativeCompilerValidator.bundledModule(normalized).orElse(null)
+                : null;
     }
 
     private void validateTypeArity(ParsedModule module, String name, int arity, SourceLocation location) {
