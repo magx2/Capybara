@@ -12433,7 +12433,7 @@ private fun primitive_backed_backing_type(name: String, module: CompiledModule, 
         case Some { backingType } -> /capy/lang/Option.Some { backingType }
         case None -> match primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
             case Some { backingType } -> /capy/lang/Option.Some { backingType }
-            case None -> primitive_backed_backing_type_in_modules(name, allModules)
+            case None -> primitive_backed_backing_type_in_imported_modules(name, module.imports, 0, module, allModules)
 
 /// Excludes built-in types that can never have primitive-backed schema metadata.
 private fun primitive_backed_lookup_candidate(name: String): bool =
@@ -12489,14 +12489,27 @@ private fun primitive_backed_backing_type_in_import_class(name: String, classNam
     case Some { importedModule } -> primitive_backed_backing_type_in_functions(name, importedModule.functions)
     case None -> /capy/lang/Option.None {}
 
-/// Resolves primitive backing metadata carried transitively by another module's public data schema.
-private fun primitive_backed_backing_type_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
-    match modules[0] with
+/// Resolves unexposed primitive backing metadata from one unambiguous imported module.
+private fun primitive_backed_backing_type_in_imported_modules(name: String, imports: List[CompiledImportDeclaration], idx: int, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
+    match imports[idx] with
     case None -> /capy/lang/Option.None {}
-    case Some { candidate } ->
-        match primitive_backed_backing_type_in_functions(name, candidate.functions) with
-        case Some { backingType } -> /capy/lang/Option.Some { backingType }
-        case None -> primitive_backed_backing_type_in_modules(name, modules[1:])
+    case Some { declaration } ->
+        let candidate = primitive_backed_backing_type_in_import_class(name, imported_module_class(module, declaration.modulePath), allModules)
+        match candidate with
+        case Some { backingType } ->
+            if primitive_backed_type_exists_in_imported_modules(name, imports, idx + 1, module, allModules)
+            then /capy/lang/Option.None {}
+            else /capy/lang/Option.Some { backingType }
+        case None -> primitive_backed_backing_type_in_imported_modules(name, imports, idx + 1, module, allModules)
+
+/// Detects a second imported declaration so an unqualified fallback never depends on module order.
+private fun primitive_backed_type_exists_in_imported_modules(name: String, imports: List[CompiledImportDeclaration], idx: int, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    match imports[idx] with
+    case None -> false
+    case Some { declaration } ->
+        match primitive_backed_backing_type_in_import_class(name, imported_module_class(module, declaration.modulePath), allModules) with
+        case Some { backingType } -> true
+        case None -> primitive_backed_type_exists_in_imported_modules(name, imports, idx + 1, module, allModules)
 
 /// Collects data type parent types for compiler processing.
 private fun data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =

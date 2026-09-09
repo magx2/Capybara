@@ -1887,6 +1887,9 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
     @Test
     void generatesArithmeticForPrimitiveBackedFieldFromImportedDataType() throws Exception {
+        var unrelatedSource = writeSource("paper_soccer/Aliases.cfun", """
+                type field_size -> String
+                """);
         var fieldSource = writeSource("paper_soccer/Fields.cfun", """
                 type field_size -> int
 
@@ -1910,7 +1913,24 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .content()
                 .contains("int half_width =")
                 .doesNotContain("java.lang.Object half_width =");
-        assertJavaCompiles(generatedField, generatedGame);
+        assertJavaCompiles(generatedPath(unrelatedSource), generatedField, generatedGame);
+    }
+
+    @Test
+    void rejectsUnaryArithmeticOnPrimitiveBackedOperatorResult() throws Exception {
+        var source = writeSource("sample/PrimitiveOperatorResult.cfun", """
+                type user_id -> int
+
+                fun user_id.`+`(other: int): String = "not numeric"
+
+                fun broken(value: user_id): int =
+                    let result = value + 1
+                    -result
+                """);
+
+        assertThat(compileGenerateStderr("java"))
+                .contains("Unary operator `-` requires a numeric operand, but received `String`.");
+        assertThat(generatedPath(source)).doesNotExist();
     }
 
     @Test
