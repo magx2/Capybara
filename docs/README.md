@@ -7,6 +7,7 @@ documentation lives in `capy-docs` and should not be edited by hand.
 ## Language Reference
 
 - [Classes, interfaces, and native interoperability](language-reference/classes-and-interfaces.md)
+- [Data values and updates](language-reference/data-values-and-updates.md)
 - [Enums](language-reference/enums.md)
 - [Main functions](language-reference/main-functions.md)
 - [Primitive-backed types](language-reference/primitive-backed-types.md)
