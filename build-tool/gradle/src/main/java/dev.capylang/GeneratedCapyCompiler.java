@@ -117,16 +117,13 @@ final class GeneratedCapyCompiler {
             }
             return 0;
         } catch (RuntimeException exception) {
-            errors.println(rootCauseMessage(exception));
+            writeUnexpectedFailure(exception, errors);
             return 1;
         }
     }
 
-    private static String rootCauseMessage(Throwable throwable) {
-        var current = throwable;
-        while (current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current.getMessage() == null ? current.toString() : current.getMessage();
+    static void writeUnexpectedFailure(RuntimeException exception, PrintStream errors) {
+        errors.println("Capybara compiler failed unexpectedly. This is an internal compiler error.");
+        exception.printStackTrace(errors);
     }
 }
