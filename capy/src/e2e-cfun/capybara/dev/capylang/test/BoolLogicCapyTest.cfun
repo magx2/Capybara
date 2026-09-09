@@ -10,8 +10,10 @@ fun tests(): Effect[TestFile] =
         test("equal_logic compares booleans", () => equal_logic_compares_booleans()),
         test("not_equal_logic compares booleans", () => not_equal_logic_compares_booleans()),
         test("not_logic negates booleans", () => not_logic_negates_booleans()),
+        test("not binds after this field access", () => not_binds_after_this_field_access()),
         test("not_field_access negates data fields", () => not_field_access_negates_data_fields()),
         test("not_method_call negates method results", () => not_method_call_negates_method_results()),
+        test("not binds after field access in lambda", () => not_binds_after_field_access_in_lambda()),
         test("complex_logic combines boolean operators", () => complex_logic_combines_boolean_operators()),
         test("numbers coerce to booleans", () => numbers_coerce_to_booleans()),
         test("strings and collections coerce to booleans", () => strings_and_collections_coerce_to_booleans()),
@@ -57,6 +59,12 @@ fun not_logic_negates_booleans(): Assert =
         assert_that(not_logic(false)).is_true(),
     ])
 
+fun not_binds_after_this_field_access(): Assert =
+    assert_all([
+        assert_that(BoolBox { failed: true }.has_not_failed()).is_false(),
+        assert_that(BoolBox { failed: false }.has_not_failed()).is_true(),
+    ])
+
 fun not_field_access_negates_data_fields(): Assert =
     assert_all([
         assert_that(not_field_access(BoolBox { failed: true })).is_false(),
@@ -67,6 +75,12 @@ fun not_method_call_negates_method_results(): Assert =
     assert_all([
         assert_that(not_method_call(BoolBox { failed: true })).is_false(),
         assert_that(not_method_call(BoolBox { failed: false })).is_true(),
+    ])
+
+fun not_binds_after_field_access_in_lambda(): Assert =
+    assert_all([
+        assert_that(not_field_access_in_lambda(BoolBox { failed: true })()).is_false(),
+        assert_that(not_field_access_in_lambda(BoolBox { failed: false })()).is_true(),
     ])
 
 fun complex_logic_combines_boolean_operators(): Assert =
