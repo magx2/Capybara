@@ -2,3 +2,8 @@ fun invalid(): int =
     fun x(left: int, right: int): int = left + right
     ---
     x(1)
+
+fun invalid_double_underscore(): int =
+    fun collect__values(left: int, right: int): int = left + right
+    ---
+    collect__values(1)
