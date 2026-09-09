@@ -12433,7 +12433,7 @@ private fun primitive_backed_backing_type(name: String, module: CompiledModule, 
         case Some { backingType } -> /capy/lang/Option.Some { backingType }
         case None -> match primitive_backed_backing_type_in_imports(name, module.imports, module, allModules) with
             case Some { backingType } -> /capy/lang/Option.Some { backingType }
-            case None -> /capy/lang/Option.None {}
+            case None -> primitive_backed_backing_type_in_modules(name, allModules)
 
 /// Excludes built-in types that can never have primitive-backed schema metadata.
 private fun primitive_backed_lookup_candidate(name: String): bool =
@@ -12488,6 +12488,15 @@ private fun primitive_backed_backing_type_in_import_class(name: String, classNam
     match find_module_by_class(className, allModules) with
     case Some { importedModule } -> primitive_backed_backing_type_in_functions(name, importedModule.functions)
     case None -> /capy/lang/Option.None {}
+
+/// Resolves primitive backing metadata carried transitively by another module's public data schema.
+private fun primitive_backed_backing_type_in_modules(name: String, modules: List[CompiledModule]): /capy/lang/Option[CompiledTypeReference] =
+    match modules[0] with
+    case None -> /capy/lang/Option.None {}
+    case Some { candidate } ->
+        match primitive_backed_backing_type_in_functions(name, candidate.functions) with
+        case Some { backingType } -> /capy/lang/Option.Some { backingType }
+        case None -> primitive_backed_backing_type_in_modules(name, modules[1:])
 
 /// Collects data type parent types for compiler processing.
 private fun data_type_parent_types(name: String, module: CompiledModule, allModules: List[CompiledModule]): List[String] =

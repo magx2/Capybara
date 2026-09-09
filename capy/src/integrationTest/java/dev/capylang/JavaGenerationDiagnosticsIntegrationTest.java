@@ -1886,6 +1886,34 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void generatesArithmeticForPrimitiveBackedFieldFromImportedDataType() throws Exception {
+        var fieldSource = writeSource("paper_soccer/Fields.cfun", """
+                type field_size -> int
+
+                data Field { width: field_size }
+                """);
+        var gameSource = writeSource("paper_soccer/Games.cfun", """
+                from /paper_soccer/Fields import { Field }
+
+                fun half_width(field: Field): int = field.width / 2
+
+                fun negative_half_width(field: Field): int =
+                    let half_width = field.width / 2
+                    -half_width
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generatedField = generatedPath(fieldSource);
+        var generatedGame = generatedPath(gameSource);
+        assertThat(generatedGame)
+                .content()
+                .contains("int half_width =")
+                .doesNotContain("java.lang.Object half_width =");
+        assertJavaCompiles(generatedField, generatedGame);
+    }
+
+    @Test
     void generatesImportedPrimitiveBackedConstructor() throws Exception {
         var importedSource = writeSource("sample/Digit.cfun", """
                 from /capy/lang/Result import { Success }
