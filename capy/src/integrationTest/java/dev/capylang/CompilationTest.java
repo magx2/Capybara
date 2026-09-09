@@ -1507,7 +1507,68 @@ class CompilationTest {
         assertThat(result).isInstanceOf(Either.Right.class);
         var errors = (List<?>) ((Either.Right<?, ?>) result).value();
         assertThat(errors.toString())
-                .contains("Binding `strings` has type `List[Result[T]]`, but declares `List[String]`.");
+                .contains("Binding `strings` has type `List[Result[String]]`, but `List[String]` is required.");
+    }
+
+    @Test
+    void shouldRejectMethodCallResultAssignedToIncompatibleBindingType() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Games", "paper_soccer", """
+                        data Game { moves: List[Point] }
+                        data Point { x: int }
+                        data Position { point: Point }
+                        enum Move { LEFT, RIGHT }
+
+                        fun Game.ball_position(): Point = this.moves[-1].or_else(Point { x: 0 })
+
+                        fun Point.move(move: Move): Point =
+                            if move == Move.LEFT
+                            then Point { x: this.x - 1 }
+                            else Point { x: this.x + 1 }
+
+                        fun Game.move(move: Move): Point =
+                            let next_ball_position: Position = this.ball_position().move(move)
+                            next_ball_position.point
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Binding `next_ball_position` has type `Point`, but `Position` is required.");
+    }
+
+    @Test
+    void shouldRejectOtherInferredExpressionsAssignedToIncompatibleBindingTypes() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Bindings", "", """
+                        data Point { x: int }
+
+                        fun point(): Point = Point { x: 1 }
+
+                        fun invalid_function_call(): String =
+                            let value: String = point()
+                            value
+
+                        fun invalid_data_literal(): String =
+                            let value: String = Point { x: 1 }
+                            value
+
+                        fun invalid_collection(): Set[int] =
+                            let value: Set[int] = [1]
+                            value
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Binding `value` has type `Point`, but `String` is required.")
+                .contains("Binding `value` has type `List[int]`, but `Set[int]` is required.");
     }
 
     @Test

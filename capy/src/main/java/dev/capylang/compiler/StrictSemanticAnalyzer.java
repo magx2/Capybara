@@ -615,11 +615,40 @@ final class StrictSemanticAnalyzer {
                     actual = actual.arguments.getLast();
                 }
             }
-            if (declared != null && directlyCheckable(binding.value())) requireAssignable(module, binding.location(), "ASSIGNMENT_TYPE", actual, declared,
-                    "Binding `" + binding.name() + "`");
+            if (declared != null) requireBindingAssignable(module, binding, actual, declared);
             env.values.put(binding.name(), declared == null ? actual : declared);
         }
         return infer(module, block.result(), expected, env);
+    }
+
+    private void requireBindingAssignable(ParsedModule module, Expression.LetBinding binding, Type actual, Type expected) {
+        if (assignable(module, actual, expected)) return;
+        if (distinctSequenceListMismatch(actual, expected)) {
+            report(module, binding.location(), "ASSIGNMENT_TYPE",
+                    "Binding `" + binding.name() + "` has type `" + actual + "`, but declares `" + expected
+                            + "`; use an explicit `to_seq` or `as_list` conversion.");
+            return;
+        }
+        requireAssignable(module, binding.location(), "ASSIGNMENT_TYPE", actual, expected,
+                "Binding `" + binding.name() + "`");
+    }
+
+    private boolean distinctSequenceListMismatch(Type actual, Type expected) {
+        var actualName = unqualified(actual.name);
+        var expectedName = unqualified(expected.name);
+        if ((actualName.equals("Seq") && expectedName.equals("List"))
+                || (actualName.equals("List") && expectedName.equals("Seq"))) {
+            return true;
+        }
+        if (!actualName.equals(expectedName) || actual.arguments.size() != expected.arguments.size()) {
+            return false;
+        }
+        for (var index = 0; index < actual.arguments.size(); index++) {
+            if (distinctSequenceListMismatch(actual.arguments.get(index), expected.arguments.get(index))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Type lambdaType(ParsedModule module, LambdaExpression lambda, Type expected, Env outer) {
