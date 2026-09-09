@@ -1362,8 +1362,12 @@ final class StrictSemanticAnalyzer {
     }
 
     private List<FunctionSig> deduplicate(List<FunctionSig> values) {
-        var keys = new LinkedHashSet<String>();
-        return values.stream().filter(value -> keys.add(value.name + value.parameters + value.result)).toList();
+        var signatures = new LinkedHashMap<String, FunctionSig>();
+        for (var value : values) {
+            var key = value.name + value.parameters + value.result;
+            signatures.merge(key, value, (existing, candidate) -> candidate.objectMethod ? candidate : existing);
+        }
+        return List.copyOf(signatures.values());
     }
 
     private void collectFunctions(ParsedModule module, String name, List<FunctionSig> target) {
