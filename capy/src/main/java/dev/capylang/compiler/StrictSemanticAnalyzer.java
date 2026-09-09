@@ -566,7 +566,13 @@ final class StrictSemanticAnalyzer {
         var left = infer(module, binary.left(), null, env);
         var right = infer(module, binary.right(), left, env);
         var overloaded = overloadedBinaryType(module, binary, left, env);
-        if (overloaded != null) return overloaded;
+        if (overloaded != null) {
+            if (binary.operator().equals("+") && overloaded == UNKNOWN) {
+                validateListAddition(module, binary.location(), left, right);
+            }
+            return overloaded;
+        }
+        if (binary.operator().equals("+")) validateListAddition(module, binary.location(), left, right);
         var effectiveLeft = primitiveBackedEffectiveType(module, left);
         var effectiveRight = primitiveBackedEffectiveType(module, right);
         if (COMPARISON.contains(binary.operator())) {
@@ -597,6 +603,23 @@ final class StrictSemanticAnalyzer {
                     : expected == null ? UNKNOWN : expected;
         }
         return expected == null ? UNKNOWN : expected;
+    }
+
+    private void validateListAddition(
+            ParsedModule module,
+            SourceLocation location,
+            Type left,
+            Type right
+    ) {
+        if (!unqualified(left.name).equals("List") || left.arguments.size() != 1) {
+            return;
+        }
+        var element = left.arguments.getFirst();
+        if (assignable(module, right, element) || assignable(module, right, left)) return;
+        report(module, location, "OPERATOR_TYPE",
+                "Operator `+` on `" + left + "` requires another `" + left
+                        + "` or a compatible `" + element + "` element, but the right operand has type `"
+                        + right + "`.");
     }
 
     private Type overloadedBinaryType(ParsedModule module, BinaryExpression binary, Type receiver, Env env) {
