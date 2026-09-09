@@ -1,0 +1,21 @@
+union Effect[T] = UnsafeEffect[T]
+data UnsafeEffect[T] { thunk: () => T }
+
+fun Effect[T].flat_map(mapper: T => Effect[Y]): Effect[Y] = <native>
+
+union Seq[T] = Cons[T] | End
+data Cons[T] { value: T, rest: () => Seq[T] }
+data End {}
+
+data Game {}
+enum State { IN_PROGRESS, DONE }
+
+fun loop(state: State, effect: Effect[Game]): Effect[Seq[Game]] =
+    effect.flat_map(game =>
+        match state with
+        case IN_PROGRESS -> loop(DONE, effect)
+        case DONE ->
+            Cons {
+                value: game,
+                rest: () => End {},
+            })

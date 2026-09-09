@@ -394,6 +394,9 @@ final class StrictSemanticAnalyzer {
             }
             var substitutions = new HashMap<String, Type>();
             bind(chosen.owner, receiver, substitutions);
+            if (expected != null) {
+                bind(chosen.result, expected, substitutions);
+            }
             inferMethodSubstitutions(module, chosen, call.arguments(), env, substitutions);
             var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
             checkArguments(module, call.name(), call.arguments(), parameters, env, call.location());
@@ -660,6 +663,7 @@ final class StrictSemanticAnalyzer {
 
     private Type blockType(ParsedModule module, BlockExpression block, Type expected, Env outer) {
         var env = outer.copy();
+        var hasEffectBinding = false;
         for (var binding : block.bindings()) {
             var declared = binding.typeReference().name().isBlank() ? null : type(binding.typeReference());
             // A `<-` annotation describes the unwrapped local value, not the wrapper expression.
@@ -678,13 +682,21 @@ final class StrictSemanticAnalyzer {
                     }
                     actual = ERROR;
                 } else if (!dynamic(actual)) {
+                    hasEffectBinding |= unqualified(actual.name).equals("Effect");
                     actual = actual.arguments.getLast();
                 }
             }
             if (declared != null) requireBindingAssignable(module, binding, actual, declared);
             env.values.put(binding.name(), declared == null ? actual : declared);
         }
-        return infer(module, block.result(), expected, env);
+        var resultExpected = hasEffectBinding
+                && expected != null
+                && unqualified(expected.name).equals("Effect")
+                && expected.arguments.size() == 1
+                ? expected.arguments.getFirst()
+                : expected;
+        var result = infer(module, block.result(), resultExpected, env);
+        return hasEffectBinding ? wrapperType("Effect", result) : result;
     }
 
     private Type monadicExpressionType(
@@ -883,7 +895,10 @@ final class StrictSemanticAnalyzer {
             if (branch.hasGuard()) requireAssignable(module, branch.location(), "CONDITION_TYPE",
                     infer(module, branch.guard(), BOOL, branchEnv), BOOL, "Match guard");
             var branchType = infer(module, branch.body(), expected, branchEnv);
-            if (result == null) result = branchType;
+            if (expected != null) {
+                requireAssignable(module, location(branch.body()), "ASSIGNMENT_TYPE",
+                        branchType, expected, "Match branch");
+            } else if (result == null) result = branchType;
             else { /* Control-flow-aware validation owns branch compatibility. */ }
         }
         return result == null ? UNKNOWN : result;

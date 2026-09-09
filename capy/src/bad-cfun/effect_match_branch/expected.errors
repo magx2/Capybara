@@ -1,0 +1,1 @@
+ASSIGNMENT_TYPE|Main.cfun|18|12|Match branch has type `Cons`, but `Effect[Seq[Game]]` is required.
