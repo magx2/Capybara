@@ -1572,6 +1572,47 @@ class CompilationTest {
     }
 
     @Test
+    void shouldAllowTypedBindingUpcastsAcrossObjectParentsAndModuleFragments() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("Models", "sample", """
+                                union Pet = Dog
+                                data Dog {}
+                                """),
+                        rawModule("Models", "sample", """
+                                from Models import { Pet, Dog }
+
+                                interface Root {}
+                                interface Child: Root {}
+                                open class Base {}
+
+                                class Implementation: Base, Child {
+                                    def as_base(): Base {
+                                        let value: Base = this
+                                        return value
+                                    }
+
+                                    def as_root(): Root {
+                                        let value: Root = this
+                                        return value
+                                    }
+
+                                    def as_pet(): Pet {
+                                        let value: Pet = Dog {}
+                                        return value
+                                    }
+                                }
+                                """, SourceKind.OBJECT_ORIENTED)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Left.class);
+    }
+
+    @Test
     void shouldRejectNonCallableDataFieldDuringCompilation() {
         var result = CapybaraCompiler.compile(
                 List.of(rawModule("Main", "", """
