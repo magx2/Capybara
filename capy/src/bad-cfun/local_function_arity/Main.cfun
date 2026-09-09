@@ -1,0 +1,4 @@
+fun invalid(): int =
+    fun x(left: int, right: int): int = left + right
+    ---
+    x(1)
