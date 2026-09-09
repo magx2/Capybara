@@ -320,9 +320,15 @@ class CompilationTest {
 
                         fun append(points: List[Point], point: Point): List[Point] = points + point
                         fun concatenate(points: List[Point], other: List[Point]): List[Point] = points + other
+                        fun make(values: List[int]): Foo = Foo { foo: "int" }
+                        fun make(values: List[long]): Foo = Foo { foo: "long" }
+                        fun ints(): List[int] = [1]
 
                         fun invalid(points: List[Point]): List[Point] =
                             points + Foo { foo: "not a point" }
+
+                        fun invalid_overloaded_call(points: List[Point]): List[Point] =
+                            points + make(ints())
                         """)),
                 new LinkedHashSet<>(),
                 emptyNativeProviders(),
@@ -331,7 +337,7 @@ class CompilationTest {
 
         assertThat(result).isInstanceOf(Either.Right.class);
         var errors = (List<?>) ((Either.Right<?, ?>) result).value();
-        assertThat(errors).hasSize(1);
+        assertThat(errors).hasSize(2);
         assertThat(errors.toString())
                 .contains("Operator `+` on `List[Point]` requires another `List[Point]` or a compatible `Point` element, "
                         + "but the right operand has type `Foo`.");

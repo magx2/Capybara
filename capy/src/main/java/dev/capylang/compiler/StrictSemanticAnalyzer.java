@@ -341,7 +341,7 @@ final class StrictSemanticAnalyzer {
         if (arity.isEmpty()) return ERROR; // Existing arity validation owns the diagnostic.
         var chosen = bestCandidate(module, arity, call.arguments(), env);
         if (chosen == null) {
-            return UNKNOWN; // The established overload resolver has richer import information.
+            return commonCandidateResult(module, arity, call.arguments(), env);
         }
         var substitutions = inferSubstitutions(module, chosen, call.arguments(), env);
         var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
@@ -849,7 +849,17 @@ final class StrictSemanticAnalyzer {
     }
 
     private FunctionSig bestCandidate(ParsedModule module, List<FunctionSig> candidates, List<Expression> arguments, Env env) {
-        var compatible = candidates.stream().filter(candidate -> {
+        var compatible = compatibleCandidates(module, candidates, arguments, env);
+        return compatible.size() == 1 ? compatible.getFirst() : candidates.size() == 1 ? candidates.getFirst() : null;
+    }
+
+    private List<FunctionSig> compatibleCandidates(
+            ParsedModule module,
+            List<FunctionSig> candidates,
+            List<Expression> arguments,
+            Env env
+    ) {
+        return candidates.stream().filter(candidate -> {
             var substitutions = inferSubstitutions(module, candidate, arguments, env);
             for (var index = 0; index < arguments.size(); index++) {
                 var actual = probe(module, arguments.get(index), env);
@@ -857,7 +867,24 @@ final class StrictSemanticAnalyzer {
             }
             return true;
         }).toList();
-        return compatible.size() == 1 ? compatible.getFirst() : candidates.size() == 1 ? candidates.getFirst() : null;
+    }
+
+    private Type commonCandidateResult(
+            ParsedModule module,
+            List<FunctionSig> candidates,
+            List<Expression> arguments,
+            Env env
+    ) {
+        var compatible = compatibleCandidates(module, candidates, arguments, env);
+        if (compatible.isEmpty()) return UNKNOWN;
+        var first = compatible.getFirst();
+        var result = substitute(first.result, inferSubstitutions(module, first, arguments, env));
+        for (var index = 1; index < compatible.size(); index++) {
+            var candidate = compatible.get(index);
+            var candidateResult = substitute(candidate.result, inferSubstitutions(module, candidate, arguments, env));
+            if (!candidateResult.equals(result)) return UNKNOWN;
+        }
+        return result;
     }
 
     private FunctionSig bestMethodCandidate(
