@@ -723,15 +723,38 @@ final class StrictSemanticAnalyzer {
     private boolean unionType(ParsedModule module, String name) {
         if (name.isBlank()) return false;
         var typeName = unqualified(name);
-        if (localUnionType(module, typeName)) return true;
-        for (var declaration : module.imports()) {
+        var fragments = moduleFragments(module);
+        if (fragments.stream().anyMatch(fragment -> localNominalType(fragment, typeName))) {
+            return fragments.stream().anyMatch(fragment -> localUnionType(fragment, typeName));
+        }
+        for (var declaration : fragments.stream().flatMap(fragment -> fragment.imports().stream()).toList()) {
             if (declaration.qualified() || !exposes(declaration, typeName)) continue;
             var imported = resolveParsed(declaration.modulePath());
-            if (imported != null && localUnionType(imported, typeName)) return true;
+            if (imported != null && moduleFragments(imported).stream()
+                    .anyMatch(fragment -> localUnionType(fragment, typeName))) return true;
             var linked = resolveLinked(declaration.modulePath());
+            if (linked == null && normalize(declaration.modulePath()).startsWith("capy/")) {
+                linked = NativeCompilerValidator.bundledModule(normalize(declaration.modulePath())).orElse(null);
+            }
             if (linked != null && linkedSchemaValue(linked, "__capy_schema_kind|" + typeName).equals("union")) return true;
         }
         return false;
+    }
+
+    private List<ParsedModule> moduleFragments(ParsedModule module) {
+        var path = modulePath(module);
+        return modules.stream().filter(candidate -> modulePath(candidate).equals(path)).toList();
+    }
+
+    private boolean localNominalType(ParsedModule module, String name) {
+        return module.definitions().stream().anyMatch(definition -> switch (definition) {
+            case DataDeclaration data -> data.name().equals(name);
+            case TypeDeclaration union -> union.name().equals(name);
+            case EnumDeclaration enumeration -> enumeration.name().equals(name);
+            case Definition.PrimitiveBackedTypeDeclaration primitive -> primitive.name().equals(name);
+            default -> false;
+        }) || module.objectOriented().classes().stream().anyMatch(value -> value.name().equals(name))
+                || module.objectOriented().interfaces().stream().anyMatch(value -> value.name().equals(name));
     }
 
     private boolean localUnionType(ParsedModule module, String name) {
@@ -1234,12 +1257,8 @@ final class StrictSemanticAnalyzer {
 
     private CompiledModule resolveLinked(String path) {
         var normalized = normalize(path);
-        var linked = linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
+        return linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
                 || entry.getKey().endsWith("/" + normalized) || entry.getValue().name().equals(path)).map(Map.Entry::getValue).findFirst().orElse(null);
-        if (linked != null) return linked;
-        return normalized.startsWith("capy/")
-                ? NativeCompilerValidator.bundledModule(normalized).orElse(null)
-                : null;
     }
 
     private void validateTypeArity(ParsedModule module, String name, int arity, SourceLocation location) {
