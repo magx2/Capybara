@@ -565,6 +565,8 @@ final class StrictSemanticAnalyzer {
         }
         var left = infer(module, binary.left(), null, env);
         var right = infer(module, binary.right(), left, env);
+        var effectiveLeft = primitiveBackedEffectiveType(left);
+        var effectiveRight = primitiveBackedEffectiveType(right);
         if (COMPARISON.contains(binary.operator())) {
             if (!comparable(left, right)) report(module, binary.location(), "OPERATOR_TYPE",
                     "Operator `" + binary.operator() + "` cannot compare `" + left + "` with `" + right + "`.");
@@ -581,13 +583,16 @@ final class StrictSemanticAnalyzer {
         }
         if (binary.operator().equals("-") && Set.of("List", "Set", "Dict").contains(left.name)) return left;
         if (binary.operator().equals("+") || NUMERIC_OPERATORS.contains(binary.operator())) {
-            if (!dynamic(left) && !dynamic(right) && (!numeric(left) || !numeric(right))
-                    && scalarPrimitive(left) && scalarPrimitive(right)) {
+            if (!dynamic(effectiveLeft) && !dynamic(effectiveRight)
+                    && (!numeric(effectiveLeft) || !numeric(effectiveRight))
+                    && scalarPrimitive(effectiveLeft) && scalarPrimitive(effectiveRight)) {
                 report(module, binary.location(), "OPERATOR_TYPE",
                         "Operator `" + binary.operator() + "` requires numeric operands, but received `" + left + "` and `" + right + "`.");
                 return ERROR;
             }
-            return numeric(left) && numeric(right) ? wider(left, right) : expected == null ? UNKNOWN : expected;
+            return numeric(effectiveLeft) && numeric(effectiveRight)
+                    ? wider(effectiveLeft, effectiveRight)
+                    : expected == null ? UNKNOWN : expected;
         }
         return expected == null ? UNKNOWN : expected;
     }
@@ -598,9 +603,10 @@ final class StrictSemanticAnalyzer {
             requireAssignable(module, unary.location(), "OPERATOR_TYPE", operand, BOOL, "Unary `!` operand");
             return BOOL;
         }
-        if (!numeric(operand)) report(module, unary.location(), "OPERATOR_TYPE",
+        var effectiveOperand = primitiveBackedEffectiveType(operand);
+        if (!numeric(effectiveOperand)) report(module, unary.location(), "OPERATOR_TYPE",
                 "Unary operator `" + unary.operator() + "` requires a numeric operand, but received `" + operand + "`.");
-        return operand;
+        return effectiveOperand;
     }
 
     private Type blockType(ParsedModule module, BlockExpression block, Type expected, Env outer) {
@@ -1117,6 +1123,26 @@ final class StrictSemanticAnalyzer {
 
     private boolean primitiveBacked(ParsedModule module, String name) {
         return primitiveBacked(module, unqualified(name), new HashSet<>());
+    }
+
+    private Type primitiveBackedEffectiveType(Type type) {
+        if (type == null || numeric(type)) return type;
+        var nominal = unqualified(type.name);
+        for (var candidate : modules) {
+            var backingType = candidate.definitions().stream()
+                    .filter(Definition.PrimitiveBackedTypeDeclaration.class::isInstance)
+                    .map(Definition.PrimitiveBackedTypeDeclaration.class::cast)
+                    .filter(declaration -> declaration.name().equals(nominal))
+                    .map(Definition.PrimitiveBackedTypeDeclaration::backingType)
+                    .findFirst()
+                    .orElse(null);
+            if (backingType != null) return type(backingType);
+        }
+        for (var candidate : linkedModules) {
+            var primitive = candidate.visiblePrimitiveBackedTypes().get(nominal);
+            if (primitive != null) return type(primitive.backingType());
+        }
+        return type;
     }
 
     private boolean primitiveBacked(ParsedModule module, String nominal, Set<String> visited) {
