@@ -345,7 +345,7 @@ final class StrictSemanticAnalyzer {
         }
         var substitutions = inferSubstitutions(module, chosen, call.arguments(), env);
         var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
-        checkArguments(module, call.name(), call.arguments(), parameters, env, call.location());
+        checkArguments(module, displayName(call.name()), call.arguments(), parameters, env, call.location());
         return substitute(chosen.result, substitutions);
     }
 
@@ -1402,7 +1402,8 @@ final class StrictSemanticAnalyzer {
     private static Type function(List<Type> parameters, Type result) { return new Type("function", List.of(), List.copyOf(parameters), result); }
     private static boolean directlyCheckable(Expression expression) {
         return expression instanceof BoolLiteral || expression instanceof IntLiteral || expression instanceof LongLiteral
-                || expression instanceof FloatLiteral || expression instanceof DoubleLiteral || expression instanceof StringLiteral;
+                || expression instanceof FloatLiteral || expression instanceof DoubleLiteral || expression instanceof StringLiteral
+                || expression instanceof SetLiteral;
     }
     private static boolean scalarPrimitive(Type type) {
         return type != null && (numeric(type) || Set.of("String", "bool", "char").contains(unqualified(type.name)));

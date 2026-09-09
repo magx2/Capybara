@@ -1,0 +1,4 @@
+private fun invalid(): Dict[int] =
+    fun collect(values: Dict[int]): Dict[int] = values
+    ---
+    collect({})
