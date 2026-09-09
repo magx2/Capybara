@@ -677,6 +677,51 @@ class CompilationTest {
     }
 
     @Test
+    void shouldRejectUnionConstructorPatternAcrossSameModuleFragments() {
+        var result = CapybaraCompiler.compile(
+                List.of(
+                        rawModule("SharedInterop", "/sample", """
+                                union SharedPet = SharedDog
+                                data SharedDog { name: String }
+                                """),
+                        rawModule("SharedInterop", "/sample", """
+                                class PetMatcher {
+                                    def invalid(pet: SharedPet): String =
+                                        match pet with
+                                        case SharedPet { name } -> name
+                                }
+                                """, SourceKind.OBJECT_ORIENTED)
+                ),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Union type `SharedPet` cannot be used as a constructor pattern; match one of its variants instead.");
+    }
+
+    @Test
+    void shouldPreferLocalDataConstructorPatternOverImportedUnion() {
+        compileProgram(List.of(
+                rawModule("Types", "/library", """
+                        union Choice = ImportedChoice
+                        data ImportedChoice {}
+                        """),
+                rawModule("Main", "/sample", """
+                        from /library/Types import { * }
+
+                        data Choice { value: int }
+
+                        fun value(choice: Choice): int =
+                            match choice with
+                            case Choice { value } -> value
+                        """)
+        ));
+    }
+
+    @Test
     void shouldPropagateGenericTypesAcrossLocallyDeclaredExtensionMethods() {
         compileProgram(List.of(rawModule("GenericExtensionChain", "", """
                 data Box[T] { value: T }
