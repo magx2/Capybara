@@ -10,3 +10,10 @@ fun invalid(choice: Choice): Result[Point] =
         case Choice.VALUE -> Point { x: 1 }
         case Choice.FAILURE -> error_kind("failed", "No point")
     Success { point }
+
+fun invalid_reversed(choice: Choice): Result[Point] =
+    let point: Point <-
+        match choice with
+        case Choice.FAILURE -> error_kind("failed", "No point")
+        case Choice.VALUE -> Point { x: 1 }
+    Success { point }

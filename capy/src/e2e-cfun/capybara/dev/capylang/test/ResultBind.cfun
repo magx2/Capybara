@@ -1,4 +1,5 @@
 from /capy/lang/Result import { * }
+from /capy/lang/Option import { Option, None }
 from /capy/lang/String import { * }
 
 data User { name: String } with constructor {
@@ -24,3 +25,11 @@ fun users_with_regular_let(name1: String, name2: String): Result[String] =
 
 fun first_error_message(name1: String, name2: String): String =
     users_with_regular_let(name1, name2).reduce_left(value => value, error => error.message)
+
+fun direct_error_bind(): Result[String] =
+    let value: String <- Error { "direct error" }
+    value
+
+fun direct_none_bind(): Option[String] =
+    let value: String <- None {}
+    value

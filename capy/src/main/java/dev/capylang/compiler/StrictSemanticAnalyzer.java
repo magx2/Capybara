@@ -470,12 +470,11 @@ final class StrictSemanticAnalyzer {
             literal.fields().forEach(field -> infer(module, field.value(), null, env));
             return expected;
         }
-        var implicitWrapper = implicitDataLiteralWrapperType(module, literal, result, env);
         var promotedResult = expected != null && subtype(module, result.name, expected.name) ? expected : result;
         var fields = dataFields(module, result.name);
         if (fields.isEmpty()) {
             literal.fields().forEach(field -> infer(module, field.value(), null, env));
-            return expected == null && implicitWrapper != null ? implicitWrapper : promotedResult;
+            return promotedResult;
         }
         var seen = new HashSet<String>();
         var positional = 0;
@@ -505,24 +504,7 @@ final class StrictSemanticAnalyzer {
             fields.stream().filter(field -> !seen.contains(field.name())).forEach(field -> report(module, literal.location(),
                     "CONSTRUCTOR_FIELD", "Data `" + result.name + "` requires field `" + field.name() + "`."));
         }
-        return expected == null && implicitWrapper != null ? implicitWrapper : promotedResult;
-    }
-
-    private Type implicitDataLiteralWrapperType(
-            ParsedModule module,
-            DataLiteral literal,
-            Type result,
-            Env env
-    ) {
-        if (hasConstructor(module, result.name)) {
-            return new Type("Result", List.of(result), List.of(), null);
-        }
-        var name = unqualified(result.name);
-        if (literal.fields().isEmpty() || !Set.of("Success", "Some").contains(name)) {
-            return null;
-        }
-        var payload = probe(module, literal.fields().getFirst().value(), null, env);
-        return new Type(name.equals("Success") ? "Result" : "Option", List.of(payload), List.of(), null);
+        return promotedResult;
     }
 
     private Type collectionType(ParsedModule module, String name, List<Expression> values, SourceLocation location, Type expected, Env env) {
@@ -651,15 +633,18 @@ final class StrictSemanticAnalyzer {
             // Inferring the expression against that payload type can hide an invalid bare value,
             // especially when a match also has an Error branch.
             var actual = infer(module, binding.value(), binding.operator().equals("<-") ? null : declared, env);
-            if (binding.operator().equals("<-") && !dynamic(actual)) {
-                if (!Set.of("Effect", "Result", "Option", "Either").contains(actual.name) || actual.arguments.isEmpty()) {
+            if (binding.operator().equals("<-")) {
+                actual = monadicExpressionType(module, binding.value(), declared, env, actual);
+                if (!dynamic(actual)
+                        && (!Set.of("Effect", "Result", "Option", "Either").contains(actual.name)
+                        || actual.arguments.isEmpty())) {
                     if (actual != ERROR) {
                         report(module, binding.location(), "ASSIGNMENT_TYPE",
                                 "Binding `" + binding.name() + "` uses `<-`, but its value has type `" + actual
                                         + "`; expected Effect, Result, Option, or Either.");
                     }
                     actual = ERROR;
-                } else {
+                } else if (!dynamic(actual)) {
                     actual = actual.arguments.getLast();
                 }
             }
@@ -667,6 +652,109 @@ final class StrictSemanticAnalyzer {
             env.values.put(binding.name(), declared == null ? actual : declared);
         }
         return infer(module, block.result(), expected, env);
+    }
+
+    private Type monadicExpressionType(
+            ParsedModule module,
+            Expression expression,
+            Type payload,
+            Env env,
+            Type inferred
+    ) {
+        return switch (expression) {
+            case DataLiteral literal -> monadicDataLiteralType(module, literal, payload, env, inferred);
+            case IfExpression conditional -> mergeMonadicTypes(
+                    module,
+                    "If branch",
+                    location(conditional.elseBranch()),
+                    monadicExpressionType(module, conditional.thenBranch(), payload, env.copy(),
+                            probe(module, conditional.thenBranch(), null, env)),
+                    monadicExpressionType(module, conditional.elseBranch(), payload, env.copy(),
+                            probe(module, conditional.elseBranch(), null, env))
+            );
+            case MatchExpression match -> monadicMatchType(module, match, payload, env);
+            case FunctionCallExpression call -> monadicFunctionCallType(call, payload, inferred);
+            default -> monadicFailureVariantType(inferred, payload);
+        };
+    }
+
+    private Type monadicFunctionCallType(FunctionCallExpression call, Type payload, Type inferred) {
+        if (Set.of("error", "error_kind", "error_with", "error_at", "error_full")
+                .contains(unqualified(call.name()))) {
+            return wrapperType("Result", payload);
+        }
+        return monadicFailureVariantType(inferred, payload);
+    }
+
+    private Type monadicDataLiteralType(
+            ParsedModule module,
+            DataLiteral literal,
+            Type payload,
+            Env env,
+            Type inferred
+    ) {
+        var name = unqualified(stripRaw(literal.typeName()));
+        if (name.equals("Error")) return wrapperType("Result", payload);
+        if (name.equals("None")) return wrapperType("Option", payload);
+        if (Set.of("Success", "Some").contains(name) && !literal.fields().isEmpty()) {
+            var valueType = probe(module, literal.fields().getFirst().value(), null, env);
+            return wrapperType(name.equals("Success") ? "Result" : "Option", valueType);
+        }
+        if (constructorPipelineReturnsResult(module, name)) {
+            return wrapperType("Result", simple(name));
+        }
+        return inferred;
+    }
+
+    private Type monadicMatchType(ParsedModule module, MatchExpression match, Type payload, Env env) {
+        Type result = null;
+        for (var branch : match.cases()) {
+            var branchEnv = env.copy();
+            branch.bindings().stream().filter(name -> !name.equals("_"))
+                    .forEach(name -> branchEnv.values.put(name, ANY));
+            var inferred = probe(module, branch.body(), null, branchEnv);
+            var branchType = monadicExpressionType(module, branch.body(), payload, branchEnv, inferred);
+            result = result == null
+                    ? branchType
+                    : mergeMonadicTypes(module, "Match branch", location(branch.body()), result, branchType);
+        }
+        return result == null ? UNKNOWN : result;
+    }
+
+    private Type mergeMonadicTypes(
+            ParsedModule module,
+            String subject,
+            SourceLocation location,
+            Type first,
+            Type second
+    ) {
+        if (first == ERROR || second == ERROR) return ERROR;
+        var wrappers = Set.of("Effect", "Result", "Option", "Either");
+        var firstIsWrapper = wrappers.contains(unqualified(first.name));
+        var secondIsWrapper = wrappers.contains(unqualified(second.name));
+        if (firstIsWrapper != secondIsWrapper
+                || (firstIsWrapper && !unqualified(first.name).equals(unqualified(second.name)))) {
+            report(module, location, "ASSIGNMENT_TYPE",
+                    subject + " has type `" + second + "`, but `" + first + "` is required.");
+            return ERROR;
+        }
+        if (assignable(module, second, first)) return first;
+        if (assignable(module, first, second)) return second;
+        report(module, location, "ASSIGNMENT_TYPE",
+                subject + " has type `" + second + "`, but `" + first + "` is required.");
+        return ERROR;
+    }
+
+    private Type monadicFailureVariantType(Type inferred, Type payload) {
+        return switch (unqualified(inferred.name)) {
+            case "Error" -> wrapperType("Result", payload);
+            case "None" -> wrapperType("Option", payload);
+            default -> inferred;
+        };
+    }
+
+    private Type wrapperType(String name, Type payload) {
+        return new Type(name, List.of(payload == null ? UNKNOWN : payload), List.of(), null);
     }
 
     private void requireBindingAssignable(ParsedModule module, Expression.LetBinding binding, Type actual, Type expected) {
@@ -761,7 +849,7 @@ final class StrictSemanticAnalyzer {
             branch.bindings().stream().filter(name -> !name.equals("_")).forEach(name -> branchEnv.values.put(name, ANY));
             if (branch.hasGuard()) requireAssignable(module, branch.location(), "CONDITION_TYPE",
                     infer(module, branch.guard(), BOOL, branchEnv), BOOL, "Match guard");
-            var branchType = infer(module, branch.body(), result, branchEnv);
+            var branchType = infer(module, branch.body(), expected, branchEnv);
             if (result == null) result = branchType;
             else { /* Control-flow-aware validation owns branch compatibility. */ }
         }
@@ -805,33 +893,98 @@ final class StrictSemanticAnalyzer {
                 || module.objectOriented().interfaces().stream().anyMatch(value -> value.name().equals(name));
     }
 
-    private boolean hasConstructor(ParsedModule module, String name) {
-        var constructorName = "__capy_constructor|" + unqualified(name);
-        if (moduleFragments(module).stream().anyMatch(fragment -> fragment.definitions().stream()
-                .anyMatch(definition -> definition instanceof FunctionDefinition function
-                        && function.function().name().equals(constructorName)))) {
-            return true;
-        }
-        for (var declaration : moduleFragments(module).stream()
-                .flatMap(fragment -> fragment.imports().stream()).toList()) {
-            if (declaration.qualified()
-                    || (!declaration.wildcard() && !declaration.importedNames().contains(unqualified(name)))
-                    || declaration.excludedNames().contains(unqualified(name))) {
-                continue;
-            }
-            var parsed = resolveParsed(declaration.modulePath());
-            if (parsed != null && moduleFragments(parsed).stream().anyMatch(fragment -> fragment.definitions().stream()
-                    .anyMatch(definition -> definition instanceof FunctionDefinition function
-                            && function.function().name().equals(constructorName)))) {
-                return true;
-            }
-            var linked = resolveLinked(declaration.modulePath());
-            if (linked != null && linked.functions().stream()
-                    .anyMatch(function -> function.name().equals(constructorName))) {
-                return true;
+    private boolean constructorPipelineReturnsResult(ParsedModule module, String literalType) {
+        var constructorResults = new LinkedHashMap<String, Boolean>();
+        for (var candidate : modules) {
+            if (!moduleVisibleFrom(module, modulePath(candidate))) continue;
+            for (var definition : candidate.definitions()) {
+                if (!(definition instanceof FunctionDefinition constructor)
+                        || !constructor.function().name().startsWith("__capy_constructor|")) {
+                    continue;
+                }
+                var constructorType = constructor.function().name().substring("__capy_constructor|".length());
+                if (constructorType.equals(literalType) || subtype(module, literalType, constructorType)) {
+                    constructorResults.put(
+                            modulePath(candidate) + "|" + constructorType,
+                            parsedConstructorReturnsResult(candidate, constructor.function())
+                    );
+                }
             }
         }
-        return false;
+        for (var candidate : linkedModules) {
+            if (!moduleVisibleFrom(module, modulePath(candidate))) continue;
+            for (var constructor : candidate.functions()) {
+                if (!constructor.name().startsWith("__capy_constructor|")) continue;
+                var constructorType = constructor.name().substring("__capy_constructor|".length());
+                if (constructorType.equals(literalType) || subtype(module, literalType, constructorType)) {
+                    constructorResults.putIfAbsent(
+                            modulePath(candidate) + "|" + constructorType,
+                            compiledConstructorReturnsResult(constructor)
+                    );
+                }
+            }
+        }
+        return constructorResults.values().stream().anyMatch(Boolean::booleanValue);
+    }
+
+    private boolean moduleVisibleFrom(ParsedModule module, String candidatePath) {
+        if (modulePath(module).equals(candidatePath)) return true;
+        return moduleFragments(module).stream().flatMap(fragment -> fragment.imports().stream())
+                .map(ImportDeclaration::modulePath)
+                .map(StrictSemanticAnalyzer::normalize)
+                .anyMatch(candidatePath::equals);
+    }
+
+    private boolean parsedConstructorReturnsResult(ParsedModule owner, FunctionDeclaration constructor) {
+        var env = new Env();
+        constructor.parameters().forEach(parameter -> env.values.put(parameter.name(), type(parameter.typeReference())));
+        return parsedExpressionReturnsResult(owner, constructor.body(), env);
+    }
+
+    private boolean parsedExpressionReturnsResult(ParsedModule module, Expression expression, Env env) {
+        return switch (expression) {
+            case DataLiteral literal -> Set.of("Success", "Error")
+                    .contains(unqualified(stripRaw(literal.typeName())));
+            case IfExpression conditional -> parsedExpressionReturnsResult(module, conditional.thenBranch(), env.copy())
+                    || parsedExpressionReturnsResult(module, conditional.elseBranch(), env.copy());
+            case MatchExpression match -> match.cases().stream()
+                    .anyMatch(branch -> parsedExpressionReturnsResult(module, branch.body(), env.copy()));
+            case BlockExpression block -> parsedExpressionReturnsResult(module, block.result(), env.copy());
+            case TryCatchExpression attempt -> parsedExpressionReturnsResult(module, attempt.body(), env.copy())
+                    || attempt.branches().stream()
+                    .anyMatch(branch -> parsedExpressionReturnsResult(module, branch.catchBody(), env.copy()));
+            case FunctionCallExpression call -> {
+                var result = probe(module, call, null, env);
+                yield Set.of("Result", "Error").contains(unqualified(result.name));
+            }
+            default -> false;
+        };
+    }
+
+    private boolean compiledConstructorReturnsResult(CompiledFunction constructor) {
+        if (Set.of("Result", "Error").contains(unqualified(constructor.returnType().name()))) return true;
+        return compiledExpressionReturnsResult(constructor.body());
+    }
+
+    private boolean compiledExpressionReturnsResult(CompiledExpression expression) {
+        return switch (expression) {
+            case CompiledExpression.CompiledDataLiteral literal -> Set.of("Success", "Error")
+                    .contains(unqualified(stripRaw(literal.typeName())));
+            case CompiledExpression.CompiledIfExpression conditional ->
+                    compiledExpressionReturnsResult(conditional.thenBranch())
+                            || compiledExpressionReturnsResult(conditional.elseBranch());
+            case CompiledExpression.CompiledMatchExpression match -> match.cases().stream()
+                    .anyMatch(branch -> compiledExpressionReturnsResult(branch.body()));
+            case CompiledExpression.CompiledBlockExpression block -> compiledExpressionReturnsResult(block.result());
+            case CompiledExpression.CompiledTryCatchExpression attempt ->
+                    compiledExpressionReturnsResult(attempt.body())
+                            || attempt.branches().stream()
+                            .anyMatch(branch -> compiledExpressionReturnsResult(branch.catchBody()));
+            case CompiledExpression.CompiledFunctionCallExpression call -> Set.of(
+                    "error", "error_kind", "error_with", "error_at", "error_full"
+            ).contains(unqualified(call.name()));
+            default -> false;
+        };
     }
 
     private boolean localUnionType(ParsedModule module, String name) {

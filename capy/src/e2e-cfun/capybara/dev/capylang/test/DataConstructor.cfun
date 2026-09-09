@@ -18,6 +18,10 @@ data User { age: int } with constructor {
 fun odd_number(x: int): int =
     (OddInt { number: x }).number
 
+fun odd_numbers(x: int): List[OddInt] =
+    let odd = OddInt { number: x }
+    [odd]
+
 fun validated_user_age(age: int): String =
     match User { age: age } with
     case Success { value } -> "ok:" + value.age
@@ -72,3 +76,7 @@ fun validated_profile(name: String, role: String): String =
     match Profile { name: name, role: role } with
     case Success { value } -> "ok:" + value.name + ":" + value.role
     case Error { message } -> "err:" + message
+
+fun bound_validated_profile(name: String, role: String): Result[Profile] =
+    let profile: Profile <- Profile { name: name, role: role }
+    profile
