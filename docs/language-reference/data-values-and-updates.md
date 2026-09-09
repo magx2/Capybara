@@ -100,9 +100,9 @@ Both the original `Address` and the original `Account` remain unchanged.
 
 ## Constructors and Invariants
 
-If a data type has a custom constructor, `with` invokes that constructor again.
-This preserves the same validation or normalization rules used during initial
-construction.
+When the receiver's static type is a concrete data type with a custom
+constructor, `with` invokes that constructor again. This preserves the same
+validation or normalization rules used during initial construction.
 
 For a constructor that returns the data value directly, `.with(...)` also
 returns the data value:
@@ -134,6 +134,13 @@ fun decrement(counter: PositiveCounter): Result[PositiveCounter] =
 
 Handle or bind that result in the same way as the result of the original
 constructor.
+
+Constructor selection follows the receiver's static type. When the receiver is
+typed as a union, `with` runs constructors associated with that union and its
+parents, but it does not run a constructor declared only on the concrete data
+variant. Enforce invariants for shared union fields in the union constructor,
+or narrow the value to its concrete variant before updating it when the
+variant's constructor must run.
 
 ## Updating a Union Field
 
