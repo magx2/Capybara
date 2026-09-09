@@ -1,4 +1,4 @@
 private fun invalid(): Dict[int] =
-    fun collect(values: Dict[int]): Dict[int] = values
+    fun collect__values(values: Dict[int]): Dict[int] = values
     ---
-    collect({})
+    collect__values({})

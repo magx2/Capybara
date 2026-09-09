@@ -1,1 +1,1 @@
-ARGUMENT_TYPE|Main.cfun|4|12|Argument 1 of `collect` has type `Set[<unknown>]`, but `Dict[int]` is required.
+ARGUMENT_TYPE|Main.cfun|4|20|Argument 1 of `collect__values` has type `Set[<unknown>]`, but `Dict[int]` is required.

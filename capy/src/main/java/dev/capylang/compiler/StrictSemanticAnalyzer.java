@@ -1431,7 +1431,13 @@ final class StrictSemanticAnalyzer {
         var file = module.name() + (module.sourceKind() == SourceKind.OBJECT_ORIENTED ? ".coo" : ".cfun");
         return path.isBlank() ? file : "/" + path + "/" + file;
     }
-    private static String displayName(String name) { var marker = name.indexOf("__local__"); return marker < 0 ? name : name.substring(marker + "__local__".length()).split("__", 2)[0]; }
+    private static String displayName(String name) {
+        var marker = name.indexOf("__local__");
+        if (marker < 0) return name;
+        var start = marker + "__local__".length();
+        var locationMarker = name.lastIndexOf("__");
+        return locationMarker < start ? name.substring(start) : name.substring(start, locationMarker);
+    }
 
     private static SourceLocation location(Expression expression) {
         return switch (expression) {
