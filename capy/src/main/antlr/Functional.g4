@@ -199,15 +199,15 @@ expressionNoLet: ifExpression
                | '(' expression ')'
                | '{' expression '}'
                | new_set
-               | BANG expressionNoLet
-               | BITWISE_NOT expressionNoLet
-               | MINUS expressionNoLet
                | expressionNoLet LBRACK sliceIndexLiteral? COLON sliceIndexLiteral? RBRACK
                | expressionNoLet LBRACK argumentList? RBRACK
                | expressionNoLet LPAREN argumentList? RPAREN
                | expressionNoLet DOT methodIdentifier LPAREN methodArgumentList? RPAREN
-               | expressionNoLet infixMethodLiteral expressionNoLet
                | expressionNoLet DOT identifier
+               | BANG expressionNoLet
+               | BITWISE_NOT expressionNoLet
+               | MINUS expressionNoLet
+               | expressionNoLet infixMethodLiteral expressionNoLet
                | expressionNoLet infixOperator expressionNoLet
                | value
                | newData
@@ -234,15 +234,15 @@ expressionNoLetNoPipe: ifExpression
                      | '(' expression ')'
                      | '{' expression '}'
                      | new_set
-                     | BANG expressionNoLetNoPipe
-                     | BITWISE_NOT expressionNoLetNoPipe
-                     | MINUS expressionNoLetNoPipe
                      | expressionNoLetNoPipe LBRACK sliceIndexNoPipeLiteral? COLON sliceIndexNoPipeLiteral? RBRACK
                      | expressionNoLetNoPipe LBRACK argumentList? RBRACK
                      | expressionNoLetNoPipe LPAREN argumentList? RPAREN
                      | expressionNoLetNoPipe DOT methodIdentifier LPAREN methodArgumentList? RPAREN
-                     | expressionNoLetNoPipe infixMethodLiteral expressionNoLetNoPipe
                      | expressionNoLetNoPipe DOT identifier
+                     | BANG expressionNoLetNoPipe
+                     | BITWISE_NOT expressionNoLetNoPipe
+                     | MINUS expressionNoLetNoPipe
+                     | expressionNoLetNoPipe infixMethodLiteral expressionNoLetNoPipe
                      | expressionNoLetNoPipe infixOperatorNoPipe expressionNoLetNoPipe
                      | value
                      | newData

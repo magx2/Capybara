@@ -3546,7 +3546,11 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         name: name,
         location: compile_location(location)
     }
-    case MethodCallExpression call -> compiled_method_call(call, functionName)
+    case MethodCallExpression call -> compiled_method_call_expression(
+        call,
+        compile_expression_in_function(call.receiver, functionName),
+        compile_expressions(call.arguments, functionName)
+    )
     case WithExpression { receiver, fields, location } -> CompiledWithExpression {
         receiver: compile_expression_in_function(receiver, functionName),
         fields: compile_expression_data_fields(fields, functionName),
@@ -3585,7 +3589,7 @@ private fun compile_expression_in_function(expression: Expression, functionName:
         fields: compile_expression_data_fields(fields, functionName),
         location: compile_location(location)
     }
-    case FieldAccessExpression access -> compile_field_access(access, functionName)
+    case FieldAccessExpression access -> compiled_field_access(access, functionName)
     case ReduceExpression { receiver, initial, accumulatorName, keyName, valueName, body, location } -> CompiledReduceExpression {
         receiver: compile_expression_in_function(receiver, functionName),
         initial: compile_expression_in_function(initial, functionName),
@@ -3625,30 +3629,6 @@ private fun compile_try_catch_branches(branches: List[TryCatchBranch], functionN
         catchBody: compile_expression_in_function(branch.catchBody, functionName),
         location: compile_location(branch.location)
     }] + compile_try_catch_branches(branches[1:], functionName)
-
-/// Extracts compiled metadata for method call.
-private fun compiled_method_call(call: MethodCallExpression, functionName: String): CompiledExpression =
-    let receiver = compile_expression_in_function(call.receiver, functionName)
-    let arguments = compile_expressions(call.arguments, functionName)
-    compiled_method_call_with_receiver(call, receiver, arguments)
-
-/// Extracts compiled metadata for method call with receiver.
-private fun compiled_method_call_with_receiver(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
-    match receiver with
-    case CompiledUnaryExpression { operator, expression, location } ->
-        if operator == "!"
-        then CompiledUnaryExpression {
-            operator: operator,
-            expression: CompiledMethodCallExpression {
-                receiver: expression,
-                name: call.name,
-                arguments: arguments,
-                location: compile_location(call.location)
-            },
-            location: location
-        }
-        else compiled_method_call_expression(call, receiver, arguments)
-    case _ -> compiled_method_call_expression(call, receiver, arguments)
 
 /// Extracts compiled metadata for method call expression.
 private fun compiled_method_call_expression(call: MethodCallExpression, receiver: CompiledExpression, arguments: List[CompiledExpression]): CompiledExpression =
@@ -3739,23 +3719,6 @@ private fun compiler_compiled_placeholder_source(source: String): bool =
 /// Extracts compiled metadata for partial parameter name.
 private fun compiled_partial_parameter_name(location: CompiledSourceLocation, idx: int): String =
     "__capy_partial_" + location.line + "_" + location.column + "_" + idx
-
-/// Converts a parsed field access into compiled metadata.
-private fun compile_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
-    match access.receiver with
-    case UnaryExpression { operator, expression, location } ->
-        if operator == "!"
-        then CompiledUnaryExpression {
-            operator: operator,
-            expression: CompiledFieldAccessExpression {
-                receiver: compile_expression_in_function(expression, functionName),
-                name: access.name,
-                location: compile_location(access.location)
-            },
-            location: compile_location(location)
-        }
-        else compiled_field_access(access, functionName)
-    case _ -> compiled_field_access(access, functionName)
 
 /// Extracts compiled metadata for field access.
 private fun compiled_field_access(access: FieldAccessExpression, functionName: String): CompiledExpression =
