@@ -1,0 +1,1 @@
+ASSIGNMENT_TYPE|Main.cfun|8|4|Binding `point` uses `<-`, but its value has type `Point`; expected Effect, Result, Option, or Either.
