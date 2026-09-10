@@ -9810,20 +9810,94 @@ private fun object_field_access_type(access: CompiledFieldAccessExpression, env:
 private fun data_field_type(name: String, receiverType: CompiledTypeReference, fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     if qualified_call_name(receiverType.name)
     then match find_qualified_data_type_binding(receiverType.name, module, allModules) with
-        case Some { binding } -> data_field_type_in_module(name, receiverType, binding.name, fallback, binding.module, allModules)
+        case Some { binding } -> data_field_type_in_module(name, receiverType, binding.name, fallback, binding.module, module, allModules)
         case None -> data_field_type_in_scope(name, receiverType, fallback, module, allModules)
     else data_field_type_in_scope(name, receiverType, fallback, module, allModules)
 
 /// Resolves type metadata for data field type in scope.
 private fun data_field_type_in_scope(name: String, receiverType: CompiledTypeReference, fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match find_data_type(receiverType.name, module, allModules) with
-    case Some { dataType } -> data_field_type_in_module(name, receiverType, dataType, fallback, module, allModules)
+    case Some { dataType } -> data_field_type_with_owner(
+        name,
+        receiverType,
+        dataType,
+        fallback,
+        data_type_owner_module(type_unqualified_name(receiverType.name), module, allModules),
+        module,
+        allModules
+    )
     case None -> fallback
 
+/// Resolves field metadata using an explicitly discovered owner when available.
+private fun data_field_type_with_owner(name: String, receiverType: CompiledTypeReference, dataType: String, fallback: CompiledTypeReference, owner: /capy/lang/Option[CompiledModule], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    match owner with
+    case Some { value } -> data_field_type_in_module(name, receiverType, dataType, fallback, value, module, allModules)
+    case None -> data_field_type_in_module(name, receiverType, dataType, fallback, module, module, allModules)
+
 /// Resolves type metadata for data field type in a module.
-private fun data_field_type_in_module(name: String, receiverType: CompiledTypeReference, dataType: String, fallback: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
-    let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, module, allModules)
-    declared_named_field_type(name, data_type_fields(dataType, module, allModules), bindings, fallback)
+private fun data_field_type_in_module(name: String, receiverType: CompiledTypeReference, dataType: String, fallback: CompiledTypeReference, owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, owner, allModules)
+    let fieldType = declared_named_field_type(name, data_type_fields(dataType, owner, allModules), bindings, fallback)
+    qualified_data_field_type(fieldType, owner, current, allModules)
+
+/// Qualifies a field type against the module that declared the containing data type.
+private fun qualified_data_field_type(type: CompiledTypeReference, owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
+    let arguments = qualified_data_field_type_arguments(type.arguments, owner, current, allModules)
+    let resolved = CompiledTypeReference { name: type.name, arguments: arguments }
+    if qualified_data_field_type_unchanged(type) | qualified_call_name(type.name) | java_generator_string_has_prefix(type.name, "/")
+    then resolved
+    else match declared_data_field_type_owner(type.name, owner, allModules) with
+        case Some { typeOwner } ->
+            if module_fqcn(typeOwner) == module_fqcn(current) | data_field_type_owner_visible(type.name, typeOwner, current, allModules)
+            then resolved
+            else CompiledTypeReference { name: module_absolute_type_name(typeOwner, type.name), arguments: arguments }
+        case None -> resolved
+
+/// Checks whether the field type owner is already visible from the consuming module.
+private fun data_field_type_owner_visible(name: String, owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): bool =
+    if schema_type_exists(name, current.functions)
+    then module_fqcn(owner) == module_fqcn(current)
+    else data_field_type_owner_matches(owner, data_type_owner_module_in_imports(name, current.imports, current, allModules))
+
+/// Checks whether an optional resolved owner identifies the expected module.
+private fun data_field_type_owner_matches(expected: CompiledModule, actual: /capy/lang/Option[CompiledModule]): bool =
+    match actual with
+    case Some { value } -> module_fqcn(expected) == module_fqcn(value)
+    case None -> false
+
+/// Checks whether a field type is intrinsic and must remain unqualified.
+private fun qualified_data_field_type_unchanged(type: CompiledTypeReference): bool =
+    type.name.is_empty()
+        | type.name == "any"
+        | type.name == "nothing"
+        | type.name == "Object"
+        | type.name == "data"
+        | type.name == "enum"
+        | type.name == "char"
+        | type.name == "array"
+        | type.name == "Tuple"
+        | type.name == "Effect"
+        | type.name == "Async"
+        | type_parameter(type)
+        | function_type(type)
+        | java_object_type(type)
+        | !primitive_java_type_name(type.name).is_empty()
+        | !simple_java_type_name(type.name).is_empty()
+        | boxed_container_java_type_name(type.name)
+        | seq_type_name(type.name)
+        | result_type_name(type.name)
+
+/// Qualifies nested field type arguments in their declaration context.
+private fun qualified_data_field_type_arguments(types: List[CompiledTypeReference], owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): List[CompiledTypeReference] =
+    match types[0] with
+    case None -> []
+    case Some { type } -> [qualified_data_field_type(type, owner, current, allModules)] + qualified_data_field_type_arguments(types[1:], owner, current, allModules)
+
+/// Resolves a field type only through declarations visible to its owner module.
+private fun declared_data_field_type_owner(name: String, owner: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if schema_type_exists(name, owner.functions)
+    then /capy/lang/Option.Some { owner }
+    else data_type_owner_module_in_imports(name, owner.imports, owner, allModules)
 
 /// Checks whether the current value satisfies the result match whole value field rule for compiler processing.
 private fun result_match_whole_value_field(name: String, receiverType: CompiledTypeReference): bool =
