@@ -435,9 +435,16 @@ final class StrictSemanticAnalyzer {
                     if (call.name().equals("map")) {
                         return new Type(receiver.name, List.of(mapperType.functionResult), List.of(), null);
                     }
-                    if (call.name().equals("flat_map")
-                            && unqualified(mapperType.functionResult.name).equals(unqualified(receiver.name))) {
-                        return mapperType.functionResult;
+                    if (call.name().equals("flat_map")) {
+                        var expectedMapper = function(
+                                List.of(element),
+                                new Type(receiver.name, List.of(UNKNOWN), List.of(), null)
+                        );
+                        requireAssignable(module, location(call.arguments().getFirst()), "ARGUMENT_TYPE",
+                                mapperType, expectedMapper, "Argument 1 of `flat_map`");
+                        if (unqualified(mapperType.functionResult.name).equals(unqualified(receiver.name))) {
+                            return mapperType.functionResult;
+                        }
                     }
                 }
             }
@@ -1195,22 +1202,33 @@ final class StrictSemanticAnalyzer {
             List<Type> parameters,
             Env env
     ) {
-        if (name.equals("flat_map")) {
-            // NativeCompilerValidator owns flat_map's wrapper-specific diagnostic. Strict analysis
-            // still checks the lambda body with its contextual return type while inferring the call.
-            for (var index = 0; index < Math.min(arguments.size(), parameters.size()); index++) {
-                var argument = arguments.get(index);
-                if (argument instanceof LambdaExpression) {
-                    infer(module, argument, parameters.get(index), env);
-                }
-            }
-            return;
-        }
         for (var index = 0; index < Math.min(arguments.size(), parameters.size()); index++) {
             var argument = arguments.get(index);
             if (!(argument instanceof LambdaExpression) && !(argument instanceof FunctionReferenceExpression)) continue;
-            var actual = infer(module, argument, parameters.get(index), env);
-            requireAssignable(module, location(argument), "ARGUMENT_TYPE", actual, parameters.get(index),
+            var expected = parameters.get(index);
+            var nativeFlatMapReturn = name.equals("flat_map")
+                    && expected.functionResult != null
+                    && Set.of("Effect", "Result").contains(unqualified(expected.functionResult.name));
+            if (nativeFlatMapReturn && argument instanceof FunctionReferenceExpression) {
+                var actual = probe(module, argument, expected, env);
+                if (actual == ERROR) {
+                    infer(module, argument, expected, env);
+                    continue;
+                }
+                // Preserve the inferred callable parameters while leaving the wrapper return diagnostic
+                // to NativeCompilerValidator.
+                actual = function(actual.parameters, expected.functionResult);
+                requireAssignable(module, location(argument), "ARGUMENT_TYPE", actual, expected,
+                        "Argument " + (index + 1) + " of `" + name + "`");
+                continue;
+            }
+            var actual = infer(module, argument, expected, env);
+            if (nativeFlatMapReturn && actual.functionResult != null) {
+                // NativeCompilerValidator owns Effect/Result.flat_map's wrapper-specific return diagnostic.
+                // Preserve the inferred callable parameters so arity and parameter types remain checked here.
+                actual = function(actual.parameters, expected.functionResult);
+            }
+            requireAssignable(module, location(argument), "ARGUMENT_TYPE", actual, expected,
                     "Argument " + (index + 1) + " of `" + name + "`");
         }
     }

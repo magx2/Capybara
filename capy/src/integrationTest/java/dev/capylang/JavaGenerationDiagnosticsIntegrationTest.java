@@ -2226,6 +2226,33 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void reportsInvalidFlatMapCallableSignaturesDuringCompilationForEveryBackend() throws Exception {
+        var collectionSource = writeSource("sample/CollectionFlatMapTypeFailure.cfun", """
+                fun broken(values: List[int]): List[int] =
+                    values.flat_map(value => value + 1)
+                """);
+        var effectSource = writeSource("sample/EffectFlatMapParameterFailure.cfun", """
+                from /capy/lang/Effect import { Effect, pure }
+
+                private fun string_to_effect(value: String): Effect[int] = pure(1)
+
+                fun broken(effect: Effect[int]): Effect[int] =
+                    effect.flat_map(:string_to_effect)
+                """);
+
+        for (var outputType : List.of("java", "javascript", "python")) {
+            assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                    Compilation failed with 2 error(s):
+                    /sample/CollectionFlatMapTypeFailure.cfun:2:20: Argument 1 of `flat_map` has type `int => int`, but `int => List[<unknown>]` is required.
+                    /sample/EffectFlatMapParameterFailure.cfun:6:20: Argument 1 of `flat_map` has type `String => Effect[int]`, but `int => Effect[int]` is required.
+                    """);
+        }
+
+        assertThat(generatedPath(collectionSource)).doesNotExist();
+        assertThat(generatedPath(effectSource)).doesNotExist();
+    }
+
+    @Test
     void acceptsValidEffectCallbacksDuringCompilationForEveryBackend() throws Exception {
         var source = writeSource("sample/ValidEffectCallbacks.cfun", """
                 from /capy/lang/Effect import { Effect, pure }
