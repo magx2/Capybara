@@ -110,6 +110,8 @@ public final class NativeCompilerValidator {
                     Map.entry("get", Set.of(1, 2)),
                     Map.entry("compare", Set.of(1)),
                     Map.entry("trim", Set.of(0)),
+                    Map.entry("to_upper_case", Set.of(0)),
+                    Map.entry("to_lower_case", Set.of(0)),
                     Map.entry("contains", Set.of(1)),
                     Map.entry("starts_with", Set.of(1)),
                     Map.entry("end_with", Set.of(1)),
@@ -1140,6 +1142,9 @@ public final class NativeCompilerValidator {
         if (intrinsicCollectionMethod(receiverName, methodName, arguments)) {
             return;
         }
+        if (methodName.equals("__capy_call") && functionTypeName(receiverType.name())) {
+            return;
+        }
         if (arity == 0
                 && context.primitiveConversionMethod(module, receiverName, methodName)
                 && context.extensionMethodArities(module, receiverName, methodName).isEmpty()) {
@@ -1198,6 +1203,15 @@ public final class NativeCompilerValidator {
             return;
         }
         if (receiverTypes.isEmpty() && standardMethods != null) {
+            errors.add(error(
+                    module,
+                    location,
+                    "Method `" + methodName + "` is not defined for receiver type `"
+                            + displayType(receiverType) + "`."
+            ));
+            return;
+        }
+        if (receiverTypes.isEmpty() && module.sourceKind() == SourceKind.FUNCTIONAL) {
             errors.add(error(
                     module,
                     location,
@@ -2946,6 +2960,9 @@ public final class NativeCompilerValidator {
     ) {
         return inferJavaBackendExpressionType(call.receiver(), types).flatMap(type -> {
             var receiverType = unqualified(type.name());
+            if (receiverType.equals("List")) {
+                return java.util.Optional.empty();
+            }
             var standardMethods = STANDARD_METHODS_BY_RECEIVER.get(receiverType);
             if (standardMethods != null && !standardMethods.contains(call.name())) {
                 return java.util.Optional.empty();
@@ -4135,7 +4152,7 @@ public final class NativeCompilerValidator {
         private boolean primitiveConversionMethod(ParsedModule module, String receiverName, String methodName) {
             var backingType = primitiveBackingType(module, receiverName);
             if (backingType == null) {
-                return false;
+                backingType = unqualified(receiverName);
             }
             return switch (methodName) {
                 case "to_int" -> Set.of("long", "float", "double").contains(backingType);

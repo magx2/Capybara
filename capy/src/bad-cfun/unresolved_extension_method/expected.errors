@@ -1,0 +1,2 @@
+METHOD_NOT_FOUND|Main.cfun|7|47|Method `inverse` is not defined for receiver type `Player`.
+METHOD_NOT_FOUND|Main.cfun|8|51|Method `inverse` is not defined for receiver type `Player`.

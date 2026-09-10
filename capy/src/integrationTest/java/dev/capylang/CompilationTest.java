@@ -38,6 +38,29 @@ import static org.assertj.core.api.Assertions.fail;
 
 class CompilationTest {
     @Test
+    void shouldRejectUnresolvedExtensionMethodsOnKnownReceiverTypes() {
+        var result = CapybaraCompiler.compile(
+                List.of(rawModule("Game", "paper_soccer", """
+                        enum GameState { PLAYER_A_WON, PLAYER_B_WON }
+                        enum Player { PLAYER_A, PLAYER_B }
+
+                        private fun Player.won(): GameState =
+                            if this == PLAYER_A then PLAYER_A_WON else PLAYER_B_WON
+
+                        fun missing_at_start(player: Player): Player = player.inverse()
+                        fun missing_in_middle(player: Player): GameState = player.inverse().won()
+                        """)),
+                new LinkedHashSet<>(),
+                emptyNativeProviders(),
+                emptyNativeProviders()
+        ).unsafeRun();
+
+        assertThat(result).isInstanceOf(Either.Right.class);
+        assertThat(((Either.Right<?, ?>) result).value().toString())
+                .contains("Method `inverse` is not defined for receiver type `Player`.");
+    }
+
+    @Test
     void shouldRejectExtensionMethodCallWithWrongArity() {
         var result = CapybaraCompiler.compile(
                 List.of(rawModule("Game", "paper_soccer", """
