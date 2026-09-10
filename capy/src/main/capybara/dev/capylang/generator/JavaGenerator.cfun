@@ -2706,7 +2706,7 @@ private fun expression_code(
 ): String =
     match expression with
     case CompiledUnsupportedExpression unsupported ->
-        if compiled_placeholder_source(unsupported.source)
+        if compiled_not_implemented_source(unsupported.source)
         then placeholder_code(unsupported, module)
         else "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
     case CompiledIntLiteral literal -> value_conversion_code(int_literal_code(literal, expectedType), expression_type(expression, env, module, allModules), expectedType, module, allModules)
@@ -2836,10 +2836,16 @@ private fun placeholder_message(placeholder: CompiledUnsupportedExpression, modu
 private fun compiled_placeholder_source(source: String): bool =
     java_generator_string_has_prefix(source, "__capy_placeholder__|")
 
+/// Checks whether compiled source represents a runtime not-implemented expression.
+private fun compiled_not_implemented_source(source: String): bool =
+    compiled_placeholder_source(source) | java_generator_string_has_prefix(source, "__capy_not_implemented__|")
+
 /// Computes the name for placeholder function.
 private fun placeholder_function_name(source: String): String =
     if compiled_placeholder_source(source)
     then source["__capy_placeholder__|".size().value, source.size().value]
+    else if java_generator_string_has_prefix(source, "__capy_not_implemented__|")
+    then source["__capy_not_implemented__|".size().value, source.size().value]
     else ""
 
 /// Emits generated code for binary expression.
@@ -9492,7 +9498,7 @@ private fun option_data_literal_value_expected_type(value: CompiledExpression, e
 /// Computes the compiled type for expression.
 private fun expression_type(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> if compiled_placeholder_source(unsupported.source) then nothing_type() else object_type()
+    case CompiledUnsupportedExpression unsupported -> if compiled_not_implemented_source(unsupported.source) then nothing_type() else object_type()
     case CompiledIntLiteral literal -> if byte_literal_source(literal.source) then byte_type() else int_type()
     case CompiledLongLiteral _ -> long_type()
     case CompiledFloatLiteral _ -> float_type()
@@ -12873,7 +12879,7 @@ private fun regex_binary_result_type(operator: String): CompiledTypeReference =
 /// Checks whether expression can be emitted by the target backend.
 private fun expression_emittable(expression: CompiledExpression, env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> compiled_placeholder_source(unsupported.source)
+    case CompiledUnsupportedExpression unsupported -> compiled_not_implemented_source(unsupported.source)
     case CompiledIntLiteral _ -> true
     case CompiledLongLiteral _ -> true
     case CompiledFloatLiteral _ -> true

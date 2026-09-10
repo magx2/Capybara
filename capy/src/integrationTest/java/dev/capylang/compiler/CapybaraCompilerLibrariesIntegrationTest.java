@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import dev.capylang.generator.GeneratedModule;
 import dev.capylang.generator.JavaGenerator;
 import dev.capylang.generator.JavaScriptGenerator;
+import dev.capylang.generator.PythonGenerator;
 import dev.capylang.compiler.parser.RawModule;
 import dev.capylang.compiler.parser.SourceKind;
 import capy.lang.Either;
@@ -213,29 +214,55 @@ class CapybaraCompilerLibrariesIntegrationTest {
     }
 
     @Test
-    void shouldRejectUnsupportedSliceEndDuringCompilation() {
+    void shouldCompileNotImplementedExpressionsForEveryBackend() {
         var source = """
-                from /capy/test/Assert import { * }
-                from /capy/test/CapyTest import { * }
-                from /capy/lang/Effect import { * }
-
-                fun tests(): Effect[TestFile] =
-                    test_file("/foo/app/SliceEndPlaceholder.cfun", [
-                        test("unsupported slice end stays ungathered", () => assert_that(slice_with_placeholder("capy")).is_equal_to("c")),
-                    ])
-
-                private fun slice_with_placeholder(value: String): String =
-                    value[0, ???]
+                fun consume(value: int): int = value
+                fun explicit(value: String): int = ???
+                fun inferred() = ???
+                fun nested(): int = consume(???)
                 """;
-        assertThatThrownBy(() -> compileProgram(
-                List.of(rawModule("SliceEndPlaceholder", "/foo/app", source)),
+        var program = compileProgram(
+                List.of(rawModule("NotImplemented", "/foo/app", source)),
                 new LinkedHashSet<>()
-        ))
-                .isInstanceOf(AssertionError.class)
-                .hasMessageContaining("/foo/app/SliceEndPlaceholder.cfun")
-                .hasMessageContaining("line\": 11")
-                .hasMessageContaining("column\": 13")
-                .hasMessageContaining("Unsupported functional construct: `???`.");
+        );
+        var functions = program.modules().getFirst().functions();
+        var explicit = functions.stream().filter(function -> function.name().equals("explicit")).findFirst().orElseThrow();
+        var inferred = functions.stream().filter(function -> function.name().equals("inferred")).findFirst().orElseThrow();
+        var nested = functions.stream().filter(function -> function.name().equals("nested")).findFirst().orElseThrow();
+
+        assertThat(explicit.body()).isInstanceOfSatisfying(
+                CompiledExpression.CompiledUnsupportedExpression.class,
+                body -> assertThat(body.source()).isEqualTo("__capy_not_implemented__|explicit")
+        );
+        assertThat(inferred.returnType().name()).isEqualTo("nothing");
+        assertThat(nested.body()).isInstanceOfSatisfying(
+                CompiledExpression.CompiledFunctionCallExpression.class,
+                call -> assertThat(call.arguments().getFirst()).isInstanceOfSatisfying(
+                        CompiledExpression.CompiledUnsupportedExpression.class,
+                        argument -> assertThat(argument.source()).isEqualTo("__capy_not_implemented__|nested")
+                )
+        );
+
+        var javaCode = String.join("\n", JavaGenerator.javaGenerator(program).modules().stream()
+                .map(GeneratedModule::code)
+                .toList());
+        assertThat(javaCode)
+                .contains("__capy_not_implemented(\"line 2, column 35, file /foo/app/NotImplemented.cfun: the function `explicit` is not yet implemented\")")
+                .contains("throw new UnsupportedOperationException(message);");
+
+        var javaScriptCode = String.join("\n", JavaScriptGenerator.javaScriptGenerator(program).modules().stream()
+                .map(GeneratedModule::code)
+                .toList());
+        assertThat(javaScriptCode)
+                .contains("line 4, column 28, file /foo/app/NotImplemented.cfun: the function `nested` is not yet implemented")
+                .contains("function __capy_not_implemented(message) { throw new Error(String(message)); }");
+
+        var pythonCode = String.join("\n", PythonGenerator.pythonGenerator(program).modules().stream()
+                .map(GeneratedModule::code)
+                .toList());
+        assertThat(pythonCode)
+                .contains("line 3, column 17, file /foo/app/NotImplemented.cfun: the function `inferred` is not yet implemented")
+                .contains("raise NotImplementedError(message)");
     }
 
     @Test

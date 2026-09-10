@@ -3153,6 +3153,8 @@ public final class NativeCompilerValidator {
         switch (expression) {
             case UnsupportedExpression unsupported -> {
                 if (!unsupported.source().equals("<native>")
+                        && !unsupported.source().equals("???")
+                        && !unsupported.source().startsWith("__capy_not_implemented__|")
                         && (unsupported.location().line() != 0 || unsupported.location().column() != 0)) {
                     errors.add(error(
                             module,

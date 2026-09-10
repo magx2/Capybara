@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 @NativeImplementation
 public final class NativeCapybaraParser implements CapybaraParser, CapybaraValidator {
     private final NativeCompilerValidator validator = new NativeCompilerValidator();
+    private static final String NOT_IMPLEMENTED_FUNCTION_KEY = "__capy_not_implemented_function";
 
     private static final String MODULE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_]*";
     private static final String PACKAGE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_-]*";
@@ -1146,12 +1147,16 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 parameters.add(functionParameter(parameter));
             }
         }
+        var name = ctx.identifier().getText();
         return new FunctionDeclaration(
-                ctx.identifier().getText(),
+                name,
                 "public",
                 List.copyOf(parameters),
                 typeReference(ctx.functionType().type()),
-                expression(ctx.expression()),
+                rewriteLocalFunctionCalls(
+                        expression(ctx.expression()),
+                        withNotImplementedFunction(Map.of(), name)
+                ),
                 docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
@@ -1434,12 +1439,17 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.FunctionalParser.ConstDeclarationContext ctx
     ) {
         var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
-        var type = ctx.type() == null ? missingType() : typeReference(ctx.type());
+        var name = ctx.TYPE().getText();
+        var expression = rewriteLocalFunctionCalls(
+                expressionNoLet(ctx.expressionNoLet()),
+                withNotImplementedFunction(Map.of(), name)
+        );
+        var type = ctx.type() == null ? inferredNotImplementedType(expression) : typeReference(ctx.type());
         return new ConstantDeclaration(
-                ctx.TYPE().getText(),
+                name,
                 visibility,
                 type,
-                expressionNoLet(ctx.expressionNoLet()),
+                expression,
                 docComments(ctx.docComment()),
                 location(ctx)
         );
@@ -1517,6 +1527,7 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             dev.capylang.parser.antlr.FunctionalParser.FunctionDeclarationContext ctx,
             Map<String, String> localNames
     ) {
+        var name = ctx.functionNameDeclaration().getText();
         var visibility = ctx.VISIBILITY() == null ? "public" : ctx.VISIBILITY().getText();
         var parameters = new ArrayList<FunctionParameter>();
         if (ctx.parameters() != null) {
@@ -1524,15 +1535,16 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 parameters.add(functionParameter(parameter));
             }
         }
+        var body = functionBody(ctx.functionBody(), withNotImplementedFunction(localNames, name));
         var returnType = ctx.functionType() == null
-                ? missingType()
+                ? inferredNotImplementedType(body)
                 : typeReference(ctx.functionType().type());
         return new FunctionDeclaration(
-                ctx.functionNameDeclaration().getText(),
+                name,
                 visibility,
                 List.copyOf(parameters),
                 returnType,
-                functionBody(ctx.functionBody(), localNames),
+                body,
                 docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
@@ -1549,16 +1561,17 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
                 parameters.add(functionParameter(parameter));
             }
         }
-        var returnType = ctx.functionType() == null
-                ? missingType()
-                : typeReference(ctx.functionType().type());
         var name = localNames.getOrDefault(ctx.localFunctionNameDeclaration().getText(), ctx.localFunctionNameDeclaration().getText());
+        var body = rewriteLocalFunctionCalls(expression(ctx.expression()), withNotImplementedFunction(localNames, name));
+        var returnType = ctx.functionType() == null
+                ? inferredNotImplementedType(body)
+                : typeReference(ctx.functionType().type());
         return new FunctionDeclaration(
                 name,
                 "private",
                 List.copyOf(parameters),
                 returnType,
-                rewriteLocalFunctionCalls(expression(ctx.expression()), localNames),
+                body,
                 docComments(ctx.docComment()),
                 annotationApplications(ctx.annotationBlock()),
                 location(ctx)
@@ -2051,6 +2064,14 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
     }
 
     private static Expression rewriteLocalFunctionCalls(Expression expression, Map<String, String> localNames) {
+        if (expression instanceof Expression.UnsupportedExpression value
+                && value.source().equals("???")
+                && localNames.containsKey(NOT_IMPLEMENTED_FUNCTION_KEY)) {
+            return new Expression.UnsupportedExpression(
+                    "__capy_not_implemented__|" + localNames.get(NOT_IMPLEMENTED_FUNCTION_KEY),
+                    value.location()
+            );
+        }
         if (localNames.isEmpty()) {
             return expression;
         }
@@ -2185,6 +2206,15 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
             );
         }
         return expression;
+    }
+
+    private static Map<String, String> withNotImplementedFunction(
+            Map<String, String> localNames,
+            String functionName
+    ) {
+        var names = new LinkedHashMap<>(localNames);
+        names.put(NOT_IMPLEMENTED_FUNCTION_KEY, functionName);
+        return Map.copyOf(names);
     }
 
     private static List<Expression> rewriteLocalFunctionCalls(List<Expression> expressions, Map<String, String> localNames) {
@@ -4048,6 +4078,14 @@ public final class NativeCapybaraParser implements CapybaraParser, CapybaraValid
 
     private static TypeReference missingType() {
         return new TypeReference("", List.of());
+    }
+
+    private static TypeReference inferredNotImplementedType(Expression expression) {
+        if (expression instanceof Expression.UnsupportedExpression unsupported
+                && unsupported.source().startsWith("__capy_not_implemented__|")) {
+            return new TypeReference("nothing", List.of());
+        }
+        return missingType();
     }
 
     private static TypeReference voidType() {

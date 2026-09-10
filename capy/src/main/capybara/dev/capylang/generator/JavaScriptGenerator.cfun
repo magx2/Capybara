@@ -2009,7 +2009,7 @@ private fun java_script_parameter_bindings(parameters: List[CompiledFunctionPara
 private fun java_script_expression_code(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
     case CompiledUnsupportedExpression unsupported ->
-        if java_script_compiled_placeholder_source(unsupported.source)
+        if java_script_compiled_not_implemented_source(unsupported.source)
         then java_script_placeholder_code(unsupported, module)
         else "__capy_unsupported(" + java_script_string_literal(unsupported.source) + ")"
     case CompiledThrowExpression throwExpression -> java_script_throw_expression_code(throwExpression, env, module, allModules)
@@ -2101,10 +2101,16 @@ private fun java_script_placeholder_message(placeholder: CompiledUnsupportedExpr
 private fun java_script_compiled_placeholder_source(source: String): bool =
     java_script_string_has_prefix(source, "__capy_placeholder__|")
 
+/// Checks whether compiled source represents a runtime not-implemented expression.
+private fun java_script_compiled_not_implemented_source(source: String): bool =
+    java_script_compiled_placeholder_source(source) | java_script_string_has_prefix(source, "__capy_not_implemented__|")
+
 /// Computes the JavaScript name for placeholder function.
 private fun java_script_placeholder_function_name(source: String): String =
     if java_script_compiled_placeholder_source(source)
     then source["__capy_placeholder__|".size().value, source.size().value]
+    else if java_script_string_has_prefix(source, "__capy_not_implemented__|")
+    then source["__capy_not_implemented__|".size().value, source.size().value]
     else ""
 
 /// Formats JavaScript source text for module source file.
@@ -7841,7 +7847,7 @@ private fun java_script_function_gatherable(function: CompiledFunction, module: 
 /// Checks whether a function matches the placeholder function body metadata.
 private fun java_script_placeholder_function_body(function: CompiledFunction): bool =
     match function.body with
-    case CompiledUnsupportedExpression unsupported -> java_script_compiled_placeholder_source(unsupported.source)
+    case CompiledUnsupportedExpression unsupported -> java_script_compiled_not_implemented_source(unsupported.source)
     case _ -> false
 
 /// Checks whether a function matches the native function body metadata.
@@ -7853,7 +7859,7 @@ private fun java_script_native_function_body(function: CompiledFunction): bool =
 /// Checks whether expression can be included in generated test gathering.
 private fun java_script_expression_gatherable(expression: CompiledExpression, env: List[JavaScriptBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledUnsupportedExpression _ -> false
+    case CompiledUnsupportedExpression unsupported -> java_script_compiled_not_implemented_source(unsupported.source)
     case CompiledThrowExpression throwExpression -> java_script_expression_gatherable(throwExpression.value, env, module, allModules)
     case CompiledTryCatchExpression tryCatch ->
         if java_script_expression_gatherable(tryCatch.body, env, module, allModules)

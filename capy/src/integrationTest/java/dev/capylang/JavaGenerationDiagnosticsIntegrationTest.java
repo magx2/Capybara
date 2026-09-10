@@ -23,11 +23,37 @@ import java.util.Optional;
 import javax.tools.ToolProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ResourceLock(Resources.SYSTEM_ERR)
 class JavaGenerationDiagnosticsIntegrationTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void generatesSourceAwareNotImplementedExpression() throws Exception {
+        var source = writeSource("sample/NotImplemented.cfun", """
+                fun foo(x: String): int = ???
+                fun fallback(): int = if true then 42 else ???
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("__capy_not_implemented(\"line 1, column 26, file /sample/NotImplemented.cfun: the function `foo` is not yet implemented\")");
+        var classes = compileJava(generated);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var generatedClass = loader.loadClass("sample.NotImplemented");
+
+            assertThat(generatedMethod(generatedClass, "fallback__").invoke(null)).isEqualTo(42);
+            assertThatThrownBy(() -> generatedMethod(generatedClass, "foo__").invoke(null, "value"))
+                    .hasCauseInstanceOf(UnsupportedOperationException.class)
+                    .cause()
+                    .hasMessage("line 1, column 26, file /sample/NotImplemented.cfun: the function `foo` is not yet implemented");
+        }
+    }
 
     @Test
     void renamesLambdaParametersThatShadowEnclosingParameters() throws Exception {

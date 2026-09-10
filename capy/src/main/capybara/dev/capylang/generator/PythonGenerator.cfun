@@ -1120,8 +1120,8 @@ private fun python_parameter_bindings(parameters: List[CompiledFunctionParameter
 private fun python_expression_code(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
     match expression with
     case CompiledUnsupportedExpression unsupported ->
-        if python_compiled_placeholder_source(unsupported.source)
-        then "__capy_not_implemented(" + python_string_literal(python_placeholder_function_name(unsupported.source)) + ")"
+        if python_compiled_not_implemented_source(unsupported.source)
+        then "__capy_not_implemented(" + python_string_literal(python_placeholder_message(unsupported, module)) + ")"
         else "__capy_unsupported(" + python_string_literal(unsupported.source) + ")"
     case CompiledThrowExpression throwExpression -> python_throw_expression_code(throwExpression, env, module, allModules)
     case CompiledTryCatchExpression tryCatch -> python_try_catch_expression_code(tryCatch, env, module, allModules)
@@ -1193,11 +1193,30 @@ private fun python_try_catch_branch_tail_codes(branches: List[CompiledTryCatchBr
 private fun python_compiled_placeholder_source(source: String): bool =
     python_string_has_prefix(source, "__capy_placeholder__|")
 
+/// Checks whether compiled source represents a runtime not-implemented expression.
+private fun python_compiled_not_implemented_source(source: String): bool =
+    python_compiled_placeholder_source(source) | python_string_has_prefix(source, "__capy_not_implemented__|")
+
 /// Computes the Python name for placeholder function.
 private fun python_placeholder_function_name(source: String): String =
     if python_compiled_placeholder_source(source)
     then source["__capy_placeholder__|".size().value, source.size().value]
+    else if python_string_has_prefix(source, "__capy_not_implemented__|")
+    then source["__capy_not_implemented__|".size().value, source.size().value]
     else ""
+
+/// Formats Python source text for placeholder message.
+private fun python_placeholder_message(placeholder: CompiledUnsupportedExpression, module: CompiledModule): String =
+    let functionName = python_placeholder_function_name(placeholder.source)
+    if functionName.is_empty()
+    then "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + python_module_source_file(module) + ": placeholder expression is not yet implemented"
+    else "line " + placeholder.location.line + ", column " + placeholder.location.column + ", file " + python_module_source_file(module) + ": the function `" + functionName + "` is not yet implemented"
+
+/// Formats Python source text for module source file.
+private fun python_module_source_file(module: CompiledModule): String =
+    if module.path.is_empty()
+    then "/" + module.name + ".cfun"
+    else "/" + module.path + "/" + module.name + ".cfun"
 
 /// Emits Python code for variable.
 private fun python_variable_code(name: String, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -7953,11 +7972,7 @@ private fun python_test_runtime_error_code(): String =
     + "def __capy_unsupported(source):" + python_newline()
     + "    raise NotImplementedError('Unsupported CFUN expression: ' + str(source))" + python_newline()
     + python_newline()
-    + "def __capy_not_implemented(function_name):" + python_newline()
-    + "    if function_name:" + python_newline()
-    + "        message = 'the function `' + str(function_name) + '` is not yet implemented'" + python_newline()
-    + "    else:" + python_newline()
-    + "        message = 'placeholder expression is not yet implemented'" + python_newline()
+    + "def __capy_not_implemented(message):" + python_newline()
     + "    raise NotImplementedError(message)" + python_newline()
     + python_newline()
     + "def __capy_normalize_type_name(type_name):" + python_newline()
@@ -9118,7 +9133,7 @@ private fun python_object_receiver_type(typeName: String): bool =
 /// Checks whether expression can be included in generated test gathering.
 private fun python_expression_gatherable(expression: CompiledExpression, env: List[PythonBinding], module: CompiledModule, allModules: List[CompiledModule]): bool =
     match expression with
-    case CompiledUnsupportedExpression unsupported -> python_compiled_placeholder_source(unsupported.source)
+    case CompiledUnsupportedExpression unsupported -> python_compiled_not_implemented_source(unsupported.source)
     case CompiledThrowExpression throwExpression -> python_expression_gatherable(throwExpression.value, env, module, allModules)
     case CompiledTryCatchExpression tryCatch ->
         if python_expression_gatherable(tryCatch.body, env, module, allModules)
