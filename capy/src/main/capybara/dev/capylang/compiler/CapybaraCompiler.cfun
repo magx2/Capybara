@@ -3107,7 +3107,7 @@ private fun compiler_tuple_type(arguments: List[TypeReference]): TypeReference =
 
 /// Checks whether an expression uses the placeholder source placeholder form.
 private fun placeholder_source(source: String): bool =
-    source == "_"
+    source == "_" | source == "???" | compiler_string_has_prefix(source, "__capy_not_implemented__|")
 
 /// Converts parsed imports into compiled metadata.
 private fun compile_imports(imports: List[ImportDeclaration]): List[CompiledImportDeclaration] =
@@ -3786,6 +3786,8 @@ private fun compile_let_bindings(bindings: List[LetBinding], functionName: Strin
 
 /// Extracts compiled metadata for unsupported source.
 private fun compiled_unsupported_source(source: String, functionName: String): String =
-    if placeholder_source(source)
+    if source == "_"
     then "__capy_placeholder__|" + functionName
+    else if source == "???"
+    then "__capy_not_implemented__|" + functionName
     else source
