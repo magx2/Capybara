@@ -295,6 +295,38 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void compilesDirectEnumValueImportedFromLinkedStandardLibrary() throws Exception {
+        var source = writeSource("sample/Rounding.cfun", """
+                from /capy/lang/Primitives import { clamp_long_to_int }
+                from /capy/lang/Math import { HALF_UP, round }
+
+                fun effort_to_depth(effort: double): int =
+                    clamp_long_to_int(round(5 * effort, HALF_UP))
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("capy.lang.Math.RoundMode.HALF_UP")
+                .doesNotContain("capy.lang.Math.HALF_UP");
+
+        var enumReference = tempDir.resolve("java-probe/EnumReference.java");
+        Files.createDirectories(enumReference.getParent());
+        Files.writeString(enumReference, """
+                package sample;
+
+                final class EnumReference {
+                    static capy.lang.Math.RoundMode imported() {
+                        return capy.lang.Math.RoundMode.HALF_UP;
+                    }
+                }
+                """);
+        assertJavaCompiles(enumReference);
+    }
+
+    @Test
     void generatesNominalEnumAndRecordConstantsWithoutDataHelpers() throws Exception {
         var source = writeSource("sample/Game.cfun", """
                 enum Player { PLAYER_A, PLAYER_B }
@@ -395,7 +427,11 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(generated)
                 .content()
                 .contains("java.lang.Object __capy_match_value_")
-                .contains("== sample.Game.IN_PROGRESS", "== sample.Game.PLAYER_A_WON", "== sample.Game.PLAYER_B_WON")
+                .contains(
+                        "== sample.Game.GameState.IN_PROGRESS",
+                        "== sample.Game.GameState.PLAYER_A_WON",
+                        "== sample.Game.GameState.PLAYER_B_WON"
+                )
                 .doesNotContain("__capy_data_is(__capy_match_value_")
                 .doesNotContain("\"GameState.IN_PROGRESS\"");
 
@@ -481,7 +517,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(generated)
                 .content()
                 .contains("__capy_data_is(__capy_match_value_")
-                .doesNotContain("== sample.Game.PLAYER_A_WON");
+                .doesNotContain("== sample.Game.GameState.PLAYER_A_WON");
         assertJavaCompiles(generatedPath(gameSource), generated);
     }
 
