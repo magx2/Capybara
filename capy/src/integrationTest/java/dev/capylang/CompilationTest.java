@@ -3786,6 +3786,42 @@ class CompilationTest {
         assertThat(pythonCode).contains("args[0:(1 + 1)]").contains("args[1:(1 + 1)]");
     }
 
+    @Test
+    void shouldPreservePrimitiveBackedFieldTypeThroughCrossModuleChainedAccess() {
+        var program = compileProgram(List.of(
+                rawModule("Fields", "/example", """
+                        type field_size -> int
+
+                        data Field {
+                            width: field_size,
+                        }
+                        """),
+                rawModule("Games", "/example", """
+                        from /example/Fields import { Field }
+
+                        data Game {
+                            game_field: Field,
+                        }
+                        """),
+                rawModule("Scoring", "/example", """
+                        from /example/Games import { Game }
+
+                        fun score(game: Game, offset: int): int =
+                            game.game_field.width - offset
+                        """)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("example/Scoring.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("((java.lang.Integer) __capy_reflection_data_field(")
+                .doesNotContain("java.lang.Object) __capy_reflection_data_field");
+    }
+
     private static String generatorOutputType(OutputType outputType) {
         return switch (outputType) {
             case JAVA -> "java";
