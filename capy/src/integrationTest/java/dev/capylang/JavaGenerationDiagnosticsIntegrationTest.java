@@ -385,6 +385,53 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void lowersEveryExtensionMethodInLocalAndImportedChains() throws Exception {
+        var localSource = writeSource("sample/LocalExtensionChain.cfun", """
+                enum GameState { PLAYER_A_WON, PLAYER_B_WON }
+                enum Player { PLAYER_A, PLAYER_B }
+
+                private fun Player.other_player(): Player =
+                    if this == PLAYER_A then PLAYER_B else PLAYER_A
+
+                private fun Player.won(): GameState =
+                    if this == PLAYER_A then PLAYER_A_WON else PLAYER_B_WON
+
+                fun winner(player: Player): GameState =
+                    player.other_player().other_player().won()
+                """);
+        var extensionsSource = writeSource("sample/ImportedExtensions.cfun", """
+                enum GameState { PLAYER_A_WON, PLAYER_B_WON }
+                enum Player { PLAYER_A, PLAYER_B }
+
+                fun Player.other_player(): Player =
+                    if this == PLAYER_A then PLAYER_B else PLAYER_A
+
+                fun Player.won(): GameState =
+                    if this == PLAYER_A then PLAYER_A_WON else PLAYER_B_WON
+                """);
+        var consumerSource = writeSource("sample/ImportedExtensionChain.cfun", """
+                from /sample/ImportedExtensions import { Player, GameState }
+
+                fun winner(player: Player): GameState =
+                    player.other_player().won()
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(localSource))
+                .content()
+                .contains("return Player_won__", "Player_other_player__")
+                .doesNotContain(".other_player(", ".won(");
+        assertThat(generatedPath(consumerSource))
+                .content()
+                .contains(
+                        "return sample.ImportedExtensions.Player_won__",
+                        "sample.ImportedExtensions.Player_other_player__")
+                .doesNotContain(".other_player(", ".won(");
+        assertJavaCompiles(generatedPath(localSource), generatedPath(extensionsSource), generatedPath(consumerSource));
+    }
+
+    @Test
     void doesNotExposeExcludedMemberThroughImportedEnumType() throws Exception {
         var gameSource = writeSource("sample/Game.cfun", """
                 enum GameState { IN_PROGRESS, PLAYER_A_WON }

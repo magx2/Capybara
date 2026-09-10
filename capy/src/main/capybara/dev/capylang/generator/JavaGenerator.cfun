@@ -11054,7 +11054,7 @@ private fun method_call_type(call: CompiledMethodCallExpression, env: List[JavaB
     else match find_object_method_with_receiver_type(call, receiverType, module, allModules) with
         case Some { binding } -> effect_type(binding.method.returnType)
         case None ->
-            match find_extension_method_in_scope(receiverType.name, call.name, module, allModules) with
+            match find_extension_method_for_arguments_in_scope(receiverType, call.name, call.arguments, env, module, allModules) with
             case Some { function } -> bound_extension_method_return_type(function, extension_method_receiver_type(function, receiverType, module, allModules))
             case None ->
                 match primitive_backed_backing_type(receiverType.name, module, allModules) with
