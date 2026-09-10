@@ -6,3 +6,6 @@ private fun Player.won(): GameState =
 
 fun missing_at_start(player: Player): Player = player.inverse()
 fun missing_in_middle(player: Player): GameState = player.inverse().won()
+
+data Game {}
+fun Game.inverse(): Game = this
