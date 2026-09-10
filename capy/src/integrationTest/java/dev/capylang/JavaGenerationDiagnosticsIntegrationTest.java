@@ -494,6 +494,40 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void lowersImportedExtensionMethodForInferredCrossModuleReceiver() throws Exception {
+        var gamesSource = writeSource("sample/Games.cfun", """
+                data Position {
+                    can_move: bool,
+                }
+
+                data Game {
+                    positions: Dict[Position],
+                }
+
+                fun Position.available_moves(): List[int] =
+                    if this.can_move then [1] else []
+
+                fun free_position(): Position =
+                    Position { can_move: true }
+                """);
+        var consumerSource = writeSource("sample/AI.cfun", """
+                from /sample/Games import { Game, free_position }
+
+                fun choose(game: Game): List[int] =
+                    let position = game.positions["center"].or_else(free_position())
+                    position.available_moves()
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        assertThat(generatedPath(consumerSource))
+                .content()
+                .contains("sample.Games.Position_available_moves__")
+                .doesNotContain(".available_moves(");
+        assertJavaCompiles(generatedPath(gamesSource), generatedPath(consumerSource));
+    }
+
+    @Test
     void doesNotExposeExcludedMemberThroughImportedEnumType() throws Exception {
         var gameSource = writeSource("sample/Game.cfun", """
                 enum GameState { IN_PROGRESS, PLAYER_A_WON }

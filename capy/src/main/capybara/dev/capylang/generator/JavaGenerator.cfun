@@ -11986,7 +11986,7 @@ private fun method_owner_matches(declaredOwner: String, actualOwner: String): bo
 /// Computes the name for method owner base.
 private fun method_owner_base_name(name: String): String =
     let bracket = first_index_of(name, "[", 0)
-    if bracket < 0 then name else name[0, bracket]
+    type_unqualified_name(if bracket < 0 then name else name[0, bracket])
 
 /// Checks whether method member matches the requested declaration, type, or name.
 private fun method_member_matches(declaredMember: String, actualMember: String): bool =
