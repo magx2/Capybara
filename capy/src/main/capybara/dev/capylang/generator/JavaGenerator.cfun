@@ -9207,7 +9207,7 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then java_enum_value_match_condition_code(matchCase, valueCode, valueType, module, allModules)
     else if java_record_match_case(matchCase, module, allModules)
     then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
-        + valueCode + " instanceof " + java_record_match_java_type(matchCase, module, allModules) + ")"
+        + "((java.lang.Object) " + valueCode + ") instanceof " + java_record_match_java_type(matchCase, module, allModules) + ")"
     else if erased_match_value_type(valueType) & generated_enum_value_binding_exists(matchCase.typeName, module, allModules)
     then valueCode + " == " + enum_match_value_code(matchCase.typeName, module, allModules)
     else if erased_match_value_type(valueType) & generated_qualified_enum_value_name(matchCase.typeName, module, allModules)
