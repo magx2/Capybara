@@ -1,21 +1,22 @@
-union Effect[T] = UnsafeEffect[T]
-data UnsafeEffect[T] { thunk: () => T }
-
-fun Effect[T].flat_map(mapper: T => Effect[Y]): Effect[Y] = <native>
-
-union Seq[T] = Cons[T] | End
-data Cons[T] { value: T, rest: () => Seq[T] }
-data End {}
+from UI import { UI }
+from /capy/lang/Effect import { Effect }
+from /capy/lang/Result import { Result }
+from /capy/collection/Seq import { Seq, Cons, End }
 
 data Game {}
 enum State { IN_PROGRESS, DONE }
 
-fun loop(state: State, effect: Effect[Game]): Effect[Seq[Game]] =
-    effect.flat_map(game =>
-        match state with
-        case IN_PROGRESS -> loop(DONE, effect)
-        case DONE ->
-            Cons {
-                value: game,
-                rest: () => End {},
-            })
+fun next_game(game: Game): Result[Game] = <native>
+
+fun loop(state: State, ui: UI, game: Game): Effect[Seq[Game]] =
+    ui.allow_player_to_move(game).flat_map(game =>
+        next_game(game).reduce(
+            next_game =>
+                match state with
+                case IN_PROGRESS -> loop(DONE, ui, game)
+                case DONE ->
+                    Cons {
+                        value: next_game,
+                        rest: () => End {},
+                    },
+            error => loop(DONE, ui, game)))
