@@ -9845,8 +9845,17 @@ private fun data_field_type_with_owner(name: String, receiverType: CompiledTypeR
 /// Resolves type metadata for data field type in a module.
 private fun data_field_type_in_module(name: String, receiverType: CompiledTypeReference, dataType: String, fallback: CompiledTypeReference, owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =
     let bindings = data_type_bindings(/capy/lang/Option.Some { dataType }, receiverType, owner, allModules)
-    let fieldType = declared_named_field_type(name, data_type_fields(dataType, owner, allModules), bindings, fallback)
-    qualified_data_field_type(fieldType, owner, current, allModules)
+    let declaredType = declared_named_schema_field_type(name, data_type_fields(dataType, owner, allModules), fallback)
+    bound_schema_type(qualified_data_field_type(declaredType, owner, current, allModules), bindings)
+
+/// Computes an unbound named field type directly from schema metadata.
+private fun declared_named_schema_field_type(name: String, fields: List[String], fallback: CompiledTypeReference): CompiledTypeReference =
+    match fields[0] with
+    case None -> fallback
+    case Some { field } ->
+        if schema_field_name(field) == name
+        then schema_type_reference(schema_field_type_name(field))
+        else declared_named_schema_field_type(name, fields[1:], fallback)
 
 /// Qualifies a field type against the module that declared the containing data type.
 private fun qualified_data_field_type(type: CompiledTypeReference, owner: CompiledModule, current: CompiledModule, allModules: List[CompiledModule]): CompiledTypeReference =

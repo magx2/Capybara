@@ -3822,6 +3822,36 @@ class CompilationTest {
                 .doesNotContain("java.lang.Object) __capy_reflection_data_field");
     }
 
+    @Test
+    void shouldPreserveCallerOwnedTypeWhenBindingImportedGenericField() {
+        var program = compileProgram(List.of(
+                rawModule("Boxes", "/example", """
+                        type size -> String
+
+                        data Box[T] {
+                            value: T,
+                        }
+                        """),
+                rawModule("Consumer", "/example", """
+                        from /example/Boxes import { Box }
+
+                        type size -> int
+
+                        fun decrement(box: Box[size]): int = box.value - 1
+                        """)
+        ));
+
+        var code = JavaGenerator.javaGenerator(program).modules().stream()
+                .filter(module -> module.relativePath().equals("example/Consumer.java"))
+                .findFirst()
+                .orElseThrow()
+                .code();
+
+        assertThat(code)
+                .contains("((java.lang.Integer) __capy_reflection_data_field(")
+                .doesNotContain("((java.lang.String) __capy_reflection_data_field(");
+    }
+
     private static String generatorOutputType(OutputType outputType) {
         return switch (outputType) {
             case JAVA -> "java";
