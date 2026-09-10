@@ -9205,9 +9205,9 @@ private fun match_case_condition_code(matchCase: CompiledMatchCase, valueCode: S
     then primitive_match_condition_code(matchCase.typeName, valueCode, valueType)
     else if java_enum_value_match_case(matchCase, valueType, module, allModules)
     then java_enum_value_match_condition_code(matchCase, valueCode, valueType, module, allModules)
-    else if java_top_level_record_match_case(matchCase, module, allModules)
+    else if java_record_match_case(matchCase, module, allModules)
     then "(__capy_data_is(" + valueCode + ", \"" + escape_java_string(matchCase.typeName) + "\") || "
-        + valueCode + " instanceof " + java_top_level_record_match_java_type(matchCase, module, allModules) + ")"
+        + valueCode + " instanceof " + java_record_match_java_type(matchCase, module, allModules) + ")"
     else if erased_match_value_type(valueType) & generated_enum_value_binding_exists(matchCase.typeName, module, allModules)
     then valueCode + " == " + enum_match_value_code(matchCase.typeName, module, allModules)
     else if erased_match_value_type(valueType) & generated_qualified_enum_value_name(matchCase.typeName, module, allModules)
@@ -9264,12 +9264,17 @@ private fun generated_qualified_enum_value_name(name: String, module: CompiledMo
     qualified_enum_value_name(name, module, allModules)
         & java_data_type_generated_in_scope(enum_qualified_type_name(name), module, allModules)
 
-/// Checks whether a data pattern names a promoted top-level record.
-private fun java_top_level_record_match_case(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
-    java_top_level_record_type(data_type_reference(matchCase.typeName), module, allModules)
+/// Checks whether a data pattern names a generated Java record.
+private fun java_record_match_case(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): bool =
+    let name = type_unqualified_name(matchCase.typeName)
+    match data_type_owner_module(name, module, allModules) with
+    case Some { owner } ->
+        java_data_type_kind(name, owner.functions) == "data"
+            & java_data_type_generated(name, owner, allModules)
+    case None -> false
 
-/// Computes the raw Java record type used by a promoted-record pattern.
-private fun java_top_level_record_match_java_type(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): String =
+/// Computes the raw Java record type used by a generated-record pattern.
+private fun java_record_match_java_type(matchCase: CompiledMatchCase, module: CompiledModule, allModules: List[CompiledModule]): String =
     let name = type_unqualified_name(matchCase.typeName)
     match data_type_owner_module(name, module, allModules) with
     case Some { owner } -> top_level_owned_data_type_java_name(name, module, owner)
@@ -9391,11 +9396,11 @@ private fun match_binding_value_code(binding: String, matchCase: CompiledMatchCa
     then option_value_code(valueCode) + ".orElse(null)"
     else if result_match_case(matchCase, valueType)
     then result_match_binding_value_code(binding, matchCase, valueCode, idx)
-    else if java_top_level_record_match_case(matchCase, module, allModules)
+    else if java_record_match_case(matchCase, module, allModules)
     then
         let fieldName = match_binding_field_name(matchCase, idx, module, allModules)
-        "__capy_data_field(" + valueCode + ", \"" + escape_java_string(fieldName)
-            + "\", __capy_record_value -> ((" + java_top_level_record_match_java_type(matchCase, module, allModules)
+        "(java.lang.Object) __capy_data_field(" + valueCode + ", \"" + escape_java_string(fieldName)
+            + "\", __capy_record_value -> ((" + java_record_match_java_type(matchCase, module, allModules)
             + ") __capy_record_value)." + java_identifier(fieldName) + "())"
     else "__capy_data_field(" + valueCode + ", \"" + escape_java_string(match_binding_field_name(matchCase, idx, module, allModules)) + "\")"
 
