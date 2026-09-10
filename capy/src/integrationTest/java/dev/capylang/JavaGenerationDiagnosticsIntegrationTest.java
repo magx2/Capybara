@@ -3016,6 +3016,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
     private java.lang.reflect.Method generatedMethod(Class<?> owner, String prefix) {
         return java.util.Arrays.stream(owner.getDeclaredMethods())
                 .filter(method -> method.getName().startsWith(prefix))
+                .filter(method -> java.lang.reflect.Modifier.isPublic(method.getModifiers()))
                 .findFirst()
                 .orElseThrow();
     }
