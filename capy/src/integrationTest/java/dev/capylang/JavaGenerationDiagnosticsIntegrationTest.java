@@ -513,6 +513,12 @@ class JavaGenerationDiagnosticsIntegrationTest {
         var consumerSource = writeSource("sample/AI.cfun", """
                 from /sample/Games import { Game, free_position }
 
+                data Position {
+                    is_local: bool,
+                }
+
+                fun Position.available_moves(): List[int] = [99]
+
                 fun choose(game: Game): List[int] =
                     let position = game.positions["center"].or_else(free_position())
                     position.available_moves()
@@ -523,6 +529,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
         assertThat(generatedPath(consumerSource))
                 .content()
                 .contains("sample.Games.Position_available_moves__")
+                .doesNotContain("AI.Position_available_moves__")
                 .doesNotContain(".available_moves(");
         assertJavaCompiles(generatedPath(gamesSource), generatedPath(consumerSource));
     }

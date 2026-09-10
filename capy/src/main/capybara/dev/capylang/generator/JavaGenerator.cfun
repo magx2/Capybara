@@ -6995,12 +6995,15 @@ private fun java_class_root_shadowed(className: String, env: List[JavaBinding]):
 
 /// Finds the origin-preserving binding for an extension overload already selected by argument types.
 private fun find_selected_extension_method_binding_in_scope(function: CompiledFunction, ownerName: String, methodName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
-    match find_selected_function_binding(function, module.functionBindings) with
-    case Some { binding } -> /capy/lang/Option.Some { binding }
+    match qualified_extension_receiver_owner(ownerName, module, allModules) with
+    case Some { owner } -> find_selected_function_binding(function, owner.functionBindings)
     case None ->
-        match find_selected_extension_method_binding_in_imports(function, ownerName, methodName, module.imports, module, allModules) with
+        match find_selected_function_binding(function, module.functionBindings) with
         case Some { binding } -> /capy/lang/Option.Some { binding }
-        case None -> find_selected_primitive_backed_proxy_binding(function, ownerName, module)
+        case None ->
+            match find_selected_extension_method_binding_in_imports(function, ownerName, methodName, module.imports, module, allModules) with
+            case Some { binding } -> /capy/lang/Option.Some { binding }
+            case None -> find_selected_primitive_backed_proxy_binding(function, ownerName, module)
 
 /// Finds the selected extension overload in unqualified imports.
 private fun find_selected_extension_method_binding_in_imports(function: CompiledFunction, ownerName: String, methodName: String, imports: List[CompiledImportDeclaration], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunctionBinding] =
@@ -11870,9 +11873,26 @@ private fun find_binary_extension_operator_with_left_type(binary: CompiledBinary
 
 /// Finds an argument-compatible extension method in local declarations or imports.
 private fun find_extension_method_for_arguments_in_scope(receiverType: CompiledTypeReference, methodName: String, arguments: List[CompiledExpression], env: List[JavaBinding], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
-    match find_method_function_for_arguments(receiverType, methodName, arguments, env, module.functions, module, allModules) with
-    case Some { function } -> /capy/lang/Option.Some { function }
-    case None -> find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, module.imports, module, allModules)
+    match qualified_extension_receiver_owner(receiverType.name, module, allModules) with
+    case Some { owner } -> find_method_function_for_arguments(
+        CompiledTypeReference { name: type_unqualified_name(receiverType.name), arguments: receiverType.arguments },
+        methodName,
+        arguments,
+        env,
+        owner.functions,
+        module,
+        allModules
+    )
+    case None ->
+        match find_method_function_for_arguments(receiverType, methodName, arguments, env, module.functions, module, allModules) with
+        case Some { function } -> /capy/lang/Option.Some { function }
+        case None -> find_extension_method_for_arguments_in_imports(receiverType, methodName, arguments, env, module.imports, module, allModules)
+
+/// Resolves the declaring module encoded in a path-qualified extension receiver type.
+private fun qualified_extension_receiver_owner(receiverName: String, module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledModule] =
+    if qualified_call_name(receiverName) | java_generator_string_has_prefix(receiverName, "/")
+    then top_level_qualified_data_type_owner(receiverName, module, allModules)
+    else /capy/lang/Option.None {}
 
 /// Finds an argument-compatible method function in declarations.
 private fun find_method_function_for_arguments(receiverType: CompiledTypeReference, methodName: String, arguments: List[CompiledExpression], env: List[JavaBinding], functions: List[CompiledFunction], module: CompiledModule, allModules: List[CompiledModule]): /capy/lang/Option[CompiledFunction] =
@@ -11986,7 +12006,7 @@ private fun method_owner_matches(declaredOwner: String, actualOwner: String): bo
 /// Computes the name for method owner base.
 private fun method_owner_base_name(name: String): String =
     let bracket = first_index_of(name, "[", 0)
-    type_unqualified_name(if bracket < 0 then name else name[0, bracket])
+    if bracket < 0 then name else name[0, bracket]
 
 /// Checks whether method member matches the requested declaration, type, or name.
 private fun method_member_matches(declaredMember: String, actualMember: String): bool =
