@@ -1721,16 +1721,19 @@ private fun explicit_static_imports_with_all(functions: List[CompiledFunction], 
     case None -> ""
     case Some { function } ->
         if static_import_function(function, declaration)
-        then "import static " + className + "." + java_static_import_member_name(function, allFunctions) + ";" + newline()
+        then "import static " + className + "." + java_static_import_member_name(function, allFunctions, className) + ";" + newline()
             + explicit_static_imports_with_all(functions[1:], allFunctions, declaration, className)
         else explicit_static_imports_with_all(functions[1:], allFunctions, declaration, className)
 
 /// Resolves the emitted member name for imported fields and ordinary compiled functions.
-private fun java_static_import_member_name(function: CompiledFunction, functions: List[CompiledFunction]): String =
+private fun java_static_import_member_name(function: CompiledFunction, functions: List[CompiledFunction], className: String): String =
     if compiled_constant(function)
     then java_identifier(function.name)
     else match enum_value_type_in_functions(function.name, functions) with
-        case Some _ -> java_identifier(function.name)
+        case Some { typeName } ->
+            if type_unqualified_name(className) == typeName
+            then java_identifier(function.name)
+            else java_identifier(typeName) + "." + java_identifier(function.name)
         case None -> java_function_name(function)
 
 /// Checks whether a function matches the static import function metadata.
@@ -12209,7 +12212,13 @@ private fun enum_schema_type_name(schemaName: String): String =
 private fun enum_value_binding_code(valueName: String, binding: JavaEnumValueBinding): String =
     if binding.moduleClassName.is_empty()
     then java_identifier(valueName)
-    else binding.moduleClassName + "." + java_identifier(valueName)
+    else imported_enum_value_code(binding.moduleClassName, binding.typeName, valueName)
+
+/// Emits an imported enum value, accounting for enums represented directly by their module class.
+private fun imported_enum_value_code(moduleClassName: String, typeName: String, valueName: String): String =
+    if type_unqualified_name(moduleClassName) == typeName
+    then moduleClassName + "." + java_identifier(valueName)
+    else moduleClassName + "." + java_identifier(typeName) + "." + java_identifier(valueName)
 
 /// Emits an enum match value after resolving its local or imported binding.
 private fun enum_match_value_code(valueName: String, module: CompiledModule, allModules: List[CompiledModule]): String =
@@ -12289,7 +12298,7 @@ private fun enum_value_reference_code(typeName: String, valueName: String, modul
     if enum_type_exists_in_functions(typeName, module.functions)
     then java_identifier(valueName)
     else match enum_type_imported_class(typeName, module.imports, module, allModules) with
-        case Some { className } -> className + "." + java_identifier(valueName)
+        case Some { className } -> imported_enum_value_code(className, typeName, valueName)
         case None -> java_identifier(valueName)
 
 /// Resolves type metadata for enum type imported class.
