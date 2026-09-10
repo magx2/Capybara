@@ -392,10 +392,16 @@ final class StrictSemanticAnalyzer {
             if (chosen == null) {
                 return UNKNOWN;
             }
+            var objectMethodCall = chosen.objectMethod && module.sourceKind() == SourceKind.FUNCTIONAL;
             var substitutions = new HashMap<String, Type>();
             bind(chosen.owner, receiver, substitutions);
             if (expected != null) {
-                bind(chosen.result, expected, substitutions);
+                var contextualResult = objectMethodCall
+                        && unqualified(expected.name).equals("Effect")
+                        && expected.arguments.size() == 1
+                        ? expected.arguments.getFirst()
+                        : expected;
+                bind(chosen.result, contextualResult, substitutions);
             }
             inferMethodSubstitutions(module, chosen, call.arguments(), env, substitutions);
             var parameters = chosen.parameters.stream().map(type -> substitute(type, substitutions)).toList();
@@ -570,6 +576,12 @@ final class StrictSemanticAnalyzer {
         }
         if (assignable(module, thenType, elseType)) return thenType;
         if (assignable(module, elseType, thenType)) return elseType;
+        var monadicThen = monadicExpressionType(module, conditional.thenBranch(), UNKNOWN, env.copy(), thenType);
+        var monadicElse = monadicExpressionType(module, conditional.elseBranch(), UNKNOWN, env.copy(), elseType);
+        if (Set.of("Result", "Option", "Either").contains(unqualified(monadicThen.name))
+                && unqualified(monadicThen.name).equals(unqualified(monadicElse.name))) {
+            return mergeMonadicTypes(module, "If branch", location(conditional.elseBranch()), monadicThen, monadicElse);
+        }
         report(module, conditional.location(), "ASSIGNMENT_TYPE",
                 "If branches have incompatible types `" + thenType + "` and `" + elseType + "`.");
         return ERROR;
@@ -676,7 +688,7 @@ final class StrictSemanticAnalyzer {
             if (binding.operator().equals("<-")) {
                 actual = monadicExpressionType(module, binding.value(), declared, env, actual);
                 if (!dynamic(actual)
-                        && (!Set.of("Effect", "Result", "Option", "Either").contains(actual.name)
+                        && (!Set.of("Effect", "Result", "Option", "Either").contains(unqualified(actual.name))
                         || actual.arguments.isEmpty())) {
                     if (actual != ERROR) {
                         report(module, binding.location(), "ASSIGNMENT_TYPE",
@@ -692,14 +704,19 @@ final class StrictSemanticAnalyzer {
             if (declared != null) requireBindingAssignable(module, binding, actual, declared);
             env.values.put(binding.name(), declared == null ? actual : declared);
         }
-        var resultExpected = hasEffectBinding
-                && expected != null
+        if (!hasEffectBinding) {
+            return infer(module, block.result(), expected, env);
+        }
+        if (expected != null
                 && unqualified(expected.name).equals("Effect")
-                && expected.arguments.size() == 1
-                ? expected.arguments.getFirst()
-                : expected;
-        var result = infer(module, block.result(), resultExpected, env);
-        return hasEffectBinding ? wrapperType("Effect", result) : result;
+                && expected.arguments.size() == 1) {
+            var wrappedResult = probe(module, block.result(), expected, env);
+            if (unqualified(wrappedResult.name).equals("Effect")) {
+                return infer(module, block.result(), expected, env);
+            }
+            return wrapperType("Effect", infer(module, block.result(), expected.arguments.getFirst(), env));
+        }
+        return wrapperType("Effect", infer(module, block.result(), null, env));
     }
 
     private Type monadicExpressionType(
@@ -1178,6 +1195,17 @@ final class StrictSemanticAnalyzer {
             List<Type> parameters,
             Env env
     ) {
+        if (name.equals("flat_map")) {
+            // NativeCompilerValidator owns flat_map's wrapper-specific diagnostic. Strict analysis
+            // still checks the lambda body with its contextual return type while inferring the call.
+            for (var index = 0; index < Math.min(arguments.size(), parameters.size()); index++) {
+                var argument = arguments.get(index);
+                if (argument instanceof LambdaExpression) {
+                    infer(module, argument, parameters.get(index), env);
+                }
+            }
+            return;
+        }
         for (var index = 0; index < Math.min(arguments.size(), parameters.size()); index++) {
             var argument = arguments.get(index);
             if (!(argument instanceof LambdaExpression) && !(argument instanceof FunctionReferenceExpression)) continue;
@@ -1487,6 +1515,16 @@ final class StrictSemanticAnalyzer {
                 }
             }
         }
+        var parentPrefix = "__capy_schema_parent|" + actualName + "|";
+        for (var linked : visibleLinkedConstructorModules(module)) {
+            for (var function : linked.functions()) {
+                if (function.name().startsWith(parentPrefix)
+                        && function.body() instanceof CompiledExpression.CompiledStringLiteral parent
+                        && subtype(module, parseType(parent.value()).name, expectedName, visited)) {
+                    return true;
+                }
+            }
+        }
         for (var objectClass : module.objectOriented().classes()) {
             if (!objectClass.name().equals(actualName)) continue;
             for (var parent : objectClass.parents()) {
@@ -1613,8 +1651,12 @@ final class StrictSemanticAnalyzer {
 
     private CompiledModule resolveLinked(String path) {
         var normalized = normalize(path);
-        return linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
-                || entry.getKey().endsWith("/" + normalized) || entry.getValue().name().equals(path)).map(Map.Entry::getValue).findFirst().orElse(null);
+        var linked = linkedByPath.entrySet().stream().filter(entry -> entry.getKey().equals(normalized)
+                || entry.getKey().endsWith("/" + normalized) || entry.getValue().name().equals(path))
+                .map(Map.Entry::getValue).findFirst().orElse(null);
+        return linked == null && resolveParsed(path) == null
+                ? NativeCompilerValidator.bundledModule(normalized).orElse(null)
+                : linked;
     }
 
     private void validateTypeArity(ParsedModule module, String name, int arity, SourceLocation location) {

@@ -1,0 +1,5 @@
+from Main import { Game }
+
+interface UI {
+    def allow_player_to_move(game: Game): Game
+}
