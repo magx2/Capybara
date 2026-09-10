@@ -1123,6 +1123,16 @@ class JavaGenerationDiagnosticsIntegrationTest {
                     match account with
                     case NamedAccount { _, related } -> related
                     case AnonymousAccount {} -> []
+
+                fun int_is_account(value: int): bool =
+                    match value with
+                    case NamedAccount {} -> true
+                    case _ -> false
+
+                fun string_is_account(value: String): bool =
+                    match value with
+                    case NamedAccount {} -> true
+                    case _ -> false
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
@@ -1132,6 +1142,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
                 .content()
                 .contains("record NamedAccount(java.lang.String name, java.util.List<Account> related) implements Account")
                 .contains("record AnonymousAccount() implements Account")
+                .contains("((java.lang.Object) __capy_match_value_")
                 .contains("instanceof Accounts.NamedAccount", "instanceof Accounts.AnonymousAccount")
                 .contains("(java.lang.Object) __capy_data_field(")
                 .contains("((Accounts.NamedAccount) __capy_record_value).name()")
@@ -1152,6 +1163,8 @@ class JavaGenerationDiagnosticsIntegrationTest {
             assertThat(accountName.invoke(null, anonymousAccount)).isEqualTo("anonymous");
             assertThat(generatedMethod(module, "related_accounts__").invoke(null, namedAccount))
                     .isEqualTo(java.util.List.of());
+            assertThat(generatedMethod(module, "int_is_account__").invoke(null, 1)).isEqualTo(false);
+            assertThat(generatedMethod(module, "string_is_account__").invoke(null, "Ada")).isEqualTo(false);
         }
     }
 
