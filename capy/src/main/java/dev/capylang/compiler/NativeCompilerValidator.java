@@ -971,9 +971,11 @@ public final class NativeCompilerValidator {
                 validateCallableMethodArgument(context, module, call, types, errors);
                 validateNestedLambdaFunctionArguments(context, module, call.receiver(), types, errors);
                 var receiverType = validationExpressionType(context, module, call.receiver(), types);
-                var valueType = receiverType != null && receiverType.arguments().size() == 1
-                        ? receiverType.arguments().getFirst()
-                        : null;
+                var valueType = Set.of("map_error", "recover").contains(call.name())
+                        ? resultErrorType()
+                        : receiverType != null && receiverType.arguments().size() == 1
+                                ? receiverType.arguments().getFirst()
+                                : null;
                 for (var argument : call.arguments()) {
                     if (argument instanceof LambdaExpression mapper && valueType != null) {
                         validateNestedLambdaFunctionArguments(
@@ -1123,11 +1125,14 @@ public final class NativeCompilerValidator {
         }
         var arity = arguments.size();
         var receiverTypes = context.extensionMethodReceiverTypes(module, methodName, arity);
-        var receiverName = unqualified(receiverType.name());
+        var receiverName = nominalTypeName(receiverType.name());
         if (receiverTypes.contains(receiverName)) {
             return;
         }
         if (context.objectMethodExists(module, receiverType.name(), methodName, arity)) {
+            return;
+        }
+        if (context.derivedReceiver(module, receiverType.name())) {
             return;
         }
         if (methodName.equals("size") && arity == 0 && SIZE_RECEIVER_TYPES.contains(receiverName)) {
@@ -1211,7 +1216,7 @@ public final class NativeCompilerValidator {
             ));
             return;
         }
-        if (receiverTypes.isEmpty() && module.sourceKind() == SourceKind.FUNCTIONAL) {
+        if (module.sourceKind() == SourceKind.FUNCTIONAL) {
             errors.add(error(
                     module,
                     location,
@@ -4438,6 +4443,35 @@ public final class NativeCompilerValidator {
 
         private Set<String> extensionMethodReceiverTypes(ParsedModule module, String methodName) {
             return extensionMethodReceiverTypes(module, methodName, -1);
+        }
+
+        private boolean derivedReceiver(ParsedModule module, String receiverType) {
+            var receiverName = unqualified(receiverType);
+            if (!localDerives(module, receiverName).isEmpty()) {
+                return true;
+            }
+            for (var declaration : module.imports()) {
+                if (!importExposes(declaration, receiverName)) {
+                    continue;
+                }
+                var imported = parsedModule(declaration.modulePath());
+                if (imported != null && !localDerives(imported, receiverName).isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private List<Definition.DeriveApplication> localDerives(ParsedModule module, String receiverName) {
+            for (var definition : module.definitions()) {
+                if (definition instanceof DataDeclaration data && data.name().equals(receiverName)) {
+                    return data.derives();
+                }
+                if (definition instanceof TypeDeclaration type && type.name().equals(receiverName)) {
+                    return type.derives();
+                }
+            }
+            return List.of();
         }
 
         private Set<Integer> extensionMethodArities(

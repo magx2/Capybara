@@ -1370,8 +1370,102 @@ final class StrictSemanticAnalyzer {
             collectMethods(resolveParsed(declaration.modulePath()), receiver, name, result);
             collectMethods(resolveLinked(declaration.modulePath()), receiver, name, result);
         }
+        collectDerivedMethods(module, receiver, name, result);
         collectObjectMethods(module, receiver, name, result, new HashSet<>());
         return deduplicate(result);
+    }
+
+    private void collectDerivedMethods(
+            ParsedModule module,
+            String receiver,
+            String name,
+            List<FunctionSig> target
+    ) {
+        var receiverName = unqualified(receiver);
+        collectLocalDerivedMethods(module, receiverName, name, target);
+        for (var declaration : module.imports()) {
+            if (declaration.qualified() || !exposes(declaration, receiverName)) continue;
+            collectLocalDerivedMethods(
+                    resolveParsed(declaration.modulePath()),
+                    receiverName,
+                    name,
+                    target
+            );
+        }
+    }
+
+    private void collectLocalDerivedMethods(
+            ParsedModule module,
+            String receiver,
+            String name,
+            List<FunctionSig> target
+    ) {
+        if (module == null) return;
+        for (var definition : module.definitions()) {
+            var derives = switch (definition) {
+                case DataDeclaration data when data.name().equals(receiver) -> data.derives();
+                case TypeDeclaration type when type.name().equals(receiver) -> type.derives();
+                default -> List.<Definition.DeriveApplication>of();
+            };
+            derives.forEach(derive -> collectDeriverMethods(module, derive.name(), receiver, name, target));
+        }
+    }
+
+    private void collectDeriverMethods(
+            ParsedModule module,
+            String deriverName,
+            String receiver,
+            String name,
+            List<FunctionSig> target
+    ) {
+        collectParsedDeriverMethods(module, deriverName, receiver, name, target);
+        for (var declaration : module.imports()) {
+            if (declaration.qualified() || !exposes(declaration, unqualified(deriverName))) continue;
+            collectParsedDeriverMethods(
+                    resolveParsed(declaration.modulePath()),
+                    deriverName,
+                    receiver,
+                    name,
+                    target
+            );
+            var linked = resolveLinked(declaration.modulePath());
+            var deriver = linked == null ? null : linked.derivers().get(unqualified(deriverName));
+            if (deriver == null || deriver.visibility().equals("private")) continue;
+            deriver.methods().stream()
+                    .filter(method -> method.name().equals(name))
+                    .map(method -> new FunctionSig(
+                            method.name(),
+                            method.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
+                            type(method.returnType()),
+                            simple(receiver),
+                            false
+                    ))
+                    .forEach(target::add);
+        }
+    }
+
+    private void collectParsedDeriverMethods(
+            ParsedModule module,
+            String deriverName,
+            String receiver,
+            String name,
+            List<FunctionSig> target
+    ) {
+        if (module == null) return;
+        module.definitions().stream()
+                .filter(Definition.DeriverDeclaration.class::isInstance)
+                .map(Definition.DeriverDeclaration.class::cast)
+                .filter(deriver -> deriver.name().equals(unqualified(deriverName)))
+                .flatMap(deriver -> deriver.methods().stream())
+                .filter(method -> method.name().equals(name))
+                .map(method -> new FunctionSig(
+                        method.name(),
+                        method.parameters().stream().map(parameter -> type(parameter.typeReference())).toList(),
+                        type(method.returnType()),
+                        simple(receiver),
+                        false
+                ))
+                .forEach(target::add);
     }
 
     private void collectMethods(ParsedModule module, String receiver, String name, List<FunctionSig> target) {

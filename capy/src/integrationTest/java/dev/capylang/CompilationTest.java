@@ -49,6 +49,9 @@ class CompilationTest {
 
                         fun missing_at_start(player: Player): Player = player.inverse()
                         fun missing_in_middle(player: Player): GameState = player.inverse().won()
+
+                        data Game {}
+                        fun Game.inverse(): Game = this
                         """)),
                 new LinkedHashSet<>(),
                 emptyNativeProviders(),
@@ -421,6 +424,28 @@ class CompilationTest {
                     fun identity(): any = receiver
                 }
                 """)));
+
+        assertThat(JavaGenerator.javaGenerator(program).modules())
+                .allSatisfy(module -> assertThat(module.code())
+                        .doesNotContain("Unsupported CFUN expression at"));
+    }
+
+    @Test
+    void shouldResolveMethodGeneratedByImportedDeriver() {
+        var program = compileProgram(List.of(
+                rawModule("Identity", "/derivers", """
+                        deriver Identity {
+                            fun identity(): any = receiver
+                        }
+                        """),
+                rawModule("Consumer", "", """
+                        from /derivers/Identity import { Identity }
+
+                        data Item { value: int } derive Identity
+
+                        fun identity(item: Item): any = item.identity()
+                        """)
+        ));
 
         assertThat(JavaGenerator.javaGenerator(program).modules())
                 .allSatisfy(module -> assertThat(module.code())
