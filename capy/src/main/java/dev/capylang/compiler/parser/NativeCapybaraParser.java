@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
 @NativeImplementation
 public final class NativeCapybaraParser implements CapybaraParser, CapybaraValidator {
     private final NativeCompilerValidator validator = new NativeCompilerValidator();
-    private static final String NOT_IMPLEMENTED_FUNCTION_KEY = "__capy_not_implemented_function";
+    // `|` cannot occur in a CFUN identifier, so this parser-only entry cannot shadow a local function.
+    private static final String NOT_IMPLEMENTED_FUNCTION_KEY = "__capy_not_implemented_function|";
 
     private static final String MODULE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_]*";
     private static final String PACKAGE_SEGMENT_PATTERN = "[A-Za-z_][A-Za-z0-9_-]*";

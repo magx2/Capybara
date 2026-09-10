@@ -2707,7 +2707,7 @@ private fun expression_code(
     match expression with
     case CompiledUnsupportedExpression unsupported ->
         if compiled_not_implemented_source(unsupported.source)
-        then placeholder_code(unsupported, module)
+        then value_conversion_code(placeholder_code(unsupported, module), nothing_type(), expectedType, module, allModules)
         else "unsupported(\"" + escape_java_string(unsupported.source) + "\")"
     case CompiledIntLiteral literal -> value_conversion_code(int_literal_code(literal, expectedType), expression_type(expression, env, module, allModules), expectedType, module, allModules)
     case CompiledLongLiteral literal -> value_conversion_code(literal.source, long_type(), expectedType, module, allModules)
@@ -3132,7 +3132,11 @@ private fun power_expression_code(binary: CompiledBinaryExpression, resultType: 
 
 /// Emits generated code for unary expression.
 private fun unary_expression_code(unary: CompiledUnaryExpression, env: List[JavaBinding], expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
-    let operandType = numeric_backing_type(expression_type(unary.expression, env, module, allModules), module, allModules)
+    let expressionType = expression_type(unary.expression, env, module, allModules)
+    let operandType =
+        if expressionType.name == "nothing"
+        then if numeric_type(expectedType) then expectedType else int_type()
+        else numeric_backing_type(expressionType, module, allModules)
     if unary.operator == "!"
     then "(!" + truthy_expression_code(unary.expression, env, module, allModules) + ")"
     else if unary.operator == ".not."
@@ -4203,7 +4207,7 @@ private fun primitive_backed_value_conversion_code(code: String, backingType: Co
 private fun ordinary_value_conversion_code(code: String, sourceType: CompiledTypeReference, expectedType: CompiledTypeReference, module: CompiledModule, allModules: List[CompiledModule]): String =
     let ordinaryType = top_level_boxed_java_type(expectedType, module, allModules)
     let castType = if ordinaryType == "java.lang.Object" then java_object_interface_type(expectedType, module, allModules) else ordinaryType
-    if (sourceType.name.is_empty() | sourceType.name == "any") & !expectedType.name.is_empty() & expectedType.name != "any"
+    if (sourceType.name.is_empty() | sourceType.name == "any" | sourceType.name == "nothing") & !expectedType.name.is_empty() & expectedType.name != "any" & expectedType.name != "nothing"
     then "((" + castType + ") " + code + ")"
     else numeric_widening_code(code, sourceType, expectedType)
 

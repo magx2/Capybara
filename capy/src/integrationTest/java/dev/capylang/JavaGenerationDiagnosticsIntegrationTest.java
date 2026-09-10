@@ -35,6 +35,15 @@ class JavaGenerationDiagnosticsIntegrationTest {
         var source = writeSource("sample/NotImplemented.cfun", """
                 fun foo(x: String): int = ???
                 fun fallback(): int = if true then 42 else ???
+                fun plus_one(): int = ??? + 1
+                fun negate(): int = -???
+                fun stub() = ???
+                fun use_stub(): int = stub()
+
+                fun collision(): int =
+                    fun __capy_not_implemented_function(): int = 7
+                    ---
+                    __capy_not_implemented_function()
                 """);
 
         assertThat(compileGenerateStderr("java")).isEmpty();
@@ -48,10 +57,17 @@ class JavaGenerationDiagnosticsIntegrationTest {
             var generatedClass = loader.loadClass("sample.NotImplemented");
 
             assertThat(generatedMethod(generatedClass, "fallback__").invoke(null)).isEqualTo(42);
+            assertThat(generatedMethod(generatedClass, "collision__").invoke(null)).isEqualTo(7);
             assertThatThrownBy(() -> generatedMethod(generatedClass, "foo__").invoke(null, "value"))
                     .hasCauseInstanceOf(UnsupportedOperationException.class)
                     .cause()
                     .hasMessage("line 1, column 26, file /sample/NotImplemented.cfun: the function `foo` is not yet implemented");
+            assertThatThrownBy(() -> generatedMethod(generatedClass, "plus_one__").invoke(null))
+                    .hasCauseInstanceOf(UnsupportedOperationException.class);
+            assertThatThrownBy(() -> generatedMethod(generatedClass, "negate__").invoke(null))
+                    .hasCauseInstanceOf(UnsupportedOperationException.class);
+            assertThatThrownBy(() -> generatedMethod(generatedClass, "use_stub__").invoke(null))
+                    .hasCauseInstanceOf(UnsupportedOperationException.class);
         }
     }
 

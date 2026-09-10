@@ -310,7 +310,7 @@ final class StrictSemanticAnalyzer {
             case ThrowExpression thrown -> { infer(module, thrown.value(), null, env); yield NOTHING; }
             case TryCatchExpression attempt -> tryCatchType(module, attempt, expected, env);
             case WithExpression with -> withType(module, with, expected, env);
-            case UnsupportedExpression ignored -> UNKNOWN;
+            case UnsupportedExpression unsupported -> notImplemented(unsupported) ? NOTHING : UNKNOWN;
             default -> UNKNOWN;
         };
     }
@@ -677,10 +677,16 @@ final class StrictSemanticAnalyzer {
             requireAssignable(module, unary.location(), "OPERATOR_TYPE", operand, BOOL, "Unary `!` operand");
             return BOOL;
         }
+        if (operand == NOTHING) return NOTHING;
         var effectiveOperand = primitiveBackedEffectiveType(module, operand);
         if (!numeric(effectiveOperand)) report(module, unary.location(), "OPERATOR_TYPE",
                 "Unary operator `" + unary.operator() + "` requires a numeric operand, but received `" + operand + "`.");
         return effectiveOperand;
+    }
+
+    private boolean notImplemented(UnsupportedExpression unsupported) {
+        return unsupported.source().equals("???")
+                || unsupported.source().startsWith("__capy_not_implemented__|");
     }
 
     private Type blockType(ParsedModule module, BlockExpression block, Type expected, Env outer) {
