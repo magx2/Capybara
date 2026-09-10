@@ -1,0 +1,8 @@
+enum GameState { PLAYER_A_WON, PLAYER_B_WON }
+enum Player { PLAYER_A, PLAYER_B }
+
+private fun Player.won(): GameState =
+    if this == PLAYER_A then PLAYER_A_WON else PLAYER_B_WON
+
+fun missing_at_start(player: Player): Player = player.inverse()
+fun missing_in_middle(player: Player): GameState = player.inverse().won()

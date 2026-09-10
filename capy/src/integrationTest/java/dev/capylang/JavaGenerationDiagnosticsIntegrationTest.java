@@ -30,6 +30,32 @@ class JavaGenerationDiagnosticsIntegrationTest {
     @TempDir
     Path tempDir;
 
+    @ParameterizedTest
+    @ValueSource(strings = {"java", "javascript", "python"})
+    void rejectsUnresolvedExtensionMethodsBeforeGeneration(String outputType) throws Exception {
+        var source = writeSource("sample/UnresolvedExtension.cfun", """
+                enum GameState { PLAYER_A_WON, PLAYER_B_WON }
+                enum Player { PLAYER_A, PLAYER_B }
+
+                private fun Player.won(): GameState =
+                    if this == PLAYER_A then PLAYER_A_WON else PLAYER_B_WON
+
+                fun winner(player: Player): GameState =
+                    player.inverse().won()
+                """);
+
+        assertThat(compileGenerateStderr(outputType)).isEqualTo("""
+                Compilation failed with 1 error(s):
+                /sample/UnresolvedExtension.cfun:8:4: Method `inverse` is not defined for receiver type `Player`.
+                """);
+        var extension = switch (outputType) {
+            case "javascript" -> ".js";
+            case "python" -> ".py";
+            default -> ".java";
+        };
+        assertThat(generatedPath(source, extension)).doesNotExist();
+    }
+
     @Test
     void generatesSourceAwareNotImplementedExpression() throws Exception {
         var source = writeSource("sample/NotImplemented.cfun", """
@@ -2118,7 +2144,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(compileGenerateStderr()).isEqualTo("""
                 Compilation failed with 1 error(s):
-                /sample/ListMethodFailure.cfun:2:4: Method `length` on `List` is not supported by the Java backend.
+                /sample/ListMethodFailure.cfun:2:4: Method `length` is not defined for receiver type `List[int]`.
                 """);
 
         assertThat(generatedPath(source)).doesNotExist();
@@ -2787,7 +2813,7 @@ class JavaGenerationDiagnosticsIntegrationTest {
 
         assertThat(compileGenerateWithTestsStderr()).isEqualTo("""
                 Compilation failed with 1 error(s):
-                /sample/MainTest.cfun:2:4: Method `length` on `List` is not supported by the Java backend.
+                /sample/MainTest.cfun:2:4: Method `length` is not defined for receiver type `List[int]`.
                 """);
 
         assertThat(generatedTestPath(testSource)).doesNotExist();
