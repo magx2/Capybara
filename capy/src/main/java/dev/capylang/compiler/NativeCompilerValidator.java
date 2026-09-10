@@ -1126,7 +1126,7 @@ public final class NativeCompilerValidator {
         var arity = arguments.size();
         var receiverTypes = context.extensionMethodReceiverTypes(module, methodName, arity);
         var receiverName = nominalTypeName(receiverType.name());
-        if (receiverTypes.contains(receiverName)) {
+        if (receiverTypeNames(context, module, receiverType).stream().anyMatch(receiverTypes::contains)) {
             return;
         }
         if (context.objectMethodExists(module, receiverType.name(), methodName, arity)) {
@@ -1227,6 +1227,30 @@ public final class NativeCompilerValidator {
         }
         if (receiverTypes.isEmpty()) {
             return;
+        }
+    }
+
+    private Set<String> receiverTypeNames(
+            Context context,
+            ParsedModule module,
+            TypeReference receiverType
+    ) {
+        var names = new LinkedHashSet<String>();
+        collectReceiverTypeNames(context, module, receiverType, names);
+        return names;
+    }
+
+    private void collectReceiverTypeNames(
+            Context context,
+            ParsedModule module,
+            TypeReference receiverType,
+            Set<String> names
+    ) {
+        if (!names.add(nominalTypeName(receiverType.name()))) {
+            return;
+        }
+        for (var parent : context.directParentTypes(module, receiverType)) {
+            collectReceiverTypeNames(context, module, parent, names);
         }
     }
 
