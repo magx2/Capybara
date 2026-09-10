@@ -1108,6 +1108,54 @@ class JavaGenerationDiagnosticsIntegrationTest {
     }
 
     @Test
+    void matchesRecordBackedUnionVariantsNominally() throws Exception {
+        var source = writeSource("sample/Accounts.cfun", """
+                union Account = NamedAccount | AnonymousAccount
+                data NamedAccount { name: String, related: List[Account] }
+                data AnonymousAccount {}
+
+                fun account_name(account: Account): String =
+                    match account with
+                    case NamedAccount { name } -> name
+                    case AnonymousAccount {} -> "anonymous"
+
+                fun related_accounts(account: Account): List[Account] =
+                    match account with
+                    case NamedAccount { _, related } -> related
+                    case AnonymousAccount {} -> []
+                """);
+
+        assertThat(compileGenerateStderr("java")).isEmpty();
+
+        var generated = generatedPath(source);
+        assertThat(generated)
+                .content()
+                .contains("record NamedAccount(java.lang.String name, java.util.List<Account> related) implements Account")
+                .contains("record AnonymousAccount() implements Account")
+                .contains("instanceof Accounts.NamedAccount", "instanceof Accounts.AnonymousAccount")
+                .contains("(java.lang.Object) __capy_data_field(")
+                .contains("((Accounts.NamedAccount) __capy_record_value).name()")
+                .contains("((Accounts.NamedAccount) __capy_record_value).related()")
+                .doesNotContain("instanceof java.lang.Object");
+        var classes = compileJava(generated);
+        try (var loader = new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()})) {
+            var module = loader.loadClass("sample.Accounts");
+            var namedAccount = loader.loadClass("sample.Accounts$NamedAccount")
+                    .getConstructor(String.class, java.util.List.class)
+                    .newInstance("Ada", java.util.List.of());
+            var anonymousAccount = loader.loadClass("sample.Accounts$AnonymousAccount")
+                    .getConstructor()
+                    .newInstance();
+            var accountName = generatedMethod(module, "account_name__");
+
+            assertThat(accountName.invoke(null, namedAccount)).isEqualTo("Ada");
+            assertThat(accountName.invoke(null, anonymousAccount)).isEqualTo("anonymous");
+            assertThat(generatedMethod(module, "related_accounts__").invoke(null, namedAccount))
+                    .isEqualTo(java.util.List.of());
+        }
+    }
+
+    @Test
     void erasesGenericParametersFromTopLevelRecordAccessorCasts() throws Exception {
         var source = writeSource("sample/Box.cfun", """
                 data Box[T] { value: T }
