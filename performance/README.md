@@ -4,6 +4,26 @@ Generated from `results.csv`. Do not edit by hand.
 
 Legend: 🟢 faster, 🔵 roughly unchanged, 🟡 small regression, 🔴 regression.
 
+## 2026-09-12 [ec4b538](https://github.com/magx2/Capybara/commit/ec4b5380f2521173bc4b566428cb8f1cb65d9f4a)
+
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/4b2228e1374e6de12ca3e66b16fda11c8018ab58...ec4b5380f2521173bc4b566428cb8f1cb65d9f4a)
+
+| Backend | compile | gen java | gen python | gen js | test |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `Java` | 4s (3.508 s)<br>🔴 Δ+0s / +16% | 6s (6.329 s)<br>🟡 Δ+0s / +5% | 3s (3.015 s)<br>🔵 Δ+0s / +1% | 3s (3.387 s)<br>🟢 Δ-0s / -7% | 20s (20.432 s)<br>🟡 Δ+1s / +5% |
+| `Python` | 4s (3.776 s)<br>🔴 Δ+1s / +25% | 6s (5.987 s)<br>🟢 Δ-0s / -6% | 3s (2.77 s)<br>🟢 Δ-0s / -13% | 4s (3.514 s)<br>🔴 Δ+1s / +17% | 20s (20.018 s)<br>🟢 Δ-0s / -1% |
+| `JS` | 4s (3.894 s)<br>🔴 Δ+1s / +30% | 6s (5.987 s)<br>🟢 Δ-0s / -5% | 3s (3.157 s)<br>🔴 Δ+0s / +18% | 3s (3.038 s)<br>🟢 Δ-1s / -19% | 20s (20.462 s)<br>🟡 Δ+1s / +6% |
+
+## 2026-09-10 [4b2228e](https://github.com/magx2/Capybara/commit/4b2228e1374e6de12ca3e66b16fda11c8018ab58)
+
+[Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/2f5b274fc09a468b489e8e0a79d4f5c195a07fdb...4b2228e1374e6de12ca3e66b16fda11c8018ab58)
+
+| Backend | compile | gen java | gen python | gen js | test |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `Java` | 3s (3.035 s)<br>🟡 Δ+0s / +2% | 6s (6.003 s)<br>🟡 Δ+0s / +5% | 3s (2.973 s)<br>🟢 Δ-0s / -4% | 4s (3.645 s)<br>🟡 Δ+0s / +8% | 20s (19.509 s)<br>🟡 Δ+1s / +3% |
+| `Python` | 3s (3.032 s)<br>🟡 Δ+0s / +3% | 6s (6.38 s)<br>🔴 Δ+1s / +26% | 3s (3.2 s)<br>🟡 Δ+0s / +6% | 3s (3.008 s)<br>🟢 Δ-0s / -3% | 20s (20.304 s)<br>🟡 Δ+1s / +7% |
+| `JS` | 3s (2.998 s)<br>🟢 Δ-0s / -0% | 6s (6.282 s)<br>🔴 Δ+1s / +11% | 3s (2.679 s)<br>🟢 Δ-0s / -10% | 4s (3.762 s)<br>🔴 Δ+0s / +14% | 19s (19.253 s)<br>🟡 Δ+1s / +5% |
+
 ## 2026-09-09 [2f5b274](https://github.com/magx2/Capybara/commit/2f5b274fc09a468b489e8e0a79d4f5c195a07fdb)
 
 [Changes since previous benchmark check](https://github.com/magx2/Capybara/compare/b2558a22834a6ae236bb24216eb2fd287278f981...2f5b274fc09a468b489e8e0a79d4f5c195a07fdb)
