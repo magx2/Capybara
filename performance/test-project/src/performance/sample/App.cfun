@@ -10,8 +10,8 @@ from /performance/sample/support/Fixtures import { fixture_order, invalid_order 
 fun happy_path_summary(): Effect[String] =
     let result <- run_workflow(fixture_order())
     match result with
-    case WorkflowAccepted { order_id, total_cents, stamp } -> "accepted:{order_id}:{total_cents}:{stamp}"
-    case WorkflowRejected { reason } -> "rejected:{reason}"
+    case WorkflowAccepted { order_id, total_cents, stamp } -> pure("accepted:{order_id}:{total_cents}:{stamp}")
+    case WorkflowRejected { reason } -> pure("rejected:{reason}")
 
 fun validation_message(): String =
     submit(invalid_order()).reduce_left(

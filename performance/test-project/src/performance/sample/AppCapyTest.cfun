@@ -24,12 +24,12 @@ fun happy_path_workflow(): Effect[Assert] =
     let result <- run_workflow(fixture_order())
     match result with
     case WorkflowAccepted { order_id, total_cents, stamp } ->
-        assert_all([
+        pure(assert_all([
             assert_that(order_id).is_equal_to("stable-O-243-4242"),
             assert_that(total_cents).is_equal_to(9394L),
             assert_that(stamp).is_equal_to(4242L),
-        ])
-    case _ -> assert_that(false).is_true()
+        ]))
+    case _ -> pure(assert_that(false).is_true())
 
 fun native_providers_are_deterministic(): Effect[Assert] =
     let native_clock <- fixed_clock()
